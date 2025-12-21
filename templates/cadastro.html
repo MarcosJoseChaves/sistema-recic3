@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Cadastros e Transações</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .form-container { max-width: 900px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); margin-top: 20px; display: none; }
+        h2 { color: #2c3e50; margin-bottom: 20px; text-align: center; }
+        .form-label { font-weight: bold; color: #495057; }
+        .btn-primary { background-color: #3498db; border-color: #3498db; }
+        .btn-info { background-color: #17a2b8; border-color: #17a2b8; color: white; }
+        .btn-warning { background-color: #f39c12; border-color: #f39c12; color: white;}
+        .btn-success { background-color: #28a745; border-color: #28a745; color: white;}
+        .btn-danger { background-color: #dc3545; border-color: #dc3545; color: white;}
+        .btn-secondary { background-color: #6c757d; border-color: #6c757d; color: white;} 
+        .btn-dark { background-color: #343a40; border-color: #343a40; color: white;}
+        .required-field::after { content: " *"; color: red; }
+        .menu-botoes { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;}
+        .menu-botoes .btn { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; border-radius: 8px; padding: 10px 15px;}
+        
+        .item-row { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 5px; background-color: #fdfdfd; }
+        .item-fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+        .item-fields-grid .form-group { display: flex; flex-direction: column; }
+        .item-fields-grid .form-group label { font-size: 0.85em; margin-bottom: 2px; }
+        .item-fields-grid .btn-danger { height: calc(1.5em + .75rem + 2px); align-self: flex-end; }
+        #itensDocumentoContainer .item-row:last-child { margin-bottom: 0; }
+        .valor-total-item-input { font-weight: bold; color: #28a745; }
+        .item-fields-grid .form-group.desc-produto-servico { grid-column: span 2; }
+
+        #relatoriosFormContainer, #extratoBancarioContainer { max-width: 1200px; } 
+        .filtros-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom:20px;}
+        .tabela-container { margin-top: 20px; max-height: 500px; overflow-y: auto; }
+        .tabela-container th, .tabela-container td { font-size: 0.9em; white-space: nowrap;}
+        .form-control, .form-select { border-radius: 8px; }
+
+        #painelFluxoResumo .alert { margin-bottom: 0; }
+        #painelFluxoResumo strong { font-size: 0.9em; }
+        #painelFluxoResumo span { font-size: 1.2em; font-weight: bold; }
+        .cep-status { font-size: 0.8em; margin-top: 4px; } 
+        .saldo-info { font-size: 1.1em; font-weight: bold; margin-top: 10px; margin-bottom: 10px;}
+        #tabelaExtrato td[style*="white-space: normal"] { white-space: normal !important; word-break: break-word; }
+        
+        /* Estilo da Barra de Usuário */
+        .user-bar { background: white; padding: 10px 20px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .user-info strong { color: #2c3e50; }
+    </style>
+</head>
+<body>
+
+    {% if usuario %}
+    <div class="user-bar">
+        <div class="user-info">
+            <i class="fas fa-user-circle fa-lg me-2 text-primary"></i>
+            <strong>Usuário:</strong> {{ usuario.username }} 
+            {% if usuario.role == 'admin' %}
+                <span class="badge bg-danger ms-2">Administrador</span>
+            {% else %}
+                <span class="badge bg-success ms-2">Associação</span>
+                {% if usuario.uvr_acesso %}
+                    <span class="badge bg-info text-dark ms-1">{{ usuario.uvr_acesso }}</span>
+                {% endif %}
+            {% endif %}
+        </div>
+        <div>
+            <a href="/alterar_senha" class="btn btn-outline-primary btn-sm me-2"><i class="fas fa-key"></i> Alterar Senha</a>
+            <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="container text-center">
+        <h1><i class="fas fa-cogs"></i> Sistema Integrado</h1>
+        
+        <div class="menu-botoes">
+            <button id="btnClienteFornecedor" class="btn btn-primary"><i class="fas fa-user-tie"></i> Cad. Cliente/Fornecedor</button>
+            <button id="btnAssociado" class="btn btn-primary"><i class="fas fa-users"></i> Ficha de Associados</button>
+            
+            <button id="btnGestaoAssociados" class="btn btn-dark"><i class="fas fa-search"></i> Pesquisar/Gerenciar Associados</button>
+            
+            <button id="btnContaCorrente" class="btn btn-secondary"><i class="fas fa-landmark"></i> Cad. Contas Correntes</button> 
+            <button id="btnReceitaDespesa" class="btn btn-success"><i class="fas fa-dollar-sign"></i> Reg. Receitas/Despesas</button>
+            
+            {% if usuario and usuario.role == 'admin' %}
+            <button id="btnProdutoServico" class="btn btn-info"><i class="fas fa-box-open"></i> Cad. Produtos/Serviços</button>
+            <button id="btnAprovacoes" class="btn btn-warning position-relative">
+                <i class="fas fa-check-double"></i> Aprovações Pendentes
+            </button>
+            <button id="btnFluxoCaixa" class="btn btn-danger"><i class="fas fa-exchange-alt"></i> Fluxo de Caixa</button>
+            <button id="btnRelatorios" class="btn btn-warning"><i class="fas fa-chart-line"></i> Relatórios Financeiros</button>
+            <button id="btnExtratoBancario" class="btn btn-dark"><i class="fas fa-file-invoice-dollar"></i> Extrato Bancário</button>
+            {% endif %}
+        </div>
+
+        <div id="gestaoAssociadosContainer" class="form-container">
+            <h2><i class="fas fa-users-cog"></i> Gerenciar Associados</h2>
+            
+            <div class="card p-3 mb-4 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Nome ou CPF</label>
+                        <input type="text" id="inputBuscaAssociado" class="form-control" placeholder="Digite...">
+                    </div>
+
+                    {% if usuario.role == 'admin' %}
+                    <div class="col-md-2">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="filtroUvrAssociado">
+                            <option value="">Todas</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <div class="col-md-2">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" id="filtroStatusAssociado">
+                            <option value="">Todos</option>
+                            <option value="Ativo">Ativo</option>
+                            <option value="Suspenso">Suspenso</option>
+                            <option value="Inativo">Inativo</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-5">
+                        <label class="form-label">Data de Admissão</label>
+                        <div class="input-group">
+                            <input type="date" id="filtroDataIniAssociado" class="form-control" placeholder="De">
+                            <span class="input-group-text">até</span>
+                            <input type="date" id="filtroDataFimAssociado" class="form-control" placeholder="Até">
+                        </div>
+                    </div>
+
+                    <div class="col-md-12 text-end">
+                        <button class="btn btn-secondary btn-sm me-2" onclick="limparFiltrosAssociados()"><i class="fas fa-eraser"></i> Limpar</button>
+                        <button class="btn btn-primary" onclick="buscarAssociados()"><i class="fas fa-search"></i> Pesquisar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th>CPF</th>
+                            <th>Data Admissão</th>
+                            <th>UVR</th>
+                            <th>Status</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaAssociadosBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="aprovacoesContainer" class="form-container">
+            <h2><i class="fas fa-tasks"></i> Aprovações Pendentes</h2>
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Solicitante</th>
+                            <th>Associado (Atual)</th>
+                            <th>Nome Novo (Proposto)</th>
+                            <th class="text-center">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaAprovacoesBody">
+                        </tbody>
+                </table>
+            </div>
+            <p id="msgSemAprovacoes" class="text-center text-muted mt-3" style="display:none;">Nenhuma solicitação pendente.</p>
+        </div>
+
+        <div id="extratoBancarioContainer" class="form-container">
+            <h2><i class="fas fa-file-invoice-dollar"></i> Extrato Bancário</h2>
+            <div class="filtros-grid">
+                <div class="form-group">
+                    <label for="extratoUvr" class="form-label required-field">UVR</label>
+                    <select class="form-select" id="extratoUvr" required><option value="">Todas</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="extratoContaCorrente" class="form-label required-field">Conta Corrente</label>
+                    <select class="form-select" id="extratoContaCorrente" disabled required><option value="">Selecione a UVR</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="extratoDataInicial" class="form-label required-field">Data Inicial</label>
+                    <input type="date" class="form-control" id="extratoDataInicial" required>
+                </div>
+                <div class="form-group">
+                    <label for="extratoDataFinal" class="form-label required-field">Data Final</label>
+                    <input type="date" class="form-control" id="extratoDataFinal" required>
+                </div>
+            </div>
+            <div class="d-flex justify-content-center gap-2 mb-3">
+                <button type="button" class="btn btn-primary" id="btnGerarExtrato"><i class="fas fa-search"></i> Gerar Extrato</button>
+                <button type="button" class="btn btn-success" id="btnBaixarCsvExtrato" style="display:none;"><i class="fas fa-file-csv"></i> Baixar CSV</button>
+                <button type="button" class="btn btn-danger" id="btnBaixarPdfExtrato" style="display:none;"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+            </div>
+            
+            <div id="infoContaExtrato" class="text-start mb-3" style="display:none;">
+                <p><strong>Conta:</strong> <span id="extratoNomeConta"></span></p>
+                <p><strong>Período:</strong> <span id="extratoPeriodo"></span></p>
+            </div>
+
+            <div class="saldo-info text-start" id="saldoInicialExtrato" style="display:none;"></div>
+            <div id="tabelaExtratoContainer" class="tabela-container">
+                <table class="table table-striped table-bordered table-hover" id="tabelaExtrato">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="saldo-info text-start" id="saldoFinalExtrato" style="display:none;"></div>
+            <p id="extratoStatus" class="text-center mt-2"></p>
+        </div>
+
+        <div id="fluxoCaixaForm" class="form-container">
+            <h2><i class="fas fa-exchange-alt"></i> Fluxo de Caixa</h2>
+            
+            <div class="row mb-3 p-3 border rounded bg-light">
+                <h5 class="mb-3 text-secondary" style="width: 100%; text-align: left;"><i class="fas fa-calendar-alt"></i> Período de Análise</h5>
+                <div class="col-md-6">
+                    <label class="form-label required-field">Data Inicial</label>
+                    <input type="date" class="form-control" id="fluxoDataInicialFiltro" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label required-field">Data Final</label>
+                    <input type="date" class="form-control" id="fluxoDataFinalFiltro" required>
+                </div>
+            </div>
+
+            <div class="row mb-4" id="painelFluxoResumo" style="display:none;">
+                <div class="col-md-4"><div class="alert alert-success text-center py-2"><strong>Receitas a Receber:</strong><br>R$ <span id="resumoReceitas">0,00</span></div></div>
+                <div class="col-md-4"><div class="alert alert-danger text-center py-2"><strong>Despesas a Pagar:</strong><br>R$ <span id="resumoDespesas">0,00</span></div></div>
+                <div class="col-md-4"><div class="alert alert-info text-center py-2"><strong>Saldo Projetado:</strong><br>R$ <span id="resumoSaldo">0,00</span></div></div>
+            </div>
+            <form id="formRegistrarFluxoCaixa"> 
+                <div class="mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrFluxoCaixa" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
+                <div class="mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao" id="associacaoFluxoCaixa" readonly></div>
+                <div class="mb-3"><label class="form-label required-field">Tipo de Movimentação</label><select class="form-select" name="tipo_movimentacao" id="tipoMovimentacao" required><option value="Recebimento">Recebimento</option><option value="Pagamento" selected>Pagamento</option></select></div>
+                <div class="mb-3"><label class="form-label required-field" id="labelClienteFornecedorFluxo">Cliente/Fornecedor/Associado</label><select class="form-select" name="id_cadastro_cf_select" id="cadastroCFSelect" required> <option value="">Selecione a UVR e Tipo Mov...</option></select><input type="hidden" name="id_cadastro_cf_str" id="idCadastroCfStrHidden"><input type="hidden" name="is_associado_rateio" id="isAssociadoRateioHidden"><input type="hidden" name="nome_cadastro_cf_display" id="nomeCadastroCfDisplayHidden"></div>
+                <div class="mb-3"><label class="form-label required-field">Documentos em Aberto (NFs/Transações)</label><div id="nfsEmAbertoContainer" class="border p-2 rounded" style="max-height: 150px; overflow-y: auto;"><small class="text-muted">Selecione um Cliente/Fornecedor/Associado para listar os documentos.</small></div></div>
+                <div class="mb-3"><label class="form-label required-field">Conta Corrente (Origem/Destino)</label><select class="form-select" name="id_conta_corrente" id="contaCorrenteSelect" required><option value="">Selecione a UVR...</option></select></div>
+                <div class="mb-3"><label class="form-label">Número Doc. Bancário (Opcional)</label><input type="text" class="form-control" name="numero_documento_bancario" placeholder="Ex: Cheque 123, TED ID 456"></div>
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Data Efetiva do Pagamento/Recebimento</label><input type="date" class="form-control" name="data_efetiva" id="dataEfetivaFluxo" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">Valor Efetivo (R$)</label><input type="text" class="form-control valor-monetario" name="valor_efetivo" id="valorEfetivo" required></div></div>
+                <div class="mb-3"><label class="form-label">Saldo da Operação (R$)</label><input type="text" class="form-control" name="saldo_operacao_display" id="saldoOperacaoDisplay" readonly style="font-weight: bold;"></div>
+                <div class="mb-3"><label class="form-label">Data/Hora Registro</label><input type="text" class="form-control" name="data_hora_registro_fluxo" id="dataHoraRegistroFluxo" readonly></div>
+                <div class="mb-3"><label class="form-label">Observações (Opcional)</label><textarea class="form-control" name="observacoes" rows="2"></textarea></div>
+                <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg">REGISTRAR MOVIMENTAÇÃO</button></div>
+            </form>
+        </div>
+        
+        <div id="clienteFornecedorForm" class="form-container">
+            <h2><i class="fas fa-user-tie"></i> Cadastro de Cliente / Fornecedor</h2>
+            <form method="POST" action="/cadastrar" id="cadastroForm">
+                <div class="mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrSelect" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
+                <div class="mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao" id="associacaoInput" readonly></div>
+                <div class="mb-3"><label class="form-label">Data/Hora Cadastro</label><input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroCF" readonly></div>
+                <div class="mb-3"><label class="form-label required-field">Tipo de Cadastro</label><select class="form-select" name="tipo_cadastro" id="tipoCadastroCF" required><option value="Fornecedor/Prestador" selected>Fornecedor/Prestador</option><option value="Cliente">Cliente</option></select></div>
+                <div class="mb-3"><label class="form-label required-field">Tipo de Atividade</label><select class="form-select" name="tipo_atividade" id="tipoAtividadeCF" required><option value="">Selecione...</option></select></div>
+                <div class="mb-3"><label class="form-label required-field">CNPJ</label><input type="text" class="form-control" name="cnpj" id="cnpj" required></div><div class="mb-3"><label class="form-label required-field">Razão Social</label><input type="text" class="form-control" name="razao_social" id="razaoSocialCF" required></div>
+                <div class="mb-3"><label class="form-label required-field">CEP</label><input type="text" class="form-control" name="cep" id="cepCF" required><div id="cepCFStatus" class="cep-status"></div></div>
+                <div class="mb-3"><label class="form-label">Logradouro</label><input type="text" class="form-control" name="logradouro" id="logradouroCF"></div>
+                <div class="mb-3"><label class="form-label">Número</label><input type="text" class="form-control" name="numero" id="numeroCF"></div>
+                <div class="mb-3"><label class="form-label">Bairro</label><input type="text" class="form-control" name="bairro" id="bairroCF"></div>
+                <div class="mb-3"><label class="form-label">Cidade</label><input type="text" class="form-control" name="cidade" id="cidadeCF"></div>
+                <div class="mb-3"><label class="form-label">UF</label><select class="form-select" name="uf" id="ufCF"><option value="">UF</option><option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option><option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option><option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option><option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option><option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option><option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option><option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option><option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option><option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option></select></div>
+                <div class="mb-3"><label class="form-label">Telefone</label><input type="text" class="form-control" name="telefone" id="telefoneCF"></div>
+                <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg">CADASTRAR</button></div>
+            </form>
+        </div>
+        
+        <div id="associadoForm" class="form-container">
+             <h2><i class="fas fa-users"></i> Ficha de Associados</h2>
+            <form method="POST" action="/cadastrar_associado" id="cadastroAssociadoForm">
+                
+                <input type="hidden" name="id_associado" id="idAssociadoHidden">
+
+                <div class="row mb-4 justify-content-center">
+                    <div class="col-md-6 text-center">
+                        <label class="form-label">Foto do Associado (3x4)</label>
+                        <div style="width: 150px; height: 200px; border: 2px dashed #ccc; margin: 0 auto; display: flex; align-items: center; justify-content: center; overflow: hidden; background-color: #000; position: relative;" id="fotoContainer">
+                            <img id="fotoPreview" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                            <video id="videoCamera" style="width: 100%; height: 100%; object-fit: cover; display: none;" autoplay playsinline></video>
+                            <span id="fotoPlaceholder" style="color: #999;">Sem foto</span>
+                        </div>
+                        <input type="hidden" name="foto_base64" id="campoFotoBase64">
+                        <div class="mt-2 btn-group">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="iniciarCamera()"><i class="fas fa-camera"></i> Abrir Câmera</button>
+                            <button type="button" class="btn btn-success btn-sm" onclick="tirarFoto()" id="btnCapturar" style="display: none;"><i class="fas fa-check"></i> Capturar</button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inputArquivo').click()"><i class="fas fa-upload"></i> Arquivo</button>
+                        </div>
+                        <input type="file" id="inputArquivo" accept="image/*" style="display: none;" onchange="carregarArquivo(this)">
+                        <canvas id="canvasFoto" style="display: none;"></canvas>
+                    </div>
+                </div>
+
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Número</label><input type="text" class="form-control" name="numero" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrSelectAssociado" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div></div>
+                <div class="mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao" id="associacaoInputAssociado" readonly></div>
+                <div class="mb-3"><label class="form-label required-field">Nome do Associado</label><input type="text" class="form-control" name="nome" id="nomeAssociado" required></div>
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">CPF</label><input type="text" class="form-control" name="cpf" id="cpfAssociado" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">RG</label><input type="text" class="form-control" name="rg" id="rgAssociado" required></div></div>
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Data de Nascimento</label><input type="date" class="form-control" name="data_nascimento" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">Data de Admissão</label><input type="date" class="form-control" name="data_admissao" required></div></div>
+                <div class="mb-3"><label class="form-label required-field">Status</label><select class="form-select" name="status" required><option value="">Selecione...</option><option value="Ativo">Ativo</option><option value="Suspenso">Suspenso</option><option value="Inativo">Inativo</option></select></div>
+                <h5 class="mt-4 mb-3">Endereço Residencial</h5>
+                <div class="mb-3"><label class="form-label required-field">CEP</label><input type="text" class="form-control" name="cep" id="cepAssociado" required><div id="cepAssociadoStatus" class="cep-status"></div></div>
+                <div class="row"><div class="col-md-8 mb-3"><label class="form-label">Logradouro</label><input type="text" class="form-control" name="logradouro" id="logradouroAssociado"></div><div class="col-md-4 mb-3"><label class="form-label">Número</label><input type="text" class="form-control" name="endereco_numero" id="numeroAssociado"></div></div>
+                <div class="row"><div class="col-md-5 mb-3"><label class="form-label">Bairro</label><input type="text" class="form-control" name="bairro" id="bairroAssociado"></div><div class="col-md-5 mb-3"><label class="form-label">Cidade</label><input type="text" class="form-control" name="cidade" id="cidadeAssociado"></div><div class="col-md-2 mb-3"><label class="form-label">UF</label><select class="form-select" name="uf" id="ufAssociado"><option value="">UF</option><option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option><option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option><option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option><option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option><option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option><option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option><option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option><option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option><option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option></select></div></div>
+                <div class="mb-3"><label class="form-label required-field">Telefone (WhatsApp)</label><input type="text" class="form-control" name="telefone" id="telefoneAssociado" required></div>
+                <div class="mb-3"><label class="form-label">Data/Hora Cadastro</label><input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroAssociado" readonly></div>
+                
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarAssociado">CADASTRAR</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicao" style="display:none;" onclick="cancelarEdicaoAssociado()">CANCELAR EDIÇÃO</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="produtoServicoForm" class="form-container">
+            <h2><i class="fas fa-box-open"></i> Cadastro de Produtos e Serviços</h2>
+            <form method="POST" action="/cadastrar_produto_servico" id="cadastroProdutoServicoForm">
+                <div class="mb-3"><label class="form-label required-field">Tipo</label><select class="form-select" name="tipo_produto_servico" id="tipoProdutoServicoSelect" required><option value="">Selecione...</option><option value="Despesa">Despesa</option><option value="Receita">Receita</option></select></div>
+                <div class="mb-3"><label class="form-label required-field">Tipo de Atividade</label><select class="form-select" name="tipo_atividade_produto_servico" id="tipoAtividadeProdutoServicoSelect" required><option value="">Selecione o Tipo acima...</option></select></div>
+                <div class="mb-3"><label class="form-label">Grupo</label><input type="text" class="form-control" name="grupo_produto_servico" placeholder="Ex: Material de Escritório, Limpeza, Consultoria"></div>
+                <div class="mb-3"> <label class="form-label">Subgrupo</label><input type="text" class="form-control" name="subgrupo_produto_servico" placeholder="Ex: Papel Sulfite, Sabão Líquido, Consultoria Financeira"></div>
+                <div class="mb-3"><label class="form-label required-field">Item (Descrição Prod./Serv.)</label><input type="text" class="form-control" name="item_produto_servico" placeholder="Ex: Resma de Papel A4, Sabão em Pó, Honorários Contábeis" required></div>
+                 <div class="mb-3"><label class="form-label">Data/Hora Cadastro</label><input type="text" class="form-control" name="data_hora_cadastro_ps" id="dataHoraCadastroPS" readonly></div>
+                <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg">CADASTRAR PRODUTO/SERVIÇO</button></div>
+            </form>
+        </div>
+
+        <div id="contaCorrenteForm" class="form-container">
+            <h2><i class="fas fa-landmark"></i> Cadastro de Contas Correntes</h2>
+            <form method="POST" action="/cadastrar_conta_corrente" id="cadastroContaCorrenteForm">
+                <div class="row"><div class="col-md-6 mb-3"><label for="uvrSelectConta" class="form-label required-field">UVR</label><select class="form-select" name="uvr_conta" id="uvrSelectConta" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label for="associacaoInputConta" class="form-label">Associação</label><input type="text" class="form-control" name="associacao_conta" id="associacaoInputConta" readonly></div></div>
+                <div class="mb-3"><label for="bancoContaSelect" class="form-label required-field">Banco</label><select class="form-select" name="banco_conta" id="bancoContaSelect" required><option value="">Selecione o Banco...</option></select></div>
+                <div class="row"><div class="col-md-6 mb-3"><label for="agenciaContaInput" class="form-label required-field">Agência (sem dígito)</label><input type="text" class="form-control" name="agencia_conta" id="agenciaContaInput" placeholder="Ex: 1234" required></div><div class="col-md-6 mb-3"><label for="contaCorrenteContaInput" class="form-label required-field">Conta Corrente (com dígito)</label><input type="text" class="form-control" name="conta_corrente_conta" id="contaCorrenteContaInput" placeholder="Ex: 12345-6" required></div></div>
+                <div class="mb-3"><label for="descricaoApelidoContaInput" class="form-label">Descrição/Apelido da Conta</label><input type="text" class="form-control" name="descricao_apelido_conta" id="descricaoApelidoContaInput" placeholder="Ex: Conta Principal UVR 01"></div>
+                <div class="mb-3"><label class="form-label">Data/Hora Cadastro</label><input type="text" class="form-control" name="data_hora_cadastro_conta" id="dataHoraCadastroConta" readonly></div>
+                <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg">CADASTRAR CONTA</button></div>
+            </form>
+        </div>
+
+        <div id="receitaDespesaForm" class="form-container">
+            <h2><i class="fas fa-dollar-sign"></i> Registro de Receitas e Despesas</h2>
+            <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm">
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_transacao" id="uvrSelectTransacao" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_transacao" id="associacaoInputTransacao" readonly></div></div>
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Tipo</label><select class="form-select" name="tipo_transacao" id="tipoTransacaoSelect" required><option value="">Selecione...</option><option value="Despesa">Despesa</option><option value="Receita">Receita</option></select></div><div class="col-md-6 mb-3"><label class="form-label required-field">Tipo de Atividade</label><select class="form-select" name="tipo_atividade_transacao" id="tipoAtividadeTransacaoSelect" required><option value="">Selecione o Tipo...</option></select></div></div>
+                <div class="mb-3"><label class="form-label required-field" id="labelFornecedorPrestadorCliente">Fornecedor / Prestador / Cliente / Associado</label><select class="form-select" name="fornecedor_prestador_transacao" id="fornecedorPrestadorTransacaoSelect" required><option value="">Carregando...</option></select><input type="hidden" name="nome_fornecedor_prestador_transacao" id="nomeFornecedorPrestadorTransacaoInput"></div>
+                <div class="row"><div class="col-md-6 mb-3"><label class="form-label">Nº do Documento</label><input type="text" class="form-control" name="numero_documento_transacao"></div><div class="col-md-6 mb-3"><label class="form-label required-field">Data do Documento</label><input type="date" class="form-control" name="data_documento_transacao" id="dataDocumentoTransacao" required></div></div>
+                <hr><h5>Itens do Documento</h5><div id="itensDocumentoContainer"></div><button type="button" class="btn btn-success btn-sm mt-2 mb-3" id="btnAdicionarItem"><i class="fas fa-plus"></i> Adicionar Item</button>
+                <div class="row mt-3"><div class="col-md-8"></div><div class="col-md-4"><label class="form-label">Valor Total do Documento (R$)</label><input type="text" class="form-control form-control-lg text-end valor-monetario" id="valorTotalDocumentoCalculado" readonly style="font-weight: bold; color: #007bff; background-color: #e9ecef;"></div></div>
+                <div class="mb-3 mt-3"><label class="form-label">Data/Hora Registro</label><input type="text" class="form-control" name="data_hora_cadastro_transacao" id="dataHoraCadastroTransacao" readonly></div>
+                <div class="d-grid gap-2 mt-4"><button type="submit" class="btn btn-primary btn-lg">REGISTRAR TRANSAÇÃO</button></div>
+            </form>
+        </div>
+
+        <div id="relatoriosFormContainer" class="form-container">
+            <h2><i class="fas fa-chart-line"></i> Relatórios Financeiros</h2>
+            <div class="filtros-grid">
+                <div class="form-group"><label for="relDataInicial">Data Inicial</label><input type="date" class="form-control" id="relDataInicial"></div>
+                <div class="form-group"><label for="relDataFinal">Data Final</label><input type="date" class="form-control" id="relDataFinal"></div>
+                <div class="form-group"><label for="relUvr">UVR</label><select class="form-select" id="relUvr"><option value="">Todas</option></select></div>
+                
+                <div class="form-group"><label for="relTipoTransacao">Tipo Transação</label><select class="form-select" id="relTipoTransacao"><option value="">Todos</option><option value="Receita">Receita</option><option value="Despesa">Despesa</option></select></div>
+                
+                <div class="form-group">
+                    <label for="relTipoEntidade">Tipo Entidade</label>
+                    <select class="form-select" id="relTipoEntidade">
+                        <option value="">Todos</option>
+                        <option value="Cliente">Cliente</option>
+                        <option value="Fornecedor/Prestador">Fornecedor/Prestador</option>
+                        <option value="Associado">Associado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="relNomeEntidade">Nome Entidade</label>
+                    <select class="form-select" id="relNomeEntidade" disabled>
+                        <option value="">Selecione Tipo Entidade</option>
+                    </select>
+                </div>
+                <div class="form-group"><label for="relTipoAtividadeTransacao">Tipo Atividade (Transação)</label><select class="form-select" id="relTipoAtividadeTransacao" disabled><option value="">Todos</option></select></div>
+                <div class="form-group"><label for="relGrupo">Grupo (Catálogo)</label><select class="form-select" id="relGrupo" disabled><option value="">Todos</option></select></div>
+                <div class="form-group"><label for="relSubgrupo">Subgrupo (Catálogo)</label><select class="form-select" id="relSubgrupo" disabled><option value="">Todos</option></select></div>
+                <div class="form-group"><label for="relItem">Item (Catálogo)</label><select class="form-select" id="relItem" disabled><option value="">Todos</option></select></div>
+                <div class="form-group"><label for="relStatusPagamento">Status Pagamento</label><select class="form-select" id="relStatusPagamento"><option value="">Todos</option><option value="Aberto">Aberto</option><option value="Parcialmente Pago/Recebido">Parcialmente Pago/Recebido</option><option value="Liquidado">Liquidado</option></select></div>
+                
+                <div class="form-group">
+                    <label for="relListarPor">Listar Por</label>
+                    <select class="form-select" id="relListarPor">
+                        <option value="valor" selected>Valor</option>
+                        <option value="quantidade">Quantidade</option>
+                    </select>
+                </div>
+            </div>
+            <div class="d-flex justify-content-center gap-2 mb-3">
+                <button type="button" class="btn btn-primary" id="btnGerarRelatorio"><i class="fas fa-search"></i> Gerar Relatório</button>
+                <button type="button" class="btn btn-success" id="btnBaixarCsv" style="display:none;"><i class="fas fa-file-csv"></i> Baixar CSV</button>
+                <button type="button" class="btn btn-danger" id="btnBaixarPdfRelatorioFinanceiro" style="display:none;"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+            </div>
+            <div id="tabelaRelatorioContainer" class="tabela-container">
+                <table class="table table-striped table-bordered table-hover" id="tabelaRelatorio">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+                <p id="relatorioStatus" class="text-center mt-2"></p>
+            </div>
+        </div>
+    </div>
+
+<div class="modal fade" id="modalVisualizarAssociado" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-id-card"></i> Ficha do Associado</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-4 text-center border-end">
+                            <div style="width: 150px; height: 200px; background: #f0f0f0; margin: 0 auto; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #ccc;">
+                                <img id="verFotoImg" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                                <span id="verFotoPlaceholder" style="color: #999; font-size: 3rem;"><i class="fas fa-user"></i></span>
+                            </div>
+                            <div class="mt-3">
+                                <span id="verStatusBadge" class="badge bg-secondary fs-6">Status</span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-8">
+                            <h4 id="verNome" class="text-primary mb-3">Nome do Associado</h4>
+                            
+                            <div class="row mb-2">
+                                <div class="col-6"><strong>CPF:</strong> <span id="verCpf"></span></div>
+                                <div class="col-6"><strong>RG:</strong> <span id="verRg"></span></div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-6"><strong>Nascimento:</strong> <span id="verNasc"></span></div>
+                                <div class="col-6"><strong>Admissão:</strong> <span id="verAdmissao"></span></div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-6"><strong>UVR:</strong> <span id="verUvr"></span></div>
+                                <div class="col-6"><strong>Associação:</strong> <span id="verAssociacao"></span></div>
+                            </div>
+                            <hr>
+                            <p class="mb-1"><i class="fas fa-map-marker-alt text-danger"></i> <strong>Endereço:</strong></p>
+                            <p class="text-muted mb-2">
+                                <span id="verLogradouro"></span>, <span id="verNumero"></span> - <span id="verBairro"></span><br>
+                                <span id="verCidade"></span> / <span id="verUf"></span> - CEP: <span id="verCep"></span>
+                            </p>
+                            <p class="mb-0"><i class="fab fa-whatsapp text-success"></i> <strong>Telefone:</strong> <span id="verTelefone"></span></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-success me-auto" id="btnImprimirNoModal"><i class="fas fa-print"></i> Imprimir Ficha</button>
+                    
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-warning" id="btnEditarNoModal"><i class="fas fa-edit"></i> Editar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalDetalhesAprovacao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-balance-scale"></i> Comparar Alterações</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2">
+                    <small><i class="fas fa-info-circle"></i> As linhas em <strong>amarelo</strong> mostram o que foi alterado.</small>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>Solicitante:</strong> <span id="detalheSolicitante"></span></div>
+                    <div class="col-md-6 text-end"><strong>Data:</strong> <span id="detalheData"></span></div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 25%">Campo</th>
+                                <th style="width: 37%">Valor Atual (Banco)</th>
+                                <th style="width: 37%">Valor Novo (Proposto)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaComparacaoBody">
+                            </tbody>
+                    </table>
+                </div>
+                
+                <div id="areaComparacaoFoto" class="row mt-3 border-top pt-3" style="display:none;">
+                    <div class="col-12 text-center"><h6 class="text-danger">A FOTO TAMBÉM FOI ALTERADA!</h6></div>
+                    <div class="col-md-6 text-center">
+                        <p class="small text-muted">Nova Foto Proposta</p>
+                        <img id="imgFotoNovaProposta" src="" style="width: 100px; height: 133px; object-fit: cover; border: 2px solid #28a745;">
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-danger" id="btnRejeitarModal"><i class="fas fa-times"></i> Rejeitar</button>
+                <button type="button" class="btn btn-success" id="btnAprovarModal"><i class="fas fa-check"></i> Aprovar</button>
+            </div>
+        </div>
+    </div>
+</div>
+    <script>
+    // --- LÓGICA DA FOTO (WEBCAM E ARQUIVO) ---
+    const video = document.getElementById('videoCamera');
+    const canvas = document.getElementById('canvasFoto');
+    const fotoPreview = document.getElementById('fotoPreview');
+    const campoFoto = document.getElementById('campoFotoBase64');
+    const placeholder = document.getElementById('fotoPlaceholder');
+    const btnCapturar = document.getElementById('btnCapturar');
+    let streamCamera = null;
+
+    function iniciarCamera() {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(function(stream) {
+            streamCamera = stream;
+            video.srcObject = stream;
+            video.style.display = 'block';
+            fotoPreview.style.display = 'none';
+            placeholder.style.display = 'none';
+            btnCapturar.style.display = 'inline-block';
+        })
+        .catch(function(err) {
+            alert("Erro ao acessar câmera: " + err);
+        });
+    }
+
+    function tirarFoto() {
+        // Define o tamanho final da imagem (3x4)
+        canvas.width = 300;
+        canvas.height = 400;
+        
+        const context = canvas.getContext('2d');
+        
+        // --- CÁLCULO DO CORTE INTELIGENTE (CROP) ---
+        const ratioDestino = 300 / 400; // 0.75
+        const ratioOrigem = video.videoWidth / video.videoHeight;
+        
+        let sWidth, sHeight, sX, sY;
+
+        if (ratioOrigem > ratioDestino) {
+            // Vídeo largo
+            sHeight = video.videoHeight;
+            sWidth = sHeight * ratioDestino;
+            sX = (video.videoWidth - sWidth) / 2;
+            sY = 0;
+        } else {
+            // Vídeo alto/quadrado
+            sWidth = video.videoWidth;
+            sHeight = sWidth / ratioDestino;
+            sX = 0;
+            sY = (video.videoHeight - sHeight) / 2;
+        }
+        
+        context.drawImage(video, sX, sY, sWidth, sHeight, 0, 0, 300, 400);
+        
+        const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+        fotoPreview.src = dataURL;
+        fotoPreview.style.display = 'block';
+        video.style.display = 'none';
+        btnCapturar.style.display = 'none';
+        campoFoto.value = dataURL;
+        pararCamera();
+    }
+
+    function carregarArquivo(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                fotoPreview.src = e.target.result;
+                fotoPreview.style.display = 'block';
+                placeholder.style.display = 'none';
+                video.style.display = 'none';
+                campoFoto.value = e.target.result;
+                pararCamera();
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function pararCamera() {
+        if (streamCamera) {
+            streamCamera.getTracks().forEach(track => track.stop());
+            streamCamera = null;
+        }
+    }
+
+    // --- FUNÇÕES DE GESTÃO DE ASSOCIADOS (GLOBAIS) ---
+
+    function buscarAssociados() {
+        const termo = $('#inputBuscaAssociado').val();
+        const status = $('#filtroStatusAssociado').val();
+        const dataIni = $('#filtroDataIniAssociado').val();
+        const dataFim = $('#filtroDataFimAssociado').val();
+        const uvr = $('#filtroUvrAssociado').val() || ""; 
+        
+        const tbody = $('#tabelaAssociadosBody');
+        tbody.html('<tr><td colspan="6" class="text-center">Buscando...</td></tr>');
+        
+        const params = new URLSearchParams({ q: termo, status: status, data_inicial: dataIni, data_final: dataFim, uvr: uvr });
+
+        $.getJSON(`/buscar_associados?${params.toString()}`, function(data) {
+            tbody.empty();
+            if (data.length === 0) {
+                tbody.html('<tr><td colspan="6" class="text-center">Nenhum associado encontrado.</td></tr>');
+                return;
+            }
+            
+            data.forEach(assoc => {
+                let badgeClass = 'bg-secondary';
+                if (assoc.status === 'Ativo') badgeClass = 'bg-success';
+                else if (assoc.status === 'Suspenso') badgeClass = 'bg-warning text-dark';
+                else if (assoc.status === 'Inativo') badgeClass = 'bg-danger';
+
+                let dataAdmissaoFormatada = assoc.data_admissao;
+                try { if(assoc.data_admissao) { let dateObj = new Date(assoc.data_admissao); dataAdmissaoFormatada = dateObj.toLocaleDateString('pt-BR'); } } catch(e) {}
+
+                tbody.append(`
+                    <tr>
+                        <td>${assoc.nome}</td>
+                        <td>${assoc.cpf}</td>
+                        <td>${dataAdmissaoFormatada}</td>
+                        <td>${assoc.uvr}</td>
+                        <td><span class="badge ${badgeClass}">${assoc.status}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white" onclick="visualizarAssociado(${assoc.id})" title="Ver Ficha"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-sm btn-success" onclick="imprimirFichaAssociado(${assoc.id})" title="Imprimir Ficha"><i class="fas fa-print"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoAssociado(${assoc.id})" title="Editar"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoAssociado(${assoc.id}, '${assoc.nome}')" title="Excluir"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(() => {
+            tbody.html('<tr><td colspan="6" class="text-center text-danger">Erro ao buscar dados.</td></tr>');
+        });
+    }
+
+    function limparFiltrosAssociados() {
+        $('#inputBuscaAssociado').val('');
+        $('#filtroStatusAssociado').val('');
+        $('#filtroDataIniAssociado').val('');
+        $('#filtroDataFimAssociado').val('');
+        if($('#filtroUvrAssociado').length) {
+            $('#filtroUvrAssociado').val('');
+        }
+        buscarAssociados();
+    }
+
+    function visualizarAssociado(id) {
+        $('#verNome').text('Carregando...');
+        
+        $.getJSON(`/get_associado/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+
+            $('#verNome').text(data.nome);
+            $('#verCpf').text(data.cpf);
+            $('#verRg').text(data.rg || '-');
+            $('#verNasc').text(data.data_nascimento);
+            $('#verAdmissao').text(data.data_admissao);
+            $('#verUvr').text(data.uvr);
+            $('#verAssociacao').text(data.associacao);
+            $('#verLogradouro').text(data.logradouro || '');
+            $('#verNumero').text(data.numero || '');
+            $('#verBairro').text(data.bairro || '');
+            $('#verCidade').text(data.cidade || '');
+            $('#verUf').text(data.uf || '');
+            $('#verCep').text(data.cep || '');
+            $('#verTelefone').text(data.telefone || '');
+
+            const badge = $('#verStatusBadge');
+            badge.text(data.status);
+            badge.removeClass('bg-success bg-danger bg-warning bg-secondary text-dark');
+            if(data.status === 'Ativo') badge.addClass('bg-success');
+            else if(data.status === 'Suspenso') badge.addClass('bg-warning text-dark');
+            else if(data.status === 'Inativo') badge.addClass('bg-danger');
+            else badge.addClass('bg-secondary');
+
+            if (data.foto_base64) {
+                $('#verFotoImg').attr('src', data.foto_base64).show();
+                $('#verFotoPlaceholder').hide();
+            } else {
+                $('#verFotoImg').hide();
+                $('#verFotoPlaceholder').show();
+            }
+            
+            // ATUALIZA OS BOTÕES DO MODAL COM O ID CORRETO
+            $('#btnEditarNoModal').attr('onclick', `iniciarEdicaoAssociado(${data.id})`);
+            $('#btnImprimirNoModal').attr('onclick', `imprimirFichaAssociado(${data.id})`); // <-- ESSA LINHA ERA NECESSÁRIA
+
+            const modal = new bootstrap.Modal(document.getElementById('modalVisualizarAssociado'));
+            modal.show();
+
+        }).fail(function() {
+            alert("Erro ao buscar dados do associado.");
+        });
+    }
+
+    function imprimirFichaAssociado(id) {
+        // Abre em nova aba
+        window.open(`/imprimir_ficha_associado/${id}`, '_blank');
+    } 
+
+    // --- FUNÇÕES DE EDIÇÃO CORRIGIDAS ---
+
+    function iniciarEdicaoAssociado(id) {
+        console.log("Iniciando edição para o ID:", id);
+
+        // 1. Tenta fechar o modal com segurança
+        var modalEl = document.getElementById('modalVisualizarAssociado');
+        if (modalEl) {
+            if (typeof bootstrap !== 'undefined') {
+                var modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+        }
+
+        // 2. Busca os dados
+        $.getJSON(`/get_associado/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+
+            // --- CORREÇÃO AQUI: Manipulação manual das telas ---
+            $('.form-container').hide(); 
+            $('#associadoForm').show();  
+            // --------------------------------------------------
+            
+            $('#btnSalvarAssociado').text('SALVAR ALTERAÇÕES (Enviar)');
+            $('#btnSalvarAssociado').removeClass('btn-primary').addClass('btn-warning');
+            $('#btnCancelarEdicao').show();
+            
+            $('#cadastroAssociadoForm').attr('action', '/editar_associado');
+            $('#idAssociadoHidden').val(data.id);
+            
+            if($('#uvrSelectAssociado').length) $('#uvrSelectAssociado').val(data.uvr).trigger('change');
+            $('#nomeAssociado').val(data.nome);
+            $('#cpfAssociado').val(data.cpf);
+            $('#rgAssociado').val(data.rg);
+            
+            if(data.data_nascimento) {
+                let partes = data.data_nascimento.split('/');
+                if(partes.length === 3) $('input[name="data_nascimento"]').val(`${partes[2]}-${partes[1]}-${partes[0]}`);
+            }
+            if(data.data_admissao) {
+                let partes = data.data_admissao.split('/');
+                if(partes.length === 3) $('input[name="data_admissao"]').val(`${partes[2]}-${partes[1]}-${partes[0]}`);
+            }
+
+            $('select[name="status"]').val(data.status);
+            $('#cepAssociado').val(data.cep);
+            $('#logradouroAssociado').val(data.logradouro);
+            $('#numeroAssociado').val(data.numero);
+            $('#bairroAssociado').val(data.bairro);
+            $('#cidadeAssociado').val(data.cidade);
+            $('#ufAssociado').val(data.uf);
+            $('#telefoneAssociado').val(data.telefone);
+            
+            if (data.foto_base64) {
+                $('#fotoPreview').attr('src', data.foto_base64).show();
+                $('#fotoPlaceholder').hide();
+                $('#campoFotoBase64').val(data.foto_base64);
+            } else {
+                $('#fotoPreview').hide();
+                $('#fotoPlaceholder').show();
+                $('#campoFotoBase64').val('');
+            }
+
+            $('html, body').animate({ scrollTop: $("#associadoForm").offset().top - 100 }, 500);
+
+        }).fail(function(jqXHR, textStatus, errorThrown) {
+            alert("Erro ao carregar dados. Verifique o console (F12).");
+        });
+    }
+
+    function cancelarEdicaoAssociado() {
+        $('#cadastroAssociadoForm')[0].reset();
+        $('#btnSalvarAssociado').text('CADASTRAR');
+        $('#btnSalvarAssociado').removeClass('btn-warning').addClass('btn-primary');
+        $('#btnCancelarEdicao').hide();
+        $('#cadastroAssociadoForm').attr('action', '/cadastrar_associado');
+        $('#idAssociadoHidden').val('');
+        
+        $('#fotoPreview').hide();
+        $('#fotoPlaceholder').show();
+        $('#campoFotoBase64').val('');
+        
+        alert("Modo de edição cancelado.");
+        
+        // --- CORREÇÃO AQUI TAMBÉM ---
+        $('.form-container').hide();
+        $('#gestaoAssociadosContainer').show();
+    }
+
+    // Função global para calcular saldo (Fluxo)
+    window.calcularSaldoOperacaoFluxo = function() {
+        try {
+            let totalPendenteNFs = 0;
+            $('#nfsEmAbertoContainer .nf-checkbox:checked').each(function() {
+                const valorPendente = parseFloat($(this).data('valor-pendente')) || 0;
+                totalPendenteNFs += valorPendente;
+            });
+            const valorEfetivoStr = $('#valorEfetivo').val();
+            const valorEfetivoNumerico = parseFloat(valorEfetivoStr.replace(/\./g, '').replace(',', '.')) || 0;
+            const saldoOperacao = totalPendenteNFs - valorEfetivoNumerico;
+            $('#saldoOperacaoDisplay').val(saldoOperacao.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}));
+        } catch (e) {
+            console.error('Erro no cálculo do saldo:', e);
+            $('#saldoOperacaoDisplay').val('R$ 0,00');
+        }
+    };
+
+    $(document).ready(function() {
+        // Máscaras
+        $('#cnpj').mask('00.000.000/0000-00', {reverse: true});
+        $('#cepCF, #cepAssociado').mask('00000-000');
+        $('#cpfAssociado').mask('000.000.000-00', {reverse: true});
+        $('#telefoneCF, #telefoneAssociado').mask('(00) 00000-0000');
+        $('.valor-monetario').mask('#.##0,00', {reverse: true});
+
+        // Função para preencher datas
+        function preencherDataAtual(selector) {
+            if (!$(selector).val()) $(selector).val(new Date().toISOString().slice(0, 10));
+        }
+        function atualizarDataHora(selector) {
+            var now = new Date();
+            var dia = String(now.getDate()).padStart(2, '0');
+            var mes = String(now.getMonth() + 1).padStart(2, '0');
+            var ano = now.getFullYear();
+            var hora = String(now.getHours()).padStart(2, '0');
+            var minuto = String(now.getMinutes()).padStart(2, '0');
+            var segundo = String(now.getSeconds()).padStart(2, '0');
+            $(selector).val(`${dia}/${mes}/${ano} ${hora}:${minuto}:${segundo}`);
+        }
+        function preencherDatasPadraoFluxo() {
+            var date = new Date();
+            var primeiroDia = new Date(date.getFullYear(), date.getMonth(), 1);
+            var ultimoDia = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+            $('#fluxoDataInicialFiltro').val(primeiroDia.toISOString().slice(0, 10));
+            $('#fluxoDataFinalFiltro').val(ultimoDia.toISOString().slice(0, 10));
+        }
+
+        const uvrAssociacaoMap = { "UVR 01": "ASCAMAR", "UVR 02": "ACAN" };
+        function preencherAssociacao(uvrFieldId, assocFieldId) {
+            const uvr = $('#' + uvrFieldId).val();
+            $('#' + assocFieldId).val(uvrAssociacaoMap[uvr] || "");
+        }
+        
+        const atividadesOpcoes = {
+            "Fornecedor/Prestador": ["Aquisição de Bens de Consumo", "Aquisição de Bens Permanentes", "Serviços de Terceiros (PJ)", "Serviços de Terceiros (PF)", "Concessionárias (Água, Luz, Tel)", "Impostos e Taxas", "Outras Despesas Operacionais"],
+            "Cliente": ["Venda de Materiais Recicláveis", "Prestação de Serviços de Coleta", "Doações de Empresas", "Outras Receitas Operacionais"],
+            "Despesa": ["Compras de Materiais", "Pagamento de Fornecedores", "Serviços Contratados", "Despesas Administrativas", "Despesas com Pessoal", "Rateio dos Associados", "Impostos e Contribuições", "Outras Despesas"],
+            "Receita": ["Venda de Recicláveis", "Serviços Prestados à Comunidade", "Doações Recebidas (Geral)", "Repasses Governamentais", "Rendimentos de Aplicações", "Outras Receitas"]
+        };
+
+        // --- FUNÇÃO mostrarFormulario (DENTRO DO READY) ---
+        function mostrarFormulario(formId) {
+            $('.form-container').hide();
+            $('#' + formId).show();
+
+            if (formId === 'clienteFornecedorForm') { atualizarDataHora('#dataHoraCadastroCF'); atualizarAtividadesCadastroClienteFornecedor(); }
+            else if (formId === 'associadoForm') { atualizarDataHora('#dataHoraCadastroAssociado'); }
+            else if (formId === 'produtoServicoForm') { atualizarDataHora('#dataHoraCadastroPS'); atualizarAtividadesProdutoServico(); }
+            else if (formId === 'contaCorrenteForm') { atualizarDataHora('#dataHoraCadastroConta'); popularBancos(); }
+            else if (formId === 'receitaDespesaForm') { atualizarDataHora('#dataHoraCadastroTransacao'); preencherDataAtual('#dataDocumentoTransacao'); if ($('#itensDocumentoContainer .item-row').length === 0) { adicionarItemLinha(); } $('#uvrSelectTransacao').trigger('change'); $('#tipoTransacaoSelect').trigger('change'); }
+            else if (formId === 'fluxoCaixaForm') { 
+                atualizarDataHora('#dataHoraRegistroFluxo'); 
+                preencherDataAtual('#dataEfetivaFluxo'); 
+                if(!$('#fluxoDataInicialFiltro').val()) preencherDatasPadraoFluxo();
+                $('#uvrFluxoCaixa').trigger('change'); 
+            }
+            else if (formId === 'relatoriosFormContainer') { 
+                loadRelatorioUVRs(); preencherDataAtual('#relDataInicial'); preencherDataAtual('#relDataFinal'); 
+                loadRelatorioCatalogOptions('grupo', { tipo_transacao: '', tipo_atividade_catalogo: '' }); 
+                $('#relUvr').trigger('change'); 
+            }
+            else if (formId === 'extratoBancarioContainer') { loadExtratoUVRs(); preencherDataAtual('#extratoDataInicial'); preencherDataAtual('#extratoDataFinal'); }
+            else if (formId === 'gestaoAssociadosContainer') { $('#inputBuscaAssociado').focus(); }
+        }
+
+        $('#btnClienteFornecedor').click(() => mostrarFormulario('clienteFornecedorForm'));
+        $('#btnAssociado').click(() => mostrarFormulario('associadoForm'));
+        $('#btnProdutoServico').click(() => mostrarFormulario('produtoServicoForm'));
+        $('#btnContaCorrente').click(() => mostrarFormulario('contaCorrenteForm'));
+        $('#btnReceitaDespesa').click(() => mostrarFormulario('receitaDespesaForm'));
+        $('#btnFluxoCaixa').click(() => mostrarFormulario('fluxoCaixaForm'));
+        $('#btnRelatorios').click(() => mostrarFormulario('relatoriosFormContainer'));
+        $('#btnExtratoBancario').click(() => mostrarFormulario('extratoBancarioContainer'));
+        $('#btnGestaoAssociados').click(() => mostrarFormulario('gestaoAssociadosContainer'));
+        
+        $('#inputBuscaAssociado').keypress(function(e) { if(e.which == 13) buscarAssociados(); });
+
+        $('#uvrSelect').change(() => preencherAssociacao('uvrSelect', 'associacaoInput'));
+        $('#uvrSelectAssociado').change(() => preencherAssociacao('uvrSelectAssociado', 'associacaoInputAssociado'));
+        $('#uvrSelectConta').change(() => preencherAssociacao('uvrSelectConta', 'associacaoInputConta'));
+        
+        $('#uvrSelectTransacao').change(() => {
+            preencherAssociacao('uvrSelectTransacao', 'associacaoInputTransacao');
+            carregarOrigemTransacao(); 
+            $('#itensDocumentoContainer').empty(); 
+            adicionarItemLinha(); 
+        });
+        
+        $('#uvrFluxoCaixa').change(() => {
+            preencherAssociacao('uvrFluxoCaixa', 'associacaoFluxoCaixa');
+            carregarResumoFinanceiroFluxo();
+            carregarContasCorrentesFluxo($('#uvrFluxoCaixa').val(), '#contaCorrenteSelect'); 
+            atualizarCadastrosComNotasFluxo(); 
+        });
+
+        $('#fluxoDataInicialFiltro, #fluxoDataFinalFiltro').change(function() {
+            carregarResumoFinanceiroFluxo(); 
+            const idCadastro = $('#idCadastroCfStrHidden').val();
+            const isRateio = $('#isAssociadoRateioHidden').val() === 'true';
+            if(idCadastro) carregarNotasEmAbertoFluxo(idCadastro, isRateio);
+        });
+
+        $('#extratoUvr').change(() => { carregarContasCorrentesFluxo($('#extratoUvr').val(), '#extratoContaCorrente'); });
+
+        function atualizarAtividadesCadastroClienteFornecedor() {
+            var tipoCadastro = $('#tipoCadastroCF').val(); 
+            var selectAtividade = $('#tipoAtividadeCF'); 
+            selectAtividade.empty().append('<option value="">Selecione...</option>');
+            if (atividadesOpcoes[tipoCadastro]) {
+                atividadesOpcoes[tipoCadastro].forEach(function(item) { selectAtividade.append(`<option value="${item}">${item}</option>`); });
+            }
+        }
+        $('#tipoCadastroCF').change(atualizarAtividadesCadastroClienteFornecedor);
+        
+        function atualizarAtividadesProdutoServico() {
+            var tipoPS = $('#tipoProdutoServicoSelect').val(); 
+            var selectAtividadePS = $('#tipoAtividadeProdutoServicoSelect'); 
+            selectAtividadePS.empty().append('<option value="">Selecione...</option>');
+            if (tipoPS === "Despesa" && atividadesOpcoes["Despesa"]) { 
+                atividadesOpcoes["Despesa"].forEach(function(item) { selectAtividadePS.append(`<option value="${item}">${item}</option>`); });
+            } else if (tipoPS === "Receita" && atividadesOpcoes["Receita"]) {
+                atividadesOpcoes["Receita"].forEach(function(item) { selectAtividadePS.append(`<option value="${item}">${item}</option>`); });
+            }
+        }
+        $('#tipoProdutoServicoSelect').change(atualizarAtividadesProdutoServico);
+
+        const bancosBrasil = [ { codigo: "001", nome: "Banco do Brasil S.A." }, { codigo: "104", nome: "Caixa Econômica Federal" }, { codigo: "237", nome: "Bradesco S.A." }, { codigo: "341", nome: "Itaú Unibanco S.A." }, { codigo: "033", nome: "Santander (Brasil) S.A." }, { codigo: "745", nome: "Citibank S.A." }, { codigo: "399", nome: "HSBC Bank Brasil S.A. - Banco Múltiplo" },  { codigo: "077", nome: "Banco Inter S.A." }, { codigo: "260", nome: "Nu Pagamentos S.A. (Nubank)" }, { codigo: "212", nome: "Banco Original S.A." }, { codigo: "655", nome: "Banco Votorantim S.A." }, { codigo: "070", nome: "BRB - Banco de Brasília S.A." }, { codigo: "041", nome: "Banrisul - Banco do Estado do Rio Grande do Sul S.A." }, { codigo: "756", nome: "Sicoob - Banco Cooperativo do Brasil S.A." }, { codigo: "085", nome: "Ailos (Viacredi, CredCrea, etc)" }, { codigo: "099", nome: "Uniprime Central CCC Ltda" }, { codigo: "748", nome: "Sicredi - Banco Cooperativo Sicredi S.A." }, { codigo: "000", nome: "Outro (especificar no apelido)" } ];
+        function popularBancos() {
+            const selectBanco = $('#bancoContaSelect');
+            if (selectBanco.children().length <= 1) {
+                selectBanco.empty().append('<option value="">Selecione o Banco...</option>');
+                bancosBrasil.forEach(function(banco) { selectBanco.append(`<option value="${banco.codigo}|${banco.nome}">${banco.codigo} - ${banco.nome}</option>`); });
+            }
+        }
+        $('#cadastroContaCorrenteForm').on('submit', function(e) {
+            const agencia = $('#agenciaContaInput').val().replace(/[^0-9]/g, '');
+            const conta = $('#contaCorrenteContaInput').val(); 
+            if (agencia.length === 0) { alert("O campo Agência é obrigatório e deve conter apenas números."); e.preventDefault(); return; }
+            if (conta.length === 0) { alert("O campo Conta Corrente é obrigatório."); e.preventDefault(); return; }
+        });
+
+        function carregarOrigemTransacao() {
+            const selectDropdown = $('#fornecedorPrestadorTransacaoSelect');
+            const uvr = $('#uvrSelectTransacao').val();
+            const tipoTransacao = $('#tipoTransacaoSelect').val(); 
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const labelOrigem = $('#labelFornecedorPrestadorCliente');
+
+            selectDropdown.empty().append('<option value="">Carregando...</option>');
+            $('#nomeFornecedorPrestadorTransacaoInput').val(''); 
+
+            if (!uvr) {
+                selectDropdown.empty().append('<option value="">Selecione a UVR...</option>');
+                labelOrigem.text('Fornecedor / Prestador / Cliente / Associado');
+                selectDropdown.prop('required', true); 
+                return;
+            }
+
+            let url = '';
+            const params = [`uvr=${encodeURIComponent(uvr)}`];
+            let tipoOrigemDesc = ''; 
+            let isRequired = true; 
+
+            if (tipoAtividade === "Rateio dos Associados") {
+                url = '/get_associados_ativos'; 
+                tipoOrigemDesc = 'Associado (para Rateio)';
+                isRequired = false; 
+            } else { 
+                let tipoCadastroFiltro = '';
+                if (tipoTransacao === 'Despesa') {
+                    tipoCadastroFiltro = 'Fornecedor/Prestador';
+                    tipoOrigemDesc = 'Fornecedor/Prestador';
+                } else if (tipoTransacao === 'Receita') {
+                    tipoCadastroFiltro = 'Cliente';
+                    tipoOrigemDesc = 'Cliente';
+                }
+
+                if (!tipoCadastroFiltro) { 
+                    selectDropdown.empty().append('<option value="">Selecione Tipo de Transação...</option>');
+                    labelOrigem.text('Fornecedor / Prestador / Cliente');
+                    selectDropdown.prop('required', true);
+                    return;
+                }
+                url = '/get_cadastros_ativos'; 
+                params.push(`tipo_cadastro_filtro=${encodeURIComponent(tipoCadastroFiltro)}`);
+            }
+            labelOrigem.text(tipoOrigemDesc);
+            selectDropdown.prop('required', isRequired); 
+
+            if (params.length > 0) { url += `?${params.join('&')}`; }
+
+            $.getJSON(url, function(data) {
+                selectDropdown.empty();
+                if (tipoAtividade === "Rateio dos Associados") {
+                    selectDropdown.append('<option value="">Rateio Geral (Nenhum Associado Específico)</option>'); 
+                } else {
+                    selectDropdown.append(`<option value="">Selecione ${tipoOrigemDesc}...</option>`);
+                }
+
+                if (data && data.length > 0) {
+                    data.forEach(function(item) {
+                        const idVal = item.id; 
+                        const nomeVal = item.nome || item.razao_social; 
+                        const tipoVal = item.tipo_cadastro || 'Associado'; 
+                        selectDropdown.append(`<option value="${idVal}" data-nome="${nomeVal}">${nomeVal} (${tipoVal})</option>`);
+                    });
+                } else if (tipoAtividade !== "Rateio dos Associados") { 
+                     selectDropdown.append(`<option value="">Nenhum ${tipoOrigemDesc} encontrado</option>`);
+                }
+            }).fail(function(jqXHR, textStatus, errorThrown) { 
+                selectDropdown.empty().append('<option value="">Erro ao carregar</option>'); 
+            });
+        }
+        
+        $('#fornecedorPrestadorTransacaoSelect').change(function() {
+            const selectedOption = $(this).find('option:selected');
+            const nomeSelecionado = selectedOption.data('nome') || (selectedOption.text() ? selectedOption.text().split(' (')[0] : '');
+            $('#nomeFornecedorPrestadorTransacaoInput').val(nomeSelecionado);
+        });
+        
+        function atualizarAtividadesTransacao() { 
+            var tipo = $('#tipoTransacaoSelect').val(); 
+            var selectAtividade = $('#tipoAtividadeTransacaoSelect'); 
+            var currentAtividade = selectAtividade.val(); 
+            selectAtividade.empty().append('<option value="">Selecione...</option>');
+            
+            let opcoesAtividadeFiltradas = [];
+            if (tipo === "Despesa" && atividadesOpcoes["Despesa"]) { 
+                opcoesAtividadeFiltradas = atividadesOpcoes["Despesa"];
+            } else if (tipo === "Receita" && atividadesOpcoes["Receita"]) { 
+                opcoesAtividadeFiltradas = atividadesOpcoes["Receita"];
+            }
+            
+            opcoesAtividadeFiltradas.forEach(function(item) { selectAtividade.append(`<option value="${item}">${item}</option>`); });
+
+            if (opcoesAtividadeFiltradas.includes(currentAtividade)) { selectAtividade.val(currentAtividade); } 
+            else { selectAtividade.val(''); }
+            selectAtividade.trigger('change'); 
+        }
+        
+        $('#tipoTransacaoSelect').change(function(){ atualizarAtividadesTransacao(); });
+
+        $('#tipoAtividadeTransacaoSelect').change(function() { 
+            carregarOrigemTransacao(); 
+            $('#itensDocumentoContainer .item-row').each(function() { populateGrupos($(this)); });
+        });
+
+        function populateGrupos(rowElement) {
+            const tipoTransacao = $('#tipoTransacaoSelect').val(); 
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const grupoSelect = $(rowElement).find('.grupo-select');
+            
+            grupoSelect.empty().append('<option value="">Carregando Grupos...</option>');
+            $(rowElement).find('.subgrupo-select').empty().append('<option value="">Selecione Grupo</option>').prop('disabled', true);
+            $(rowElement).find('.item-select').empty().append('<option value="">Selecione Subgrupo</option>').prop('disabled', true);
+
+            if (!tipoTransacao || !tipoAtividade) {
+                grupoSelect.empty().append('<option value="">Selecione Tipo e Atividade da Transação</option>');
+                return;
+            }
+
+            let url = '/get_distinct_grupos'; 
+            let params = [];
+            if (tipoTransacao) params.push(`tipo=${encodeURIComponent(tipoTransacao)}`); 
+            if (tipoAtividade) params.push(`tipo_atividade=${encodeURIComponent(tipoAtividade)}`);
+            if (params.length > 0) url += `?${params.join('&')}`;
+
+            $.getJSON(url, function(data) {
+                grupoSelect.empty().append('<option value="">Selecione Grupo...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(grupo) { grupoSelect.append(`<option value="${grupo}">${grupo}</option>`); });
+                } else { grupoSelect.append('<option value="">Nenhum grupo encontrado</option>'); }
+            }).fail(function() { grupoSelect.empty().append('<option value="">Erro ao carregar grupos</option>'); });
+        }
+
+        function populateSubgrupos(rowElement, selectedGrupo) {
+            const tipoTransacao = $('#tipoTransacaoSelect').val();
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const subgrupoSelect = $(rowElement).find('.subgrupo-select');
+
+            subgrupoSelect.empty().append('<option value="">Carregando Subgrupos...</option>').prop('disabled', true);
+            $(rowElement).find('.item-select').empty().append('<option value="">Selecione Subgrupo</option>').prop('disabled', true);
+
+            if (!selectedGrupo) {
+                subgrupoSelect.empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+                return;
+            }
+            if (!tipoTransacao || !tipoAtividade) {
+                subgrupoSelect.empty().append('<option value="">Selecione Tipo e Atividade da Transação</option>').prop('disabled', true);
+                return;
+            }
+
+            let url = `/get_distinct_subgrupos?grupo=${encodeURIComponent(selectedGrupo)}`;
+            let params = [];
+            if (tipoTransacao) params.push(`tipo=${encodeURIComponent(tipoTransacao)}`); 
+            if (tipoAtividade) params.push(`tipo_atividade=${encodeURIComponent(tipoAtividade)}`);
+            if (params.length > 0) url += `&${params.join('&')}`;
+            
+            $.getJSON(url, function(data) {
+                subgrupoSelect.empty().append('<option value="">Selecione Subgrupo...</option>');
+                subgrupoSelect.append('<option value="">(Nenhum)</option>'); 
+                if (data && data.length > 0) {
+                    data.forEach(function(subgrupo) { subgrupoSelect.append(`<option value="${subgrupo}">${subgrupo}</option>`); });
+                }
+                subgrupoSelect.prop('disabled', false);
+            }).fail(function() { subgrupoSelect.empty().append('<option value="">Erro ao carregar subgrupos</option>').prop('disabled', false); });
+        }
+
+        function populateItems(rowElement, selectedGrupo, selectedSubgrupo) {
+            const tipoTransacao = $('#tipoTransacaoSelect').val();
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const itemSelect = $(rowElement).find('.item-select');
+
+            itemSelect.empty().append('<option value="">Carregando Itens...</option>').prop('disabled', true);
+
+            if (!selectedGrupo) { 
+                itemSelect.empty().append('<option value="">Selecione Grupo</option>').prop('disabled', true);
+                return;
+            }
+            if (!tipoTransacao || !tipoAtividade) {
+                itemSelect.empty().append('<option value="">Selecione Tipo e Atividade da Transação</option>').prop('disabled', true);
+                return;
+            }
+
+            let url = `/get_items_for_filters?grupo=${encodeURIComponent(selectedGrupo)}&subgrupo=${encodeURIComponent(selectedSubgrupo === null ? "" : selectedSubgrupo)}`;
+            let params = [];
+            if (tipoTransacao) params.push(`tipo=${encodeURIComponent(tipoTransacao)}`); 
+            if (tipoAtividade) params.push(`tipo_atividade=${encodeURIComponent(tipoAtividade)}`);
+            if (params.length > 0) url += `&${params.join('&')}`;
+
+            $.getJSON(url, function(data) {
+                itemSelect.empty().append('<option value="">Selecione Item...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(item) { itemSelect.append(`<option value="${item}">${item}</option>`); });
+                } else { itemSelect.append('<option value="">Nenhum item encontrado</option>'); }
+                itemSelect.prop('disabled', false);
+            }).fail(function() { itemSelect.empty().append('<option value="">Erro ao carregar itens</option>').prop('disabled', false); });
+        }
+        
+        const unidadesMedida = ["UN", "PC", "CX", "KG", "G", "L", "ML", "M", "M2", "M3", "H", "SV", "PCT", "RL", "FD", "GL", "LT", "DZ", "PAR", "JG", "KIT", "OUTRO"];
+        let itemCounter = 0;
+
+        function adicionarItemLinha() {
+            itemCounter++;
+            let unidadeOptions = unidadesMedida.map(u => `<option value="${u}">${u}</option>`).join('');
+            const itemHtml = `
+                <div class="item-row" id="itemRow${itemCounter}">
+                    <div class="item-fields-grid">
+                        <div class="form-group">
+                            <label for="grupo${itemCounter}">Grupo</label>
+                            <select class="form-select grupo-select" id="grupo${itemCounter}" name="produto_servico_grupo[]">
+                                <option value="">Selecione Grupo...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="subgrupo${itemCounter}">Subgrupo</label>
+                            <select class="form-select subgrupo-select" id="subgrupo${itemCounter}" name="produto_servico_subgrupo[]" disabled>
+                                <option value="">Selecione Grupo Primeiro</option>
+                            </select>
+                        </div>
+                        <div class="form-group desc-produto-servico"> 
+                            <label for="desc${itemCounter}" class="required-field">Descrição Prod./Serv.</label>
+                            <select class="form-select item-select" id="desc${itemCounter}" name="produto_servico_descricao[]" required disabled>
+                                <option value="">Selecione Subgrupo Primeiro</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="un${itemCounter}" class="required-field">UN</label>
+                            <select class="form-select" id="un${itemCounter}" name="produto_servico_unidade[]" required>${unidadeOptions}</select>
+                        </div>
+                        <div class="form-group">
+                            <label for="qtd${itemCounter}" class="required-field">Qtd.</label>
+                            <input type="number" class="form-control item-calculavel" id="qtd${itemCounter}" name="produto_servico_quantidade[]" placeholder="Qtd." step="any" min="0.001" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vu${itemCounter}" class="required-field">Vl. Unit. (R$)</label>
+                            <input type="text" class="form-control item-calculavel valor-monetario" id="vu${itemCounter}" name="produto_servico_valor_unitario[]" placeholder="Unitário" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vt${itemCounter}">Vl. Total Item (R$)</label>
+                            <input type="text" class="form-control valor-total-item-input valor-monetario" id="vt${itemCounter}" name="produto_servico_valor_total_item[]" readonly>
+                        </div>
+                        <button type="button" class="btn btn-danger btn-sm remover-item" data-item="${itemCounter}"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+            `;
+            $('#itensDocumentoContainer').append(itemHtml);
+            populateGrupos($(`#itemRow${itemCounter}`)); 
+            $(`#vu${itemCounter}`).mask('#.##0,00', {reverse: true});
+            $(`#vt${itemCounter}`).mask('#.##0,00', {reverse: true}); 
+        }
+
+        $('#btnAdicionarItem').click(adicionarItemLinha);
+
+        $('#itensDocumentoContainer').on('click', '.remover-item', function() {
+            $(this).closest('.item-row').remove();
+            calcularValorTotalDocumento();
+        });
+        
+        $('#itensDocumentoContainer').on('change', '.grupo-select', function() {
+            const selectedGrupo = $(this).val();
+            const rowElement = $(this).closest('.item-row');
+            populateSubgrupos(rowElement, selectedGrupo);
+        });
+
+        $('#itensDocumentoContainer').on('change', '.subgrupo-select', function() {
+            const selectedSubgrupo = $(this).val(); 
+            const rowElement = $(this).closest('.item-row');
+            const selectedGrupo = $(rowElement).find('.grupo-select').val();
+            populateItems(rowElement, selectedGrupo, selectedSubgrupo);
+        });
+
+        $('#itensDocumentoContainer').on('input change keyup', '.item-calculavel', function() { 
+            let row = $(this).closest('.item-row');
+            let qtdStr = row.find('input[name="produto_servico_quantidade[]"]').val().replace(',', '.');
+            let vuStr = row.find('input[name="produto_servico_valor_unitario[]"]').val().replace("R$", "").replace(/\./g, '').replace(',', '.');
+            let qtd = parseFloat(qtdStr) || 0;
+            let vu = parseFloat(vuStr) || 0;
+            let totalItem = qtd * vu;
+            row.find('input[name="produto_servico_valor_total_item[]"]').val(totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+            calcularValorTotalDocumento();
+        });
+
+        function calcularValorTotalDocumento() {
+            let totalDocumento = 0;
+            $('#itensDocumentoContainer .item-row').each(function() {
+                let valorTotalItemStr = $(this).find('input[name="produto_servico_valor_total_item[]"]').val().replace("R$", "").replace(/\./g, '').replace(',', '.');
+                if (valorTotalItemStr) {
+                    totalDocumento += parseFloat(valorTotalItemStr) || 0;
+                }
+            });
+            $('#valorTotalDocumentoCalculado').val(totalDocumento.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        }
+        
+        $('#transacaoForm').on('submit', function(e) { 
+            if ($('#itensDocumentoContainer .item-row').length === 0) {
+                alert("Adicione pelo menos um produto/serviço à transação.");
+                e.preventDefault(); 
+                return false;
+            }
+            let itemValido = true;
+            $('#itensDocumentoContainer .item-row').each(function(index) {
+                const itemSelect = $(this).find('.item-select');
+                const grupoSelect = $(this).find('.grupo-select'); 
+                if (!itemSelect.val() && grupoSelect.val()) { 
+                    alert(`Por favor, selecione a Descrição do Produto/Serviço para o item ${index + 1}.`);
+                    itemSelect.focus();
+                    itemValido = false;
+                    return false; 
+                }
+            });
+            if (!itemValido) {
+                e.preventDefault();
+                return false;
+            }
+
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val();
+            const origemSelecionada = $('#fornecedorPrestadorTransacaoSelect').val(); 
+            const nomeOrigemInputHidden = $('#nomeFornecedorPrestadorTransacaoInput');
+
+            if (tipoAtividade === "Rateio dos Associados") {
+                if (!origemSelecionada) { 
+                     nomeOrigemInputHidden.val("Rateio Geral Associados");
+                } else { 
+                    if (!nomeOrigemInputHidden.val()) { 
+                         nomeOrigemInputHidden.val($('#fornecedorPrestadorTransacaoSelect option:selected').data('nome'));
+                    }
+                }
+            } else { 
+                if (!origemSelecionada) {
+                    alert("O campo '" + $('#labelFornecedorPrestadorCliente').text() + "' é obrigatório para este Tipo de Atividade.");
+                    $('#fornecedorPrestadorTransacaoSelect').focus();
+                    e.preventDefault();
+                    return false;
+                }
+                 if (!nomeOrigemInputHidden.val()) { 
+                     nomeOrigemInputHidden.val($('#fornecedorPrestadorTransacaoSelect option:selected').data('nome'));
+                 }
+            }
+            if (!nomeOrigemInputHidden.val() && tipoAtividade !== "Rateio dos Associados" && !origemSelecionada) {
+                 alert("O campo 'Nome do Fornecedor/Prestador/Cliente/Associado' é obrigatório.");
+                 e.preventDefault();
+                 return false;
+            }
+        });
+        
+        // --- LÓGICA PARA FLUXO DE CAIXA ---
+        function carregarResumoFinanceiroFluxo() {
+            const uvr = $('#uvrFluxoCaixa').val();
+            const dataIni = $('#fluxoDataInicialFiltro').val();
+            const dataFim = $('#fluxoDataFinalFiltro').val();
+
+            if (!uvr || !dataIni || !dataFim) {
+                $('#painelFluxoResumo').hide();
+                return;
+            }
+
+            $.get(`/get_resumo_fluxo_caixa?uvr=${uvr}&data_inicial=${dataIni}&data_final=${dataFim}`, function(resumo) {
+                $('#resumoReceitas').text(parseFloat(resumo.receitas_a_receber || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#resumoDespesas').text(parseFloat(resumo.despesas_a_pagar || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#resumoSaldo').text(parseFloat(resumo.saldo_projetado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#painelFluxoResumo').show();
+            }).fail(function() {
+                $('#painelFluxoResumo').hide();
+            });
+        }
+
+        function carregarContasCorrentesFluxo(uvr, selectId) {
+            const select = $(selectId); 
+            select.empty().append('<option value="">Carregando...</option>');
+            if (!uvr) {
+                select.empty().append('<option value="">Selecione a UVR...</option>');
+                select.prop('disabled', true); 
+                return;
+            }
+            $.get(`/get_contas_correntes?uvr=${uvr}`, function(data) { 
+                select.empty().append('<option value="">Selecione a Conta...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(c => { select.append(`<option value="${c.id}" data-uvr-conta="${c.uvr}">${c.display_name}</option>`); });
+                    select.prop('disabled', false); 
+                } else {
+                    select.append('<option value="">Nenhuma conta encontrada para esta UVR</option>');
+                    select.prop('disabled', true); 
+                }
+            }).fail(function() {
+                select.empty().append('<option value="">Erro ao carregar contas</option>');
+                select.prop('disabled', true);
+            });
+        }
+
+        function atualizarCadastrosComNotasFluxo() {
+            const uvr = $('#uvrFluxoCaixa').val();
+            const tipoMov = $('#tipoMovimentacao').val();
+            const select = $('#cadastroCFSelect');
+            select.empty().append('<option value="">Carregando...</option>');
+            $('#nfsEmAbertoContainer').html('<small class="text-muted">Selecione para listar documentos.</small>');
+            $('#idCadastroCfStrHidden').val('');
+            $('#isAssociadoRateioHidden').val('');
+            $('#nomeCadastroCfDisplayHidden').val('');
+
+            if (!uvr || !tipoMov) {
+                select.empty().append('<option value="">Selecione UVR e Tipo Mov...</option>');
+                return;
+            }
+            
+            $('#labelClienteFornecedorFluxo').text(tipoMov === 'Recebimento' ? 'Cliente com Pendências' : 'Fornecedor/Associado com Pendências');
+            
+            $.get(`/get_clientes_fornecedores_com_pendencias?uvr=${uvr}&tipo_movimentacao=${tipoMov}`, function(data) {
+                select.empty().append(`<option value="">Selecione ${tipoMov === 'Recebimento' ? 'Cliente' : 'Fornecedor/Associado'}...</option>`);
+                
+                if (data && data.length > 0) {
+                    data.forEach(c => {
+                        const isRateio = c.is_associado_rateio || false;
+                        select.append(`<option value="${c.id}" 
+                            data-nome="${c.razao_social}" 
+                            data-is-associado-rateio="${isRateio}">
+                            ${c.razao_social}${isRateio ? " (Rateio)" : ""}
+                        </option>`);
+                    });
+                } else {
+                    select.append(`<option value="">Nenhum com pendências encontrado</option>`);
+                }
+            }).fail(function() { select.empty().append('<option value="">Erro ao carregar</option>'); });
+        }
+
+        $('#tipoMovimentacao').change(function() { atualizarCadastrosComNotasFluxo(); });
+
+        $('#cadastroCFSelect').change(function() {
+            const selectedOption = $(this).find('option:selected');
+            const idCadastroCfOriginal = selectedOption.val(); 
+            const nomeCadastroCfDisplay = selectedOption.data('nome') || selectedOption.text().split(' (')[0];
+            const isAssociadoRateio = selectedOption.data('is-associado-rateio') || false;
+            
+            $('#idCadastroCfStrHidden').val(idCadastroCfOriginal);
+            $('#isAssociadoRateioHidden').val(isAssociadoRateio);
+            $('#nomeCadastroCfDisplayHidden').val(nomeCadastroCfDisplay);
+
+            carregarNotasEmAbertoFluxo(idCadastroCfOriginal, isAssociadoRateio);
+        });
+
+        function carregarNotasEmAbertoFluxo(idCadastroOuNome, isRateio) { 
+            const uvr = $('#uvrFluxoCaixa').val();
+            const tipoMov = $('#tipoMovimentacao').val();
+            const dataIni = $('#fluxoDataInicialFiltro').val();
+            const dataFim = $('#fluxoDataFinalFiltro').val();
+            const container = $('#nfsEmAbertoContainer');
+
+            container.empty();
+
+            if (!idCadastroOuNome || !uvr || !tipoMov || !dataIni || !dataFim) {
+                container.html('<small class="text-muted">Informações insuficientes (Datas/Cadastro) para carregar documentos.</small>');
+                calcularSaldoOperacaoFluxo(); 
+                return;
+            }
+            
+            container.html('<small class="text-muted">Carregando documentos...</small>');
+
+            const params = new URLSearchParams({
+                uvr: uvr,
+                id_cadastro_cf: idCadastroOuNome, 
+                tipo_movimentacao: tipoMov,
+                is_associado_rateio: isRateio,
+                data_inicial: dataIni,
+                data_final: dataFim 
+            });
+            
+            $.get(`/get_notas_em_aberto?${params.toString()}`, function(notas) {
+                container.empty();
+                if (notas && notas.length > 0) {
+                    notas.forEach(nf => {
+                        let dataDocFormatada = new Date(nf.data_documento + 'T00:00:00').toLocaleDateString('pt-BR');
+                        container.append(`
+                            <div class="form-check">
+                                <input class="form-check-input nf-checkbox" type="checkbox" 
+                                    value="${nf.id}" 
+                                    id="fluxo_nf_${nf.id}" 
+                                    data-valor-pendente="${nf.valor_restante}">
+                                <label class="form-check-label" for="fluxo_nf_${nf.id}">
+                                    ${nf.numero_documento || 'Sem doc'} (${dataDocFormatada}) - 
+                                    R$ ${parseFloat(nf.valor_restante).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                </label>
+                            </div>
+                        `);
+                    });
+                } else { container.html('<small class="text-muted">Nenhum documento em aberto encontrado neste período.</small>'); }
+                calcularSaldoOperacaoFluxo(); 
+            }).fail(function() { container.html('<small class="text-danger">Erro ao carregar documentos.</small>'); calcularSaldoOperacaoFluxo(); });
+        }
+        
+        $('#valorEfetivo').on('input change keyup paste', calcularSaldoOperacaoFluxo);
+        $('#nfsEmAbertoContainer').on('change', '.nf-checkbox', calcularSaldoOperacaoFluxo);
+
+
+        $('#formRegistrarFluxoCaixa').on('submit', function(e) {
+            e.preventDefault();
+            const uvr = $('#uvrFluxoCaixa').val();
+            const tipoMov = $('#tipoMovimentacao').val();
+            const idCadastroCfStr = $('#idCadastroCfStrHidden').val(); 
+            const idConta = $('#contaCorrenteSelect').val();
+            const dataEfetiva = $('#dataEfetivaFluxo').val();
+            const valorEfetivo = $('#valorEfetivo').val(); 
+            
+            if (!uvr || !tipoMov || !idCadastroCfStr || !idConta || !dataEfetiva || !valorEfetivo) {
+                alert("Preencha todos os campos obrigatórios do Fluxo de Caixa.");
+                return;
+            }
+            
+            const nfsSelecionadas = $('.nf-checkbox:checked');
+            if (nfsSelecionadas.length === 0) {
+                alert("Selecione pelo menos uma NF (transação) para registrar a movimentação.");
+                return;
+            }
+            
+            const formData = {
+                uvr: uvr,
+                associacao: $('#associacaoFluxoCaixa').val(),
+                tipo_movimentacao: tipoMov,
+                id_cadastro_cf_str: idCadastroCfStr,
+                is_associado_rateio: ($('#isAssociadoRateioHidden').val() === 'true'), 
+                nome_cadastro_cf_display: $('#nomeCadastroCfDisplayHidden').val(),
+                id_conta_corrente: idConta,
+                numero_documento_bancario: $('input[name="numero_documento_bancario"]').val(),
+                data_efetiva: dataEfetiva,
+                valor_efetivo: valorEfetivo.replace(/\./g, '').replace(',', '.'), 
+                data_hora_registro_fluxo: $('#dataHoraRegistroFluxo').val(), 
+                observacoes: $('textarea[name="observacoes"]').val(),
+                ids_nfs_selecionadas: nfsSelecionadas.map(function() { return this.value; }).get()
+            };
+            
+            $.ajax({
+                url: '/registrar_fluxo_caixa',
+                type: 'POST',
+                contentType: 'application/json', 
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    if (response.status === 'sucesso') {
+                        alert("Movimentação de Fluxo de Caixa registrada com sucesso!");
+                        $('#formRegistrarFluxoCaixa')[0].reset(); 
+                        $('#nfsEmAbertoContainer').empty().html('<small class="text-muted">Selecione para listar documentos.</small>');
+                        $('#saldoOperacaoDisplay').val('');
+                        preencherDataAtual('#dataEfetivaFluxo'); 
+                        atualizarDataHora('#dataHoraRegistroFluxo'); 
+                        if (uvr) {
+                            carregarResumoFinanceiroFluxo(); // Recarrega resumo
+                            atualizarCadastrosComNotasFluxo(); 
+                        }
+                    } else {
+                        alert("Erro ao registrar Fluxo de Caixa: " + (response.error || "Erro desconhecido. Verifique o console."));
+                        console.error("Erro do backend:", response);
+                    }
+                },
+                error: function(xhr) {
+                    let errorMsg = "Erro ao registrar Fluxo de Caixa.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += " Detalhes: " + xhr.responseJSON.error;
+                    } else if (xhr.statusText) {
+                        errorMsg += " Status: " + xhr.statusText;
+                    }
+                    alert(errorMsg);
+                    console.error("Erro AJAX:", xhr);
+                }
+            });
+        });
+
+
+        // --- LÓGICA PARA RELATÓRIOS FINANCEIROS ---
+        function loadRelatorioUVRs() { 
+            $.getJSON('/get_relatorio_uvrs', function(data) {
+                const selects = $('#relUvr, #extratoUvr'); 
+                selects.find('option:not(:first)').remove(); // Limpa opções anteriores, exceto a primeira ("Todas" ou "Selecione")
+                data.forEach(uvr => selects.append(`<option value="${uvr}">${uvr}</option>`));
+            }).fail(() => console.error("Erro ao carregar UVRs para relatórios/extratos."));
+        }
+        function loadExtratoUVRs() { loadRelatorioUVRs(); } // Reutiliza a função
+
+        function loadRelatorioTiposAtividadeTransacao(tipoTransacao) {
+            const select = $('#relTipoAtividadeTransacao');
+            select.find('option:not(:first)').remove().end().val(''); 
+            select.prop('disabled', true);
+            $('#relGrupo').find('option:not(:first)').remove().end().val('').prop('disabled', true); 
+            $('#relSubgrupo').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+            $('#relItem').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+
+            if (!tipoTransacao) { 
+                 loadRelatorioCatalogOptions('grupo', {}); 
+                 return;
+            }
+
+            $.getJSON(`/get_relatorio_tipos_atividade_transacao?tipo_transacao=${tipoTransacao}`, function(data) {
+                if (data && data.length > 0) {
+                    data.forEach(atv => select.append(`<option value="${atv}">${atv}</option>`));
+                    select.prop('disabled', false);
+                }
+                loadRelatorioCatalogOptions('grupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: select.val() }); 
+            }).fail(() => console.error("Erro ao carregar Tipos de Atividade da Transação para relatório."));
+        }
+        
+        function loadRelatorioCatalogOptions(optionType, filters = {}) {
+            const selectMap = {
+                'grupo': $('#relGrupo'),
+                'subgrupo': $('#relSubgrupo'),
+                'item': $('#relItem')
+            };
+            const currentSelect = selectMap[optionType];
+            currentSelect.find('option:not(:first)').remove().end().val(''); 
+            currentSelect.prop('disabled', true);
+
+            if (optionType === 'grupo') {
+                $('#relSubgrupo').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+                $('#relItem').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+            } else if (optionType === 'subgrupo') {
+                $('#relItem').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+            }
+
+            if (optionType === 'subgrupo' && !filters.grupo) { return; }
+            if (optionType === 'item' && !filters.grupo ) { return; } 
+
+            let queryParams = `option_type=${optionType}`;
+            if (filters.tipo_transacao) queryParams += `&tipo_transacao=${encodeURIComponent(filters.tipo_transacao)}`;
+            if (filters.tipo_atividade_catalogo) queryParams += `&tipo_atividade_catalogo=${encodeURIComponent(filters.tipo_atividade_catalogo)}`;
+            if (filters.grupo) queryParams += `&grupo=${encodeURIComponent(filters.grupo)}`;
+            if (filters.subgrupo) queryParams += `&subgrupo=${encodeURIComponent(filters.subgrupo)}`;
+
+            $.getJSON(`/get_relatorio_catalog_options?${queryParams}`, function(data) {
+                if (data && data.length > 0) {
+                    data.forEach(opt => currentSelect.append(`<option value="${opt}">${opt}</option>`));
+                    if(optionType === 'subgrupo') { 
+                        currentSelect.append('<option value="(Nenhum)">(Nenhum)</option>'); 
+                    }
+                    currentSelect.prop('disabled', false);
+                } else if (optionType === 'subgrupo') { 
+                     currentSelect.append('<option value="(Nenhum)">(Nenhum)</option>');
+                     currentSelect.prop('disabled', false);
+                }
+            }).fail(() => console.error(`Erro ao carregar ${optionType} para relatório.`));
+        }
+
+        function loadRelatorioEntidades() {
+            const tipoEntidade = $('#relTipoEntidade').val();
+            const uvr = $('#relUvr').val();
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const selectNomeEntidade = $('#relNomeEntidade');
+            
+            selectNomeEntidade.empty().append('<option value="">Carregando...</option>').prop('disabled', true);
+
+            if (!tipoEntidade) {
+                selectNomeEntidade.empty().append('<option value="">Selecione Tipo Entidade</option>').prop('disabled', true);
+                return;
+            }
+
+            let queryParams = `tipo_entidade=${encodeURIComponent(tipoEntidade)}`;
+            if (uvr) queryParams += `&uvr=${encodeURIComponent(uvr)}`;
+            if (tipoTransacao) queryParams += `&tipo_transacao_rel=${encodeURIComponent(tipoTransacao)}`;
+
+
+            $.getJSON(`/get_relatorio_entidades_para_filtro?${queryParams}`, function(data) {
+                selectNomeEntidade.empty().append(`<option value="">Todos(as) os(as) ${tipoEntidade.toLowerCase()}s</option>`);
+                if (data && data.length > 0) {
+                    data.forEach(entidade => {
+                        selectNomeEntidade.append(`<option value="${entidade.id}" data-nome-entidade="${entidade.nome}">${entidade.nome}</option>`);
+                    });
+                    selectNomeEntidade.prop('disabled', false);
+                } else {
+                    selectNomeEntidade.append(`<option value="">Nenhum(a) ${tipoEntidade.toLowerCase()} encontrado(a)</option>`);
+                     selectNomeEntidade.prop('disabled', true); 
+                }
+            }).fail(function() {
+                selectNomeEntidade.empty().append('<option value="">Erro ao carregar entidades</option>').prop('disabled', true);
+                console.error(`Erro ao carregar entidades do tipo: ${tipoEntidade} com UVR: ${uvr} e Tipo Trans.: ${tipoTransacao}`);
+            });
+        }
+        
+        $('#relUvr, #relTipoTransacao, #relTipoEntidade').change(function() { loadRelatorioEntidades(); });
+
+        $('#relTipoAtividadeTransacao').change(function() {
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const tipoAtividadeTransacao = $(this).val(); 
+            loadRelatorioCatalogOptions('grupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: tipoAtividadeTransacao });
+        });
+
+        $('#relGrupo').change(function() {
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const tipoAtividadeTransacao = $('#relTipoAtividadeTransacao').val();
+            const grupo = $(this).val();
+            loadRelatorioCatalogOptions('subgrupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: tipoAtividadeTransacao, grupo: grupo });
+        });
+
+        $('#relSubgrupo').change(function() {
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const tipoAtividadeTransacao = $('#relTipoAtividadeTransacao').val();
+            const grupo = $('#relGrupo').val();
+            const subgrupo = $(this).val();
+            loadRelatorioCatalogOptions('item', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: tipoAtividadeTransacao, grupo: grupo, subgrupo: subgrupo });
+        });
+
+        let currentReportFilters = {}; 
+        $('#btnGerarRelatorio').click(function() {
+            const nomeEntidadeSelecionada = $('#relNomeEntidade option:selected').data('nome-entidade');
+
+            currentReportFilters = {
+                data_inicial: $('#relDataInicial').val(), data_final: $('#relDataFinal').val(),
+                uvr: $('#relUvr').val(), 
+                tipo_transacao_rel: $('#relTipoTransacao').val(), // Movido para antes
+                tipo_entidade: $('#relTipoEntidade').val(), 
+                id_entidade: $('#relNomeEntidade').val(),  
+                nome_entidade_display: nomeEntidadeSelecionada || $('#relNomeEntidade option:selected').text().split(" (")[0], // Para PDF
+                tipo_atividade_transacao_rel: $('#relTipoAtividadeTransacao').val(), 
+                grupo_rel: $('#relGrupo').val(), subgrupo_rel: $('#relSubgrupo').val(), 
+                item_rel: $('#relItem').val(), status_pagamento_rel: $('#relStatusPagamento').val(),
+                listar_por: $('#relListarPor').val() 
+            };
+            
+            if (!currentReportFilters.data_inicial || !currentReportFilters.data_final) {
+                alert("Por favor, selecione Data Inicial e Data Final."); return;
+            }
+            if (new Date(currentReportFilters.data_inicial) > new Date(currentReportFilters.data_final)) {
+                alert("A Data Inicial não pode ser maior que a Data Final."); return;
+            }
+
+            $('#relatorioStatus').text('Gerando relatório...').show();
+            $('#tabelaRelatorio thead').empty(); $('#tabelaRelatorio tbody').empty();
+            $('#btnBaixarCsv').hide(); $('#btnBaixarPdfRelatorioFinanceiro').hide();
+
+            $.ajax({
+                url: '/gerar_relatorio', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(currentReportFilters),
+                success: function(data) {
+                    $('#relatorioStatus').hide();
+                    if (data.error) { alert(`Erro ao gerar relatório: ${data.error}`); return; }
+                    if (data.length === 0) { $('#relatorioStatus').text('Nenhum dado encontrado para os filtros selecionados.').show(); return; }
+
+                    const headers = [
+                        "UVR", "Associação", "Fornecedor/Cliente/Associado", "Nº Doc.", 
+                        "Data Doc.", "Data Efetiva Pag./Rec.", 
+                        "Tipo Trans.", "Tipo Ativ. Trans.", "Item Descrição", 
+                        "Tipo Item (Cat.)", "Tipo Ativ. (Cat.)", "Grupo (Cat.)", "Subgrupo (Cat.)", 
+                        "UN", "Qtd.", "Vl. Unit. (R$)", "Vl. Total Item (R$)", 
+                        "Status Pag. NF", "Valor Pago/Rec. Item (R$)" 
+                    ];
+                    const headerKeys = [
+                        "uvr", "associacao", "nome_cadastro_origem", "numero_documento", 
+                        "data_documento", "data_efetiva_pag_rec", 
+                        "tipo_transacao", "tipo_atividade_transacao", "item_descricao", 
+                        "item_tipo_catalogo", "item_tipo_atividade_catalogo", "item_grupo_catalogo", "item_subgrupo_catalogo",
+                        "unidade", "quantidade", "valor_unitario", "valor_total_item", 
+                        "status_pagamento", "valor_pago_neste_item" 
+                    ];
+                    
+                    let headerHtml = '<tr>'; headers.forEach(h => headerHtml += `<th>${h}</th>`); headerHtml += '</tr>';
+                    $('#tabelaRelatorio thead').html(headerHtml);
+                    let tbodyHtml = '';
+                    data.forEach(row => {
+                        tbodyHtml += '<tr>';
+                        headerKeys.forEach(key => {
+                            let value = row[key] !== null && row[key] !== undefined ? row[key] : '';
+                            if (key === 'data_documento' && value) { 
+                                if (String(value).includes('-')) { 
+                                     try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
+                                }
+                            } else if (key === 'data_efetiva_pag_rec' && value) { 
+                                if (String(value).includes('-')) {
+                                     try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
+                                }
+                            } else if (key === 'data_hora_registro' && value) { 
+                                if (String(value).includes('T')) {
+                                     try { value = new Date(value).toLocaleString('pt-BR'); } catch(e) { /* mantem original */ }
+                                }
+                            } else if (['valor_unitario', 'valor_total_item', 'valor_pago_neste_item'].includes(key) && value) { 
+                                try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch(e) { /* mantem original */ }
+                            } else if (key === 'quantidade' && value) {
+                                try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } catch(e) { /* mantem original */ }
+                            }
+                            tbodyHtml += `<td>${value}</td>`;
+                        });
+                        tbodyHtml += '</tr>';
+                    });
+                    $('#tabelaRelatorio tbody').html(tbodyHtml);
+                    $('#btnBaixarCsv').show();
+                    $('#btnBaixarPdfRelatorioFinanceiro').show();
+                },
+                error: function(xhr) { $('#relatorioStatus').hide(); alert(`Erro ao gerar relatório: ${xhr.responseText || 'Erro desconhecido'}`); }
+            });
+        });
+
+        function baixarArquivo(url, filters, defaultFilename) {
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filters)
+            })
+            .then(async resp => {
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    let filename = defaultFilename;
+                    const disposition = resp.headers.get('Content-Disposition');
+                    if (disposition && disposition.indexOf('attachment') !== -1) {
+                        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        const matches = filenameRegex.exec(disposition);
+                        if (matches != null && matches[1]) { filename = matches[1].replace(/['"]/g, '');}
+                    }
+                    const link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(link.href);
+                } else {
+                    const errorData = await resp.json().catch(() => null);
+                    let errorMsg = "Erro ao baixar arquivo";
+                    if (errorData && errorData.message) { errorMsg += `: ${errorData.message}`; }
+                    else if (errorData && errorData.error) { errorMsg += `: ${errorData.error}`; }
+                    else { errorMsg += `: ${resp.statusText}`; }
+                    alert(errorMsg);
+                }
+            })
+            .catch(err => {
+                console.error("Falha na requisição de download:", err);
+                alert("Erro ao baixar arquivo. Verifique o console.");
+            });
+        }
+
+        $('#btnBaixarCsv').click(function() {
+            if (Object.keys(currentReportFilters).length === 0) { alert("Gere um relatório financeiro primeiro."); return; }
+            baixarArquivo('/baixar_csv_relatorio', currentReportFilters, 'relatorio_financeiro.csv');
+        });
+        $('#btnBaixarPdfRelatorioFinanceiro').click(function() {
+            if (Object.keys(currentReportFilters).length === 0) { alert("Gere um relatório financeiro primeiro."); return; }
+            baixarArquivo('/baixar_pdf_relatorio_financeiro', currentReportFilters, 'relatorio_financeiro.pdf');
+        });
+        
+        // --- LÓGICA PARA EXTRATO BANCÁRIO ---
+        let currentExtratoFilters = {};
+        $('#btnGerarExtrato').click(function() {
+            currentExtratoFilters = {
+                id_conta_corrente_extrato: $('#extratoContaCorrente').val(),
+                data_inicial_extrato: $('#extratoDataInicial').val(),
+                data_final_extrato: $('#extratoDataFinal').val(),
+            };
+            if (!currentExtratoFilters.id_conta_corrente_extrato || !currentExtratoFilters.data_inicial_extrato || !currentExtratoFilters.data_final_extrato) {
+                alert("Por favor, selecione Conta Corrente, Data Inicial e Data Final para o extrato."); return;
+            }
+            if (new Date(currentExtratoFilters.data_inicial_extrato) > new Date(currentExtratoFilters.data_final_extrato)) {
+                alert("A Data Inicial do extrato não pode ser maior que a Data Final."); return;
+            }
+
+            $('#extratoStatus').text('Gerando extrato...').show();
+            $('#tabelaExtrato thead, #tabelaExtrato tbody').empty();
+            $('#saldoInicialExtrato, #saldoFinalExtrato, #infoContaExtrato').hide().empty();
+            $('#btnBaixarCsvExtrato, #btnBaixarPdfExtrato').hide();
+
+            $.ajax({
+                url: '/gerar_extrato_bancario', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(currentExtratoFilters),
+                success: function(data) {
+                    $('#extratoStatus').hide();
+                    if (data.error) { alert(`Erro ao gerar extrato: ${data.error}`); return; }
+                    
+                    const contaInfo = data.conta_info || {};
+                    $('#extratoNomeConta').text(contaInfo.display_name || 'N/A');
+                    $('#extratoPeriodo').text(contaInfo.periodo || 'N/A');
+                    $('#infoContaExtrato').show();
+
+                    $('#saldoInicialExtrato').html(`<strong>Saldo Inicial:</strong> R$ ${parseFloat(data.saldo_inicial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`).show();
+                    
+                    if (data.movimentacoes && data.movimentacoes.length === 0) {
+                        $('#extratoStatus').text('Nenhuma movimentação encontrada para os filtros selecionados.').show();
+                    } else if (data.movimentacoes) {
+                        const headers = ["Data", "Histórico", "Entrada (R$)", "Saída (R$)", "Saldo (R$)"];
+                        let headerHtml = '<tr>'; headers.forEach(h => headerHtml += `<th>${h}</th>`); headerHtml += '</tr>';
+                        $('#tabelaExtrato thead').html(headerHtml);
+                        let tbodyHtml = '';
+                        data.movimentacoes.forEach(mov => {
+                            tbodyHtml += `<tr>
+                                <td>${mov.data}</td>
+                                <td style="white-space: normal;">${mov.historico}</td>
+                                <td class="text-end">${parseFloat(mov.entrada || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                <td class="text-end">${parseFloat(mov.saida || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                <td class="text-end">${parseFloat(mov.saldo_parcial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                            </tr>`;
+                        });
+                        $('#tabelaExtrato tbody').html(tbodyHtml);
+                        $('#btnBaixarCsvExtrato, #btnBaixarPdfExtrato').show();
+                    }
+                    $('#saldoFinalExtrato').html(`<strong>Saldo Final:</strong> R$ ${parseFloat(data.saldo_final || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`).show();
+                },
+                error: function(xhr) { $('#extratoStatus').hide(); alert(`Erro ao gerar extrato: ${xhr.responseJSON ? xhr.responseJSON.error : (xhr.responseText || 'Erro desconhecido')}`); }
+            });
+        });
+
+        $('#btnBaixarCsvExtrato').click(function() {
+            if (Object.keys(currentExtratoFilters).length === 0 || !currentExtratoFilters.id_conta_corrente_extrato) { alert("Gere um extrato primeiro."); return; }
+            baixarArquivo('/baixar_csv_extrato', currentExtratoFilters, 'extrato_bancario.csv');
+        });
+        $('#btnBaixarPdfExtrato').click(function() {
+            if (Object.keys(currentExtratoFilters).length === 0 || !currentExtratoFilters.id_conta_corrente_extrato) { alert("Gere um extrato primeiro."); return; }
+            baixarArquivo('/baixar_pdf_extrato', currentExtratoFilters, 'extrato_bancario.pdf');
+        });
+
+        // --- TRAVA DE SEGURANÇA (PERMISSÕES DE USUÁRIO) ---
+        const usuarioLogadoUvr = "{{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else '' }}";
+        const usuarioIsAdmin = "{{ 'true' if usuario and usuario.role == 'admin' else 'false' }}" === 'true';
+
+        if (usuarioLogadoUvr && !usuarioIsAdmin) {
+            const uvrSelects = $('select[name="uvr"], select[name="uvr_conta"], select[name="uvr_transacao"], #extratoUvr, #relUvr, #uvrSelectAssociado, #uvrFluxoCaixa');
+            uvrSelects.each(function() {
+                const select = $(this);
+                select.val(usuarioLogadoUvr);
+                select.trigger('change'); 
+                select.prop('disabled', true); 
+                if (select.attr('name')) {
+                    const hiddenName = select.attr('name');
+                    $(`input[type="hidden"][name="${hiddenName}"]`).remove();
+                    $('<input>').attr({ type: 'hidden', name: hiddenName, value: usuarioLogadoUvr }).insertAfter(select);
+                }
+            });
+        }
+    });
+
+// --- LÓGICA DE APROVAÇÕES (ADMIN) ---
+
+    // Correção: Agora o clique é definido aqui fora, usando delegação de evento ou direto se o elemento existir
+    // Mas para garantir, vamos usar o document.on (caso o botão seja carregado dinamicamente) ou apenas substituir a lógica interna.
+    
+    // Substitua o trecho anterior por este:
+    $(document).on('click', '#btnAprovacoes', function() {
+        // CORREÇÃO: Fazemos a troca de tela manualmente, sem depender da função 'mostrarFormulario'
+        $('.form-container').hide();
+        $('#aprovacoesContainer').show();
+        
+        carregarAprovacoes();
+    });
+
+    function carregarAprovacoes() {
+        const tbody = $('#tabelaAprovacoesBody');
+        tbody.html('<tr><td colspan="5" class="text-center">Carregando...</td></tr>');
+        $('#msgSemAprovacoes').hide();
+
+        $.getJSON('/get_solicitacoes_pendentes', function(data) {
+            tbody.empty();
+            if (data.length === 0) {
+                $('#msgSemAprovacoes').show();
+                return;
+            }
+
+            data.forEach(item => {
+                tbody.append(`
+                    <tr>
+                        <td>${item.data}</td>
+                        <td>${item.solicitante}</td>
+                        <td>${item.nome_atual}</td>
+                        <td class="text-primary fw-bold">${item.nome_novo}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesSolicitacao(${item.id})" title="Ver o que mudou">
+                                <i class="fas fa-eye"></i> Detalhes
+                            </button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(function() {
+            tbody.html('<tr><td colspan="5" class="text-center text-danger">Erro ao carregar solicitações.</td></tr>');
+        });
+    }
+
+    // Função Nova: Busca os detalhes e abre o modal de comparação
+    function verDetalhesSolicitacao(id) {
+        // Limpa o modal antes de abrir
+        $('#tabelaComparacaoBody').html('<tr><td colspan="3" class="text-center">Carregando comparação...</td></tr>');
+        $('#areaComparacaoFoto').hide();
+        
+        // Configura os botões de ação do modal
+        $('#btnAprovarModal').attr('onclick', `responderSolicitacao(${id}, 'aprovar')`);
+        $('#btnRejeitarModal').attr('onclick', `responderSolicitacao(${id}, 'rejeitar')`);
+
+        const modal = new bootstrap.Modal(document.getElementById('modalDetalhesAprovacao'));
+        modal.show();
+
+        $.getJSON(`/get_detalhes_solicitacao/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+
+            $('#detalheSolicitante').text(data.usuario);
+            $('#detalheData').text(data.data);
+            
+            const tbody = $('#tabelaComparacaoBody');
+            tbody.empty();
+
+            data.comparacao.forEach(row => {
+                // Se mudou, pinta de amarelo bem clarinho
+                const rowClass = row.mudou ? 'table-warning' : '';
+                const iconChange = row.mudou ? '<i class="fas fa-exclamation-triangle text-warning"></i> ' : '';
+                
+                // Formata valores vazios
+                let valAntigo = row.valor_atual || '<span class="text-muted text-opacity-50">Is empty</span>';
+                let valNovo = row.valor_novo || '<span class="text-muted text-opacity-50">Is empty</span>';
+
+                // Destaca o valor novo se mudou
+                if (row.mudou) valNovo = `<strong>${valNovo}</strong>`;
+
+                tbody.append(`
+                    <tr class="${rowClass}">
+                        <td>${iconChange}${row.campo}</td>
+                        <td class="text-muted">${valAntigo}</td>
+                        <td>${valNovo}</td>
+                    </tr>
+                `);
+            });
+
+            // Verifica se tem foto nova
+            if (data.foto_nova_base64 && data.foto_nova_base64.length > 100) {
+                $('#imgFotoNovaProposta').attr('src', data.foto_nova_base64);
+                $('#areaComparacaoFoto').show();
+            }
+
+        }).fail(function() {
+            alert("Erro ao buscar detalhes da solicitação.");
+        });
+    }
+
+    // Mantém a função responderSolicitacao igual, mas agora fecha o modal se estiver aberto
+    function responderSolicitacao(id, acao) {
+        if (!confirm(`Tem certeza que deseja ${acao.toUpperCase()} esta solicitação?`)) return;
+
+        $.ajax({
+            url: '/responder_solicitacao',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ id: id, acao: acao }),
+            success: function(response) {
+                alert(response.message);
+                
+                // Fecha o modal se estiver aberto
+                const modalEl = document.getElementById('modalDetalhesAprovacao');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+                
+                carregarAprovacoes(); // Recarrega a lista
+            },
+            error: function(xhr) {
+                alert("Erro ao processar: " + (xhr.responseJSON?.error || "Erro desconhecido"));
+            }
+        });
+    }
+    </script>
+</body>
+</html>
