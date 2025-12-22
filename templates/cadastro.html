@@ -79,6 +79,7 @@
         
         <div class="menu-botoes">
             <button id="btnClienteFornecedor" class="btn btn-primary"><i class="fas fa-user-tie"></i> Cad. Cliente/Fornecedor</button>
+            <button id="btnGestaoCadastros" class="btn btn-dark"><i class="fas fa-search"></i> Pesquisar Clientes/Fornecedores</button>
             <button id="btnAssociado" class="btn btn-primary"><i class="fas fa-users"></i> Ficha de Associados</button>
             
             <button id="btnGestaoAssociados" class="btn btn-dark"><i class="fas fa-search"></i> Pesquisar/Gerenciar Associados</button>
@@ -162,6 +163,73 @@
             </div>
         </div>
         
+        <div id="gestaoCadastrosContainer" class="form-container">
+            <h2><i class="fas fa-address-book"></i> Gerenciar Clientes e Fornecedores</h2>
+            
+            <div class="card p-3 mb-4 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Nome ou CNPJ</label>
+                        <input type="text" id="inputBuscaCadastro" class="form-control" placeholder="Digite...">
+                    </div>
+                    {% if usuario.role == 'admin' %}
+                    <div class="col-md-2">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="filtroUvrCadastro"><option value="">Todas</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select>
+                    </div>
+                    {% endif %}
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select" id="filtroTipoCadastro">
+                            <option value="">Todos</option>
+                            <option value="Cliente">Cliente</option>
+                            <option value="Fornecedor/Prestador">Fornecedor/Prestador</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 text-end align-self-end">
+                        <button class="btn btn-primary" onclick="buscarCadastros()"><i class="fas fa-search"></i> Pesquisar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light"><tr><th>Razão Social</th><th>CNPJ</th><th>Tipo</th><th>Cidade</th><th>UVR</th><th class="text-center">Ações</th></tr></thead>
+                    <tbody id="tabelaCadastrosBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalVisualizarCadastro" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title"><i class="fas fa-building"></i> Detalhes do Cadastro</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h4 id="verCadRazao" class="text-primary mb-3">Razão Social</h4>
+                        <div class="row mb-2">
+                            <div class="col-6"><strong>CNPJ:</strong> <span id="verCadCnpj"></span></div>
+                            <div class="col-6"><strong>Tipo:</strong> <span id="verCadTipo"></span></div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-6"><strong>UVR:</strong> <span id="verCadUvr"></span></div>
+                            <div class="col-6"><strong>Atividade:</strong> <span id="verCadAtiv"></span></div>
+                        </div>
+                        <hr>
+                        <p><strong>Endereço:</strong> <span id="verCadEnd"></span></p>
+                        <p><strong>Telefone:</strong> <span id="verCadTel"></span></p>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-success me-auto" id="btnImprimirCadNoModal"><i class="fas fa-print"></i> Imprimir</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                        <button type="button" class="btn btn-warning" id="btnEditarCadNoModal"><i class="fas fa-edit"></i> Editar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="aprovacoesContainer" class="form-container">
             <h2><i class="fas fa-tasks"></i> Aprovações Pendentes</h2>
             <div class="tabela-container">
@@ -263,6 +331,7 @@
         <div id="clienteFornecedorForm" class="form-container">
             <h2><i class="fas fa-user-tie"></i> Cadastro de Cliente / Fornecedor</h2>
             <form method="POST" action="/cadastrar" id="cadastroForm">
+                <input type="hidden" name="id_cadastro" id="idCadastroHidden">
                 <div class="mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrSelect" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
                 <div class="mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao" id="associacaoInput" readonly></div>
                 <div class="mb-3"><label class="form-label">Data/Hora Cadastro</label><input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroCF" readonly></div>
@@ -276,7 +345,10 @@
                 <div class="mb-3"><label class="form-label">Cidade</label><input type="text" class="form-control" name="cidade" id="cidadeCF"></div>
                 <div class="mb-3"><label class="form-label">UF</label><select class="form-select" name="uf" id="ufCF"><option value="">UF</option><option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option><option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option><option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option><option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option><option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option><option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option><option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option><option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option><option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option></select></div>
                 <div class="mb-3"><label class="form-label">Telefone</label><input type="text" class="form-control" name="telefone" id="telefoneCF"></div>
-                <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg">CADASTRAR</button></div>
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarCadastro">CADASTRAR</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoCadastro" style="display:none;" onclick="cancelarEdicaoCadastro()">CANCELAR EDIÇÃO</button>
+                </div>
             </form>
         </div>
         
@@ -869,7 +941,7 @@
         };
 
         // --- FUNÇÃO mostrarFormulario (DENTRO DO READY) ---
-        function mostrarFormulario(formId) {
+        window.mostrarFormulario = function(formId) {  // <--- MUDANÇA AQUI
             $('.form-container').hide();
             $('#' + formId).show();
 
@@ -902,6 +974,7 @@
         $('#btnRelatorios').click(() => mostrarFormulario('relatoriosFormContainer'));
         $('#btnExtratoBancario').click(() => mostrarFormulario('extratoBancarioContainer'));
         $('#btnGestaoAssociados').click(() => mostrarFormulario('gestaoAssociadosContainer'));
+        $('#btnGestaoCadastros').click(() => mostrarFormulario('gestaoCadastrosContainer'));
         
         $('#inputBuscaAssociado').keypress(function(e) { if(e.which == 13) buscarAssociados(); });
 
@@ -1935,36 +2008,35 @@
 
     // Função Nova: Busca os detalhes e abre o modal de comparação
     function verDetalhesSolicitacao(id) {
-        // Limpa o modal antes de abrir
+        // Limpa o modal antes de abrir e mostra aviso de carregamento
         $('#tabelaComparacaoBody').html('<tr><td colspan="3" class="text-center">Carregando comparação...</td></tr>');
         $('#areaComparacaoFoto').hide();
         
-        // Configura os botões de ação do modal
+        // Configura os botões de ação do modal com o ID correto
         $('#btnAprovarModal').attr('onclick', `responderSolicitacao(${id}, 'aprovar')`);
         $('#btnRejeitarModal').attr('onclick', `responderSolicitacao(${id}, 'rejeitar')`);
 
         const modal = new bootstrap.Modal(document.getElementById('modalDetalhesAprovacao'));
         modal.show();
 
+        // Faz a busca dos dados no Python
         $.getJSON(`/get_detalhes_solicitacao/${id}`, function(data) {
-            if(data.error) { alert(data.error); return; }
-
+            
+            // Preenche cabeçalho
             $('#detalheSolicitante').text(data.usuario);
             $('#detalheData').text(data.data);
             
             const tbody = $('#tabelaComparacaoBody');
             tbody.empty();
 
+            // Loop para preencher a tabela de comparação
             data.comparacao.forEach(row => {
-                // Se mudou, pinta de amarelo bem clarinho
                 const rowClass = row.mudou ? 'table-warning' : '';
                 const iconChange = row.mudou ? '<i class="fas fa-exclamation-triangle text-warning"></i> ' : '';
                 
-                // Formata valores vazios
-                let valAntigo = row.valor_atual || '<span class="text-muted text-opacity-50">Is empty</span>';
-                let valNovo = row.valor_novo || '<span class="text-muted text-opacity-50">Is empty</span>';
+                let valAntigo = row.valor_atual || '<span class="text-muted small">vazio</span>';
+                let valNovo = row.valor_novo || '<span class="text-muted small">vazio</span>';
 
-                // Destaca o valor novo se mudou
                 if (row.mudou) valNovo = `<strong>${valNovo}</strong>`;
 
                 tbody.append(`
@@ -1976,14 +2048,26 @@
                 `);
             });
 
-            // Verifica se tem foto nova
+            // Mostra foto se houver alteração nela
             if (data.foto_nova_base64 && data.foto_nova_base64.length > 100) {
                 $('#imgFotoNovaProposta').attr('src', data.foto_nova_base64);
                 $('#areaComparacaoFoto').show();
             }
 
-        }).fail(function() {
-            alert("Erro ao buscar detalhes da solicitação.");
+        }).fail(function(xhr) {
+            // --- AQUI ESTÁ A CORREÇÃO IMPORTANTE ---
+            // Agora o alerta vai mostrar o erro que veio do Python!
+            let msg = "Erro desconhecido ao buscar detalhes.";
+            if(xhr.responseJSON && xhr.responseJSON.error) {
+                msg = xhr.responseJSON.error;
+            } else if (xhr.responseText) {
+                msg = xhr.responseText;
+            }
+            alert("Erro do Sistema: " + msg);
+            // Fecha o modal se der erro para não ficar travado
+            var modalEl = document.getElementById('modalDetalhesAprovacao');
+            var modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if(modalInstance) modalInstance.hide();
         });
     }
 
@@ -2010,6 +2094,121 @@
                 alert("Erro ao processar: " + (xhr.responseJSON?.error || "Erro desconhecido"));
             }
         });
+    }
+
+// --- LÓGICA DE GESTÃO DE CLIENTES/FORNECEDORES ---
+   
+    function buscarCadastros() {
+        const termo = $('#inputBuscaCadastro').val();
+        const tipo = $('#filtroTipoCadastro').val();
+        const uvr = $('#filtroUvrCadastro').val() || "";
+        const tbody = $('#tabelaCadastrosBody');
+        tbody.html('<tr><td colspan="6" class="text-center">Buscando...</td></tr>');
+        
+        const params = new URLSearchParams({ q: termo, tipo: tipo, uvr: uvr });
+        
+        $.getJSON(`/buscar_cadastros?${params.toString()}`, function(data) {
+            tbody.empty();
+            if(data.length === 0) { tbody.html('<tr><td colspan="6" class="text-center">Nenhum registro encontrado.</td></tr>'); return; }
+            
+            data.forEach(c => {
+                tbody.append(`
+                    <tr>
+                        <td>${c.razao}</td><td>${c.cnpj}</td><td>${c.tipo}</td><td>${c.cidade}</td><td>${c.uvr}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white" onclick="visualizarCadastro(${c.id})"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-sm btn-success" onclick="imprimirFichaCadastro(${c.id})"><i class="fas fa-print"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoCadastro(${c.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoCadastro(${c.id}, '${c.razao}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(() => tbody.html('<tr><td colspan="6" class="text-center text-danger">Erro ao buscar.</td></tr>'));
+    }
+
+    function visualizarCadastro(id) {
+        $.getJSON(`/get_cadastro/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+            $('#verCadRazao').text(data.razao_social); $('#verCadCnpj').text(data.cnpj);
+            $('#verCadTipo').text(data.tipo_cadastro); $('#verCadUvr').text(data.uvr);
+            $('#verCadAtiv').text(data.tipo_atividade); $('#verCadTel').text(data.telefone);
+            $('#verCadEnd').text(`${data.logradouro}, ${data.numero} - ${data.bairro}, ${data.cidade}/${data.uf}`);
+            
+            $('#btnEditarCadNoModal').attr('onclick', `iniciarEdicaoCadastro(${data.id})`);
+            $('#btnImprimirCadNoModal').attr('onclick', `imprimirFichaCadastro(${data.id})`);
+            
+            new bootstrap.Modal(document.getElementById('modalVisualizarCadastro')).show();
+        });
+    }
+
+    function iniciarEdicaoCadastro(id) {
+        // Fecha modal se aberto
+        var m = document.getElementById('modalVisualizarCadastro');
+        if(m) { var inst = bootstrap.Modal.getInstance(m); if(inst) inst.hide(); }
+
+        $.getJSON(`/get_cadastro/${id}`, function(data) {
+            $('.form-container').hide(); $('#clienteFornecedorForm').show();
+            
+            $('#btnSalvarCadastro').text('SALVAR ALTERAÇÕES (Enviar)').removeClass('btn-primary').addClass('btn-warning');
+            $('#btnCancelarEdicaoCadastro').show();
+            $('#cadastroForm').attr('action', '/editar_cadastro');
+            $('#idCadastroHidden').val(data.id);
+            
+            // Preenche campos
+            $('#uvrSelect').val(data.uvr).trigger('change');
+            $('#tipoCadastroCF').val(data.tipo_cadastro).trigger('change');
+            
+            // Timeout pequeno para dar tempo do trigger preencher o select de atividades
+            setTimeout(() => { $('#tipoAtividadeCF').val(data.tipo_atividade); }, 100);
+            
+            $('#cnpj').val(data.cnpj); $('#razaoSocialCF').val(data.razao_social);
+            $('#cepCF').val(data.cep); $('#logradouroCF').val(data.logradouro);
+            $('#numeroCF').val(data.numero); $('#bairroCF').val(data.bairro);
+            $('#cidadeCF').val(data.cidade); $('#ufCF').val(data.uf);
+            $('#telefoneCF').val(data.telefone);
+            
+        });
+    }
+
+    function cancelarEdicaoCadastro() {
+        $('#cadastroForm')[0].reset();
+        $('#btnSalvarCadastro').text('CADASTRAR').removeClass('btn-warning').addClass('btn-primary');
+        $('#btnCancelarEdicaoCadastro').hide();
+        $('#cadastroForm').attr('action', '/cadastrar');
+        $('#idCadastroHidden').val('');
+        
+        $('.form-container').hide(); $('#gestaoCadastrosContainer').show();
+    }
+    
+    function imprimirFichaCadastro(id) { window.open(`/imprimir_ficha_cadastro/${id}`, '_blank'); }
+    function solicitarExclusaoCadastro(id, nome) {
+        // 1. Confirmação de segurança
+        if (confirm("Tem certeza que deseja excluir (ou solicitar exclusão) o cadastro de: " + nome + "?")) {
+            
+            // 2. Chamada AJAX para o Python
+            $.ajax({
+                url: "/excluir_cadastro/" + id,
+                type: 'POST',
+                success: function(response) {
+                    // 3. Sucesso: Mostra mensagem e atualiza a tabela
+                    if (response.status === 'sucesso') {
+                        alert(response.message);
+                        buscarCadastros(); // Recarrega a lista para sumir o item excluído
+                    } else {
+                        alert("Atenção: " + (response.message || "Erro desconhecido."));
+                    }
+                },
+                error: function(xhr) {
+                    // 4. Erro: Mostra o erro que veio do servidor
+                    let msg = "Erro ao processar exclusão.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        msg += "\nDetalhe: " + xhr.responseJSON.error;
+                    }
+                    alert(msg);
+                }
+            });
+        }
     }
     </script>
 </body>

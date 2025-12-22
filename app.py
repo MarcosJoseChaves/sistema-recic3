@@ -82,7 +82,7 @@ def criar_tabelas_se_nao_existir():
         # Tabelas Base
         cur.execute("""
             CREATE TABLE IF NOT EXISTS cadastros (
-                id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50) NOT NULL,
+                id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50),
                 data_hora_cadastro TIMESTAMP NOT NULL, razao_social VARCHAR(255) NOT NULL,
                 cnpj VARCHAR(14) NOT NULL, cep VARCHAR(8) NOT NULL, logradouro VARCHAR(255), 
                 numero VARCHAR(20), bairro VARCHAR(100), cidade VARCHAR(100), uf VARCHAR(2), 
@@ -90,6 +90,14 @@ def criar_tabelas_se_nao_existir():
                 CONSTRAINT uq_cadastros_cnpj_tipo_uvr UNIQUE (cnpj, tipo_cadastro, uvr)
             )
         """)
+
+        # --- CORREÇÃO AUTOMÁTICA (MIGRATION) PARA CADASTROS ---
+        try:
+            cur.execute("ALTER TABLE cadastros ADD COLUMN IF NOT EXISTS associacao VARCHAR(50);")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
+        # -----------------------------------------------------
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS associados (
@@ -102,7 +110,7 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # --- FIX: GARANTE COLUNA FOTO ---
+        # --- FIX: GARANTE COLUNA FOTO EM ASSOCIADOS ---
         try:
             cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS foto_base64 TEXT;")
             conn.commit()
@@ -2531,198 +2539,214 @@ def buscar_cnpj(cnpj):
 @app.route("/get_solicitacoes_pendentes", methods=["GET"])
 @login_required
 def get_solicitacoes_pendentes():
-    if current_user.role != 'admin':
-        return jsonify({"error": "Acesso negado"}), 403
-
+    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Busca apenas as pendentes, trazendo também o nome atual do associado para facilitar a leitura
+        # Busca TUDO que está pendente (Associados e Cadastros)
         sql = """
-            SELECT s.id, s.usuario_solicitante, s.data_solicitacao, 
-                   a.nome as nome_atual, s.dados_novos
+            SELECT s.id, s.usuario_solicitante, s.data_solicitacao, s.tabela_alvo, s.tipo_solicitacao, s.dados_novos,
+                   CASE 
+                       WHEN s.tabela_alvo = 'associados' THEN (SELECT nome FROM associados WHERE id = s.id_registro)
+                       WHEN s.tabela_alvo = 'cadastros' THEN (SELECT razao_social FROM cadastros WHERE id = s.id_registro)
+                   END as nome_atual
             FROM solicitacoes_alteracao s
-            JOIN associados a ON s.id_registro = a.id
-            WHERE s.status = 'PENDENTE' AND s.tabela_alvo = 'associados'
+            WHERE s.status = 'PENDENTE'
             ORDER BY s.data_solicitacao DESC
         """
         cur.execute(sql)
-        
-        pendencias = []
-        for row in cur.fetchall():
-            # row[4] é o JSON com os dados novos. Vamos ler para pegar o nome novo sugerido.
-            dados_novos = json.loads(row[4])
-            nome_novo = dados_novos.get('nome', 'N/D')
+        res = []
+        for r in cur.fetchall():
+            # --- CORREÇÃO DE TIPO (STR ou DICT) ---
+            raw_data = r[5]
+            if isinstance(raw_data, str):
+                dados = json.loads(raw_data)
+            else:
+                dados = raw_data
+            # --------------------------------------
+
+            # Se for exclusão, o nome novo é irrelevante, usamos o tipo da ação
+            nome_novo_ou_acao = "EXCLUSÃO" if r[4] == 'EXCLUSAO' else dados.get('nome') or dados.get('razao_social')
             
-            pendencias.append({
-                "id": row[0],
-                "solicitante": row[1],
-                "data": row[2].strftime('%d/%m/%Y %H:%M'),
-                "nome_atual": row[3],
-                "nome_novo": nome_novo
+            res.append({
+                "id": r[0], "solicitante": r[1], "data": r[2].strftime('%d/%m %H:%M'),
+                "tabela": r[3], "tipo": r[4], 
+                "nome_atual": r[6] or "(Registro não encontrado/Já excluído)", 
+                "nome_novo": nome_novo_ou_acao
             })
-            
-        return jsonify(pendencias)
-    except Exception as e:
-        app.logger.error(f"Erro ao buscar pendências: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify(res)
     finally:
         if conn: conn.close()
-        
-@app.route("/get_detalhes_solicitacao/<int:id_solicitacao>", methods=["GET"])
+
+@app.route("/get_detalhes_solicitacao/<int:id>", methods=["GET"])
 @login_required
-def get_detalhes_solicitacao(id_solicitacao):
-    if current_user.role != 'admin':
-        return jsonify({"error": "Acesso negado"}), 403
-    
+def get_detalhes_solicitacao(id):
+    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
+        cur.execute("SELECT id_registro, dados_novos, usuario_solicitante, data_solicitacao, tabela_alvo, tipo_solicitacao FROM solicitacoes_alteracao WHERE id = %s", (id,))
+        solic = cur.fetchone()
         
-        # 1. Busca a solicitação (Dados Novos)
-        cur.execute("""
-            SELECT id_registro, dados_novos, usuario_solicitante, data_solicitacao 
-            FROM solicitacoes_alteracao WHERE id = %s
-        """, (id_solicitacao,))
-        solicitacao = cur.fetchone()
+        if not solic: return jsonify({"error": "Solicitação não encontrada"}), 404
         
-        if not solicitacao:
-            return jsonify({"error": "Solicitação não encontrada"}), 404
-            
-        id_associado = solicitacao[0]
-        dados_novos = json.loads(solicitacao[1]) # Transforma string JSON em dicionário Python
-        usuario = solicitacao[2]
-        data_solic = solicitacao[3].strftime('%d/%m/%Y %H:%M')
+        id_reg, dados_novos_json, usuario, data_solic, tabela, tipo = solic
         
-        # 2. Busca os dados ATUAIS do associado no banco
-        # Vamos pegar as colunas principais para comparar
-        cols = ["nome", "cpf", "rg", "data_nascimento", "data_admissao", "status", "uvr", 
-                "associacao", "cep", "logradouro", "endereco_numero", "bairro", "cidade", "uf", "telefone"]
+        # --- TRATAMENTO ROBUSTO DO JSON ---
+        d_novos = {}
+        if dados_novos_json is None:
+            d_novos = {} # Evita erro se o campo estiver nulo
+        elif isinstance(dados_novos_json, str):
+            try:
+                d_novos = json.loads(dados_novos_json)
+            except:
+                d_novos = {} # Se falhar ao converter string, usa vazio
+        else:
+            d_novos = dados_novos_json # Já é um dicionário (Postgres JSONB)
         
-        # Monta a query dinamicamente para não digitar tudo duas vezes
-        sql_assoc = f"SELECT {', '.join(cols)} FROM associados WHERE id = %s"
-        cur.execute(sql_assoc, (id_associado,))
-        row_atual = cur.fetchone()
-        
-        dados_atuais = {}
-        if row_atual:
-            for i, col in enumerate(cols):
-                val = row_atual[i]
-                # Formata datas para string YYYY-MM-DD para bater com o formato do formulário HTML
-                if isinstance(val, (date, datetime)):
-                    val = val.strftime('%Y-%m-%d')
-                # Trata None como string vazia
-                dados_atuais[col] = str(val) if val is not None else ""
+        # Garante que d_novos seja um dicionário (caso venha uma lista ou outro tipo)
+        if not isinstance(d_novos, dict):
+            d_novos = {}
+        # ----------------------------------
 
-        # Mapeamento de nomes amigáveis para exibir na tela
-        labels = {
-            "nome": "Nome", "cpf": "CPF", "rg": "RG", "data_nascimento": "Nascimento",
-            "data_admissao": "Admissão", "status": "Status", "uvr": "UVR", "associacao": "Associação",
-            "cep": "CEP", "logradouro": "Logradouro", "endereco_numero": "Número",
-            "bairro": "Bairro", "cidade": "Cidade", "uf": "UF", "telefone": "Telefone"
-        }
-
-        # Prepara a lista de comparação
-        comparacao = []
-        for key, label in labels.items():
-            valor_antigo = dados_atuais.get(key, "")
-            valor_novo = dados_novos.get(key, "")
-            
-            # Só adiciona na lista se tiver mudado alguma coisa (opcional, mas melhor mostrar tudo)
-            mudou = valor_antigo != valor_novo
-            
-            comparacao.append({
-                "campo": label,
-                "valor_atual": valor_antigo,
-                "valor_novo": valor_novo,
-                "mudou": mudou
+        # Se for exclusão, não comparamos campos, apenas mostramos aviso
+        if tipo == 'EXCLUSAO':
+             return jsonify({
+                "id_solicitacao": id, "usuario": usuario, 
+                "data": data_solic.strftime('%d/%m %H:%M') if data_solic else "Data desc.",
+                "tipo": "EXCLUSAO", "tabela": tabela,
+                "info_extra": f"Solicitação para EXCLUIR permanentemente o registro ID {id_reg}."
             })
 
+        # Configuração de colunas dependendo da tabela
+        if tabela == 'associados':
+            sql_atual = "SELECT nome, cpf, rg, data_nascimento, data_admissao, status, uvr, associacao, cep, logradouro, endereco_numero, bairro, cidade, uf, telefone FROM associados WHERE id = %s"
+            cols = ["nome","cpf","rg","data_nascimento","data_admissao","status","uvr","associacao","cep","logradouro","endereco_numero","bairro","cidade","uf","telefone"]
+            labels = {"nome":"Nome","cpf":"CPF","rg":"RG","data_nascimento":"Nascimento","data_admissao":"Admissão","status":"Status","uvr":"UVR","associacao":"Assoc","cep":"CEP","logradouro":"Logradouro","endereco_numero":"Núm","bairro":"Bairro","cidade":"Cidade","uf":"UF","telefone":"Tel"}
+        else: # cadastros
+            sql_atual = "SELECT razao_social, cnpj, tipo_cadastro, tipo_atividade, uvr, associacao, cep, logradouro, numero, bairro, cidade, uf, telefone FROM cadastros WHERE id = %s"
+            cols = ["razao_social","cnpj","tipo_cadastro","tipo_atividade","uvr","associacao","cep","logradouro","numero","bairro","cidade","uf","telefone"]
+            labels = {"razao_social":"Razão Social","cnpj":"CNPJ","tipo_cadastro":"Tipo","tipo_atividade":"Atividade","uvr":"UVR","associacao":"Assoc","cep":"CEP","logradouro":"Logradouro","numero":"Núm","bairro":"Bairro","cidade":"Cidade","uf":"UF","telefone":"Tel"}
+
+        cur.execute(sql_atual, (id_reg,))
+        atual = cur.fetchone()
+        d_atuais = {}
+        
+        # Se o registro original foi apagado, preenchemos com vazio
+        if atual:
+            for i, c in enumerate(cols): 
+                val = atual[i]
+                d_atuais[c] = str(val) if val is not None else ""
+        else:
+            for c in cols: d_atuais[c] = "(Registro não encontrado)"
+
+        comp = []
+        for k, l in labels.items():
+            val_atual = d_atuais.get(k,"")
+            val_novo = str(d_novos.get(k,"")) if d_novos.get(k) is not None else ""
+            
+            comp.append({
+                "campo": l, 
+                "valor_atual": val_atual, 
+                "valor_novo": val_novo, 
+                "mudou": val_atual != val_novo
+            })
+            
         return jsonify({
-            "id_solicitacao": id_solicitacao,
-            "usuario": usuario,
-            "data": data_solic,
-            "comparacao": comparacao,
-            "foto_nova_base64": dados_novos.get("foto_base64", "") # Manda a foto nova se tiver
+            "id_solicitacao": id, "usuario": usuario, 
+            "data": data_solic.strftime('%d/%m %H:%M') if data_solic else "Data desc.",
+            "tipo": "EDICAO", 
+            "comparacao": comp, 
+            "foto_nova_base64": d_novos.get("foto_base64","")
         })
 
     except Exception as e:
-        app.logger.error(f"Erro ao buscar detalhes: {e}")
-        return jsonify({"error": str(e)}), 500
+        # Aqui capturamos o erro real e enviamos para o navegador
+        app.logger.error(f"Erro em get_detalhes_solicitacao: {e}")
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/responder_solicitacao", methods=["POST"])
 @login_required
 def responder_solicitacao():
-    if current_user.role != 'admin':
-        return jsonify({"error": "Acesso negado"}), 403
-        
+    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     data = request.json
-    id_solicitacao = data.get('id')
-    acao = data.get('acao') # 'aprovar' ou 'rejeitar'
-    
-    if not id_solicitacao or not acao:
-        return jsonify({"error": "Dados inválidos"}), 400
-
+    id_sol = data.get('id'); acao = data.get('acao')
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
+        cur.execute("SELECT id_registro, dados_novos, tabela_alvo, tipo_solicitacao FROM solicitacoes_alteracao WHERE id = %s", (id_sol,))
+        solic = cur.fetchone()
         
-        # 1. Busca a solicitação completa
-        cur.execute("SELECT id_registro, dados_novos FROM solicitacoes_alteracao WHERE id = %s", (id_solicitacao,))
-        solicitacao = cur.fetchone()
-        
-        if not solicitacao:
-            return jsonify({"error": "Solicitação não encontrada"}), 404
-            
-        id_associado = solicitacao[0]
-        dados_json = solicitacao[1]
+        if not solic: return jsonify({"error": "Não encontrado"}), 404
+        id_reg, d_json, tabela, tipo = solic
         
         if acao == 'aprovar':
-            # Converte o JSON de volta para dicionário
-            dados = json.loads(dados_json)
-            
-            # Limpeza básica (igual ao editar_associado)
-            cpf_num = re.sub(r'[^0-9]', '', dados.get("cpf", ""))
-            cep_num = re.sub(r'[^0-9]', '', dados.get("cep", ""))
-            
-            # Aplica a alteração na tabela REAL (associados)
-            sql_update = """
-                UPDATE associados SET 
-                    nome=%s, cpf=%s, rg=%s, data_nascimento=%s, data_admissao=%s,
-                    status=%s, uvr=%s, associacao=%s, cep=%s, logradouro=%s,
-                    endereco_numero=%s, bairro=%s, cidade=%s, uf=%s, telefone=%s,
-                    foto_base64=%s
-                WHERE id=%s
-            """
-            cur.execute(sql_update, (
-                dados.get("nome"), cpf_num, dados.get("rg"), dados.get("data_nascimento"), dados.get("data_admissao"),
-                dados.get("status"), dados.get("uvr"), dados.get("associacao", ""), cep_num,
-                dados.get("logradouro", ""), dados.get("endereco_numero", ""),
-                dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf", ""),
-                dados.get("telefone"), dados.get("foto_base64", ""), 
-                id_associado
-            ))
-            
-            # Marca como Aprovado
-            cur.execute("UPDATE solicitacoes_alteracao SET status = 'APROVADO' WHERE id = %s", (id_solicitacao,))
-            msg = "Solicitação aprovada e dados atualizados com sucesso!"
+            if tipo == 'EXCLUSAO':
+                # Executa a exclusão real
+                sql_del = f"DELETE FROM {tabela} WHERE id = %s"
+                cur.execute(sql_del, (id_reg,))
+                msg = "Registro excluído com sucesso!"
+            else:
+                # Executa a edição
+                # Garante que é um dicionário
+                if isinstance(d_json, str):
+                    d = json.loads(d_json)
+                else:
+                    d = d_json
 
-        elif acao == 'rejeitar':
-            # Apenas marca como Rejeitado
-            cur.execute("UPDATE solicitacoes_alteracao SET status = 'REJEITADO' WHERE id = %s", (id_solicitacao,))
+                if tabela == 'associados':
+                    # --- FIX: Recupera UVR e Associação atuais se vierem vazios ---
+                    novo_uvr = d.get("uvr")
+                    nova_assoc = d.get("associacao", "")
+                    
+                    if not novo_uvr:
+                        cur.execute("SELECT uvr, associacao FROM associados WHERE id = %s", (id_reg,))
+                        atual = cur.fetchone()
+                        if atual:
+                            novo_uvr = atual[0]
+                            if not nova_assoc: nova_assoc = atual[1]
+                    # -------------------------------------------------------------
+
+                    cur.execute("""UPDATE associados SET nome=%s, cpf=%s, rg=%s, data_nascimento=%s, data_admissao=%s, status=%s, uvr=%s, associacao=%s, cep=%s, logradouro=%s, endereco_numero=%s, bairro=%s, cidade=%s, uf=%s, telefone=%s, foto_base64=%s WHERE id=%s""",
+                        (d.get("nome"), re.sub(r'[^0-9]', '', d.get("cpf","")), d.get("rg"), d.get("data_nascimento"), d.get("data_admissao"), d.get("status"), 
+                         novo_uvr, nova_assoc, # Usa as variáveis tratadas
+                         re.sub(r'[^0-9]', '', d.get("cep","")), d.get("logradouro"), d.get("endereco_numero"), d.get("bairro"), d.get("cidade"), d.get("uf"), d.get("telefone"), d.get("foto_base64",""), id_reg))
+                
+                elif tabela == 'cadastros':
+                    # --- FIX: Recupera UVR e Associação atuais se vierem vazios ---
+                    novo_uvr = d.get("uvr")
+                    nova_assoc = d.get("associacao", "")
+
+                    if not novo_uvr:
+                        cur.execute("SELECT uvr, associacao FROM cadastros WHERE id = %s", (id_reg,))
+                        atual = cur.fetchone()
+                        if atual:
+                            novo_uvr = atual[0]
+                            if not nova_assoc: nova_assoc = atual[1]
+                    # -------------------------------------------------------------
+
+                    cur.execute("""UPDATE cadastros SET uvr=%s, associacao=%s, razao_social=%s, cnpj=%s, cep=%s, logradouro=%s, numero=%s, bairro=%s, cidade=%s, uf=%s, telefone=%s, tipo_atividade=%s, tipo_cadastro=%s WHERE id=%s""",
+                        (novo_uvr, nova_assoc, # Usa as variáveis tratadas
+                         d.get("razao_social"), re.sub(r'[^0-9]', '', d.get("cnpj","")), re.sub(r'[^0-9]', '', d.get("cep","")), d.get("logradouro"), d.get("numero"), d.get("bairro"), d.get("cidade"), d.get("uf"), d.get("telefone"), d.get("tipo_atividade"), d.get("tipo_cadastro"), id_reg))
+                
+                msg = "Edição aprovada e aplicada!"
+
+            cur.execute("UPDATE solicitacoes_alteracao SET status='APROVADO' WHERE id=%s", (id_sol,))
+        else:
+            cur.execute("UPDATE solicitacoes_alteracao SET status='REJEITADO' WHERE id=%s", (id_sol,))
             msg = "Solicitação rejeitada."
             
         conn.commit()
         return jsonify({"status": "sucesso", "message": msg})
-
     except Exception as e:
         if conn: conn.rollback()
+        # Log do erro para você ver no terminal se precisar
         app.logger.error(f"Erro ao responder solicitação: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
@@ -2881,6 +2905,241 @@ def imprimir_ficha_associado(id):
     except Exception as e:
         app.logger.error(f"Erro PDF: {e}", exc_info=True)
         return f"Erro: {e}", 500
+    finally:
+        if conn: conn.close()
+
+# --- GESTÃO DE CLIENTES / FORNECEDORES (LEITURA) ---
+
+@app.route("/buscar_cadastros", methods=["GET"])
+@login_required
+def buscar_cadastros():
+    termo = request.args.get("q", "").lower()
+    tipo = request.args.get("tipo", "") # Cliente ou Fornecedor
+    uvr_tela = request.args.get("uvr", "")
+    
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        sql = "SELECT id, razao_social, cnpj, tipo_cadastro, uvr, cidade, telefone FROM cadastros WHERE 1=1"
+        params = []
+        
+        # Filtro de UVR (Segurança)
+        if current_user.role == 'admin':
+            if uvr_tela and uvr_tela != "Todas": 
+                sql += " AND uvr = %s"
+                params.append(uvr_tela)
+        elif current_user.uvr_acesso: 
+            sql += " AND uvr = %s"
+            params.append(current_user.uvr_acesso)
+        
+        # Filtros de Busca
+        if termo: 
+            sql += " AND (LOWER(razao_social) LIKE %s OR cnpj LIKE %s)"
+            params.extend([f"%{termo}%", f"%{termo}%"])
+        
+        if tipo and tipo != "Todos": 
+            sql += " AND tipo_cadastro = %s"
+            params.append(tipo)
+            
+        sql += " ORDER BY razao_social ASC LIMIT 50"
+        
+        cur.execute(sql, tuple(params))
+        
+        res = []
+        for r in cur.fetchall():
+            res.append({
+                "id": r[0], "razao": r[1], "cnpj": r[2], 
+                "tipo": r[3], "uvr": r[4], "cidade": r[5], "tel": r[6]
+            })
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route("/get_cadastro/<int:id>", methods=["GET"])
+@login_required
+def get_cadastro(id):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
+        row = cur.fetchone()
+        
+        if not row: return jsonify({"error": "Não encontrado"}), 404
+        
+        # Segurança UVR
+        if current_user.uvr_acesso and current_user.role != 'admin' and row[1] != current_user.uvr_acesso: 
+            return jsonify({"error": "Acesso negado"}), 403
+
+        # Mapeamento (Ajuste os índices se sua tabela for diferente)
+        data = {
+            "id": row[0], "uvr": row[1], "associacao": row[2], 
+            "razao_social": row[4], "cnpj": row[5], "cep": row[6],
+            "logradouro": row[7], "numero": row[8], "bairro": row[9],
+            "cidade": row[10], "uf": row[11], "telefone": row[12],
+            "tipo_atividade": row[13], "tipo_cadastro": row[14]
+        }
+        return jsonify(data)
+    finally:
+        if conn: conn.close()
+
+# --- IMPRESSÃO DE FICHA DE CADASTRO ---
+
+@app.route("/imprimir_ficha_cadastro/<int:id>", methods=["GET"])
+@login_required
+def imprimir_ficha_cadastro(id):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
+        row = cur.fetchone()
+        
+        if not row: return "Não encontrado", 404
+        
+        # Dados organizados
+        d = {
+            "uvr": row[1], "assoc": row[2], "razao": row[4], "cnpj": row[5],
+            "cep": row[6], "log": row[7] or "", "num": row[8] or "", 
+            "bairro": row[9] or "", "cid": row[10] or "", "uf": row[11] or "", 
+            "tel": row[12] or "", "ativ": row[13], "tipo": row[14]
+        }
+
+        # Gera PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*cm, bottomMargin=1*cm, leftMargin=1.5*cm, rightMargin=1.5*cm)
+        story = []
+        styles = getSampleStyleSheet()
+        
+        story.append(Paragraph(f"Ficha Cadastral - {d['tipo']}", ParagraphStyle('T', parent=styles['Heading1'], alignment=TA_CENTER)))
+        story.append(Spacer(1, 0.5*cm))
+
+        # Função auxiliar para tabela de 2 colunas
+        def criar_tabela_secao(lista_campos):
+            rows = []
+            col_w = 8*cm # Largura fixa pois não tem foto
+            for i in range(0, len(lista_campos), 2):
+                c1 = [[Paragraph(f"<b>{lista_campos[i][0]}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
+                      [Paragraph(str(lista_campos[i][1]), ParagraphStyle('val', fontSize=10))]]
+                c2 = []
+                if i + 1 < len(lista_campos):
+                    c2 = [[Paragraph(f"<b>{lista_campos[i+1][0]}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
+                          [Paragraph(str(lista_campos[i+1][1]), ParagraphStyle('val', fontSize=10))]]
+                rows.append([c1, c2])
+            
+            t = Table(rows, colWidths=[col_w, col_w])
+            t.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'), ('BOTTOMPADDING',(0,0),(-1,-1),6)]))
+            return t
+
+        story.append(Paragraph("<b>DADOS PRINCIPAIS</b>", styles['Heading4']))
+        story.append(criar_tabela_secao([
+            ("Razão Social/Nome", d['razao']), ("CNPJ/CPF", d['cnpj']),
+            ("Tipo Cadastro", d['tipo']),      ("Atividade", d['ativ']),
+            ("Telefone", d['tel']),            ("UVR", d['uvr'])
+        ]))
+        
+        story.append(Spacer(1, 0.5*cm))
+        
+        story.append(Paragraph("<b>ENDEREÇO</b>", styles['Heading4']))
+        story.append(criar_tabela_secao([
+            ("Logradouro", f"{d['log']}, {d['num']}"), ("Bairro", d['bairro']),
+            ("Cidade/UF", f"{d['cid']} - {d['uf']}"),  ("CEP", d['cep'])
+        ]))
+        
+        doc.build(story)
+        buffer.seek(0)
+        filename = f"ficha_{d['razao'][:10].replace(' ','_')}.pdf"
+        return Response(buffer, mimetype='application/pdf', headers={'Content-Disposition': f'inline;filename={filename}'})
+    finally:
+        if conn: conn.close()
+# --- AÇÕES DE ESCRITA (EDITAR / EXCLUIR) ---
+
+@app.route("/editar_cadastro", methods=["POST"])
+@login_required
+def editar_cadastro():
+    conn = None
+    try:
+        dados = request.form.to_dict()
+        id_cad = dados.get("id_cadastro")
+        if not id_cad: return "ID não informado", 400
+        
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        # Admin: Executa direto
+        if current_user.role == 'admin':
+            cnpj_num = re.sub(r'[^0-9]', '', dados["cnpj"])
+            cep_num = re.sub(r'[^0-9]', '', dados.get("cep",""))
+            
+            cur.execute("""
+                UPDATE cadastros SET 
+                    uvr=%s, associacao=%s, razao_social=%s, cnpj=%s, cep=%s, 
+                    logradouro=%s, numero=%s, bairro=%s, cidade=%s, uf=%s, 
+                    telefone=%s, tipo_atividade=%s, tipo_cadastro=%s 
+                WHERE id=%s
+            """, (
+                dados["uvr"], dados.get("associacao",""), dados["razao_social"], cnpj_num, cep_num,
+                dados.get("logradouro"), dados.get("numero"), dados.get("bairro"), dados.get("cidade"), 
+                dados.get("uf"), dados.get("telefone"), dados["tipo_atividade"], dados["tipo_cadastro"], 
+                int(id_cad)
+            ))
+            conn.commit()
+            msg = "Alterações salvas com sucesso!"
+        
+        # Usuário: Cria solicitação
+        else:
+            dados_json = json.dumps(dados)
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('cadastros', int(id_cad), 'EDICAO', dados_json, current_user.username))
+            conn.commit()
+            msg = "Solicitação de edição enviada para aprovação."
+        
+        return pagina_sucesso_base("Processado", msg)
+    except Exception as e:
+        if conn: conn.rollback()
+        return f"Erro: {e}", 500
+    finally:
+        if conn: conn.close()
+
+@app.route("/excluir_cadastro/<int:id>", methods=["POST"])
+@login_required
+def excluir_cadastro(id):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        # Busca dados para registrar quem foi excluído (opcional, mas bom para histórico)
+        cur.execute("SELECT razao_social FROM cadastros WHERE id = %s", (id,))
+        row = cur.fetchone()
+        nome_registro = row[0] if row else "Desconhecido"
+
+        if current_user.role == 'admin':
+            cur.execute("DELETE FROM cadastros WHERE id = %s", (id,))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Registro excluído permanentemente."})
+        else:
+            # Usuário cria solicitação de EXCLUSÃO
+            # Salvamos apenas o nome/motivo no JSON, pois o ID já identifica o registro
+            dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "razao_social": nome_registro})
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('cadastros', id, 'EXCLUSAO', dados_json, current_user.username))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
+            
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
 
