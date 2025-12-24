@@ -1,0 +1,3210 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Cadastros e Transações</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+
+/* --- NOVO ESTILO DO DASHBOARD --- */
+.dashboard-card {
+    transition: transform 0.2s;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+.dashboard-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+}
+.card-header-custom {
+    border-radius: 12px 12px 0 0 !important;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.9rem;
+    padding: 15px;
+}
+.btn-dashboard {
+    text-align: left;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-weight: 500;
+}
+.btn-dashboard i {
+    width: 25px; /* Alinha os ícones */
+    text-align: center;
+    margin-right: 8px;
+}
+.btn-group-dashboard {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.btn-group-dashboard .btn {
+    flex: 1; /* Botões ocupam larguras iguais */
+}
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .form-container { max-width: 900px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); margin-top: 20px; display: none; }
+        h2 { color: #2c3e50; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        .required-field::after { content: "*"; color: red; margin-left: 5px; }
+        .menu-botoes { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .menu-botoes button { min-width: 200px; }
+        .item-row { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #dee2e6; position: relative; }
+        .remover-item { position: absolute; top: 10px; right: 10px; }
+        .item-fields-grid { display: grid; grid-template-columns: 2fr 2fr 3fr 1fr 1fr 1.5fr 1.5fr; gap: 10px; align-items: end; }
+        .valor-monetario { font-weight: bold; color: #2980b9; }
+        #tabelaRelatorio th { white-space: nowrap; }
+        .tabela-container { overflow-x: auto; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="container text-center">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3>Sistema de Gestão - {{ usuario.nome_completo if usuario else 'Visitante' }} 
+                <small class="text-muted fs-6">({{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else 'Admin' }})</small>
+            </h3>
+            <div>
+                <a href="/alterar_senha" class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-key"></i> Alterar Senha</a>
+                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</a>
+            </div>
+        </div>
+
+        <div class="container mb-5">
+    <div class="row g-4">
+        
+        <div class="col-md-4">
+            <div class="card h-100 dashboard-card">
+                <div class="card-header card-header-custom bg-primary text-white">
+                    <i class="fas fa-users me-2"></i> Cadastros Gerais
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">PESSOAS & ENTIDADES</small>
+                    <div class="btn-group-dashboard">
+                        <button id="btnClienteFornecedor" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus"></i> Novo</button>
+                        <button id="btnGestaoCadastros" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Pesquisar</button>
+                    </div>
+
+                    <div class="btn-group-dashboard">
+                        <button id="btnAssociado" class="btn btn-outline-primary btn-sm"><i class="fas fa-user-plus"></i> Associado</button>
+                        <button id="btnGestaoAssociados" class="btn btn-primary btn-sm"><i class="fas fa-users"></i> Gerenciar</button>
+                    </div>
+
+                    {% if usuario and usuario.role == 'admin' %}
+                    <hr>
+                    <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
+                    <button id="btnGestaoProdutosServicos" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm"><i class="fas fa-box-open"></i> Catálogo de Produtos</button>
+                    
+                    <hr>
+                    <small class="text-muted d-block mb-2">PATRIMÔNIO & ESTRUTURA</small>
+                    <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="alert('EM BREVE: Cadastro de Veículos, Equipamentos e Imóveis para controle de custos (combustível/manutenção).')">
+                        <i class="fas fa-truck-moving"></i> Frota & Equipamentos
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100 dashboard-card">
+                <div class="card-header card-header-custom bg-success text-white">
+                    <i class="fas fa-wallet me-2"></i> Operacional Financeiro
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">LANÇAMENTOS (Dia a Dia)</small>
+                    <button id="btnReceitaDespesa" class="btn btn-success w-100 btn-dashboard shadow-sm"><i class="fas fa-plus-circle"></i> Nova Receita / Despesa</button>
+                    <button id="btnGestaoTransacoes" class="btn btn-outline-success w-100 btn-dashboard"><i class="fas fa-search-dollar"></i> Pesquisar Transações</button>
+
+                    <hr>
+                    <small class="text-muted d-block mb-2">BANCÁRIO</small>
+                    <div class="btn-group-dashboard">
+                        <button id="btnContaCorrente" class="btn btn-outline-dark btn-sm"><i class="fas fa-landmark"></i> Nova Conta</button>
+                        <button id="btnGestaoContas" class="btn btn-dark btn-sm"><i class="fas fa-list"></i> Listar Contas</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if usuario and usuario.role == 'admin' %}
+        <div class="col-md-4">
+            <div class="card h-100 dashboard-card">
+                <div class="card-header card-header-custom bg-warning text-dark">
+                    <i class="fas fa-chart-line me-2"></i> Gestão & Controle
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">FLUXO DE CAIXA</small>
+                    <button id="btnFluxoCaixa" class="btn btn-danger w-100 btn-dashboard mb-3 text-white"><i class="fas fa-exchange-alt"></i> Baixas & Conciliação</button>
+                    
+                    <small class="text-muted d-block mb-2">RELATÓRIOS</small>
+                    <div class="btn-group-dashboard">
+                        <button id="btnExtratoBancario" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-invoice-dollar"></i> Extrato</button>
+                        <button id="btnRelatorios" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-alt"></i> Financeiro</button>
+                    </div>
+                    
+                    <hr>
+                    <small class="text-muted d-block mb-2">SECRETARIA & LEGAL</small>
+                    <button class="btn btn-outline-dark w-100 btn-dashboard btn-sm mb-2" onclick="alert('EM BREVE: Gestão de Alvarás, Licenças, Certidões e Contratos com alertas de vencimento.')">
+                        <i class="fas fa-file-contract"></i> Documentos & Licenças
+                    </button>
+
+                    <hr>
+                    <small class="text-muted d-block mb-2">ADMINISTRAÇÃO</small>
+                    <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
+                        <i class="fas fa-check-double"></i> Aprovações Pendentes
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+    </div>
+</div>
+
+    <div class="container d-flex justify-content-center">
+
+        <div id="clienteFornecedorForm" class="form-container">
+            <h2><i class="fas fa-user-plus"></i> Cadastro de Cliente / Fornecedor</h2>
+            <form method="POST" action="/cadastrar" id="cadastroForm">
+                <input type="hidden" name="id_cadastro" id="idCadastroHidden">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">UVR</label>
+                        <select class="form-select" name="uvr" id="uvrSelect" required>
+                            <option value="">Selecione...</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Associação</label>
+                        <input type="text" class="form-control" name="associacao" id="associacaoInput" readonly>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Tipo de Cadastro</label>
+                    <select class="form-select" name="tipo_cadastro" id="tipoCadastroCF" required>
+                        <option value="">Selecione...</option>
+                        <option value="Fornecedor/Prestador">Fornecedor / Prestador de Serviço</option>
+                        <option value="Cliente">Cliente (Comprador de Material)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Data/Hora Cadastro</label>
+                    <input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroCF" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Razão Social / Nome Completo</label>
+                    <input type="text" class="form-control" name="razao_social" id="razaoSocialCF" required>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">CNPJ / CPF</label>
+                        <input type="text" class="form-control" name="cnpj" id="cnpj" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">Telefone / Contato</label>
+                        <input type="text" class="form-control" name="telefone" id="telefoneCF" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label required-field">CEP</label>
+                        <input type="text" class="form-control" name="cep" id="cepCF" required>
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label">Logradouro</label>
+                        <input type="text" class="form-control" name="logradouro" id="logradouroCF">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Número</label>
+                        <input type="text" class="form-control" name="numero" id="numeroCF">
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label">Bairro</label>
+                        <input type="text" class="form-control" name="bairro" id="bairroCF">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label">Cidade</label>
+                        <input type="text" class="form-control" name="cidade" id="cidadeCF">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">UF</label>
+                        <input type="text" class="form-control" name="uf" id="ufCF" maxlength="2">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Tipo de Atividade</label>
+                    <select class="form-select" name="tipo_atividade" id="tipoAtividadeCF" required>
+                        <option value="">Selecione Tipo de Cadastro Primeiro</option>
+                    </select>
+                </div>
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarCadastro">CADASTRAR</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoCadastro" style="display:none;" onclick="cancelarEdicaoCadastro()">CANCELAR EDIÇÃO</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="associadoForm" class="form-container">
+            <h2><i class="fas fa-id-card"></i> Ficha de Associado</h2>
+            <form method="POST" action="/cadastrar_associado" id="cadastroAssociadoForm" enctype="multipart/form-data">
+                <input type="hidden" name="id_associado" id="idAssociadoHidden">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">UVR</label>
+                        <select class="form-select" name="uvr" id="uvrSelectAssociado" required>
+                            <option value="">Selecione...</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Associação</label>
+                        <input type="text" class="form-control" name="associacao" id="associacaoInputAssociado" readonly>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="mb-3">
+                            <label class="form-label required-field">Nome Completo</label>
+                            <input type="text" class="form-control" name="nome" id="nomeAssociado" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label required-field">CPF</label>
+                                <input type="text" class="form-control" name="cpf" id="cpfAssociado" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label required-field">RG</label>
+                                <input type="text" class="form-control" name="rg" id="rgAssociado" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label required-field">Data Nascimento</label>
+                                <input type="date" class="form-control" name="data_nascimento" id="nascAssociado" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label required-field">Data Admissão</label>
+                                <input type="date" class="form-control" name="data_admissao" id="admAssociado" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <label class="form-label">Foto do Associado</label>
+                        <div class="border rounded p-2 mb-2 d-flex justify-content-center align-items-center" style="height: 150px; background-color: #eee;">
+                            <img id="previewFotoAssociado" src="" alt="Sem Foto" style="max-height: 100%; max-width: 100%; display: none;">
+                            <span id="textoSemFoto" class="text-muted"><i class="fas fa-camera fa-2x"></i></span>
+                        </div>
+                        <input type="file" class="form-control form-control-sm" name="foto_associado" id="inputFotoAssociado" accept="image/*">
+                        <input type="hidden" name="foto_existente_base64" id="fotoExistenteBase64">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label required-field">CEP</label>
+                        <input type="text" class="form-control" name="cep" id="cepAssociado" required>
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label">Logradouro</label>
+                        <input type="text" class="form-control" name="logradouro" id="logAssociado">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Número</label>
+                        <input type="text" class="form-control" name="endereco_numero" id="numAssociado">
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label">Bairro</label>
+                        <input type="text" class="form-control" name="bairro" id="bairroAssociado">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label">Cidade</label>
+                        <input type="text" class="form-control" name="cidade" id="cidadeAssociado">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">UF</label>
+                        <input type="text" class="form-control" name="uf" id="ufAssociado" maxlength="2">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">Telefone/Celular</label>
+                        <input type="text" class="form-control" name="telefone" id="telAssociado" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">Status</label>
+                        <select class="form-select" name="status" id="statusAssociado" required>
+                            <option value="Ativo">Ativo</option>
+                            <option value="Inativo">Inativo</option>
+                            <option value="Afastado">Afastado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Data/Hora Cadastro</label>
+                    <input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroAssociado" readonly>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarAssociado">SALVAR ASSOCIADO</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoAssociado" style="display:none;" onclick="cancelarEdicaoAssociado()">CANCELAR EDIÇÃO</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="produtoServicoForm" class="form-container">
+            <h2><i class="fas fa-box"></i> Cadastro de Produtos e Serviços</h2>
+            <form method="POST" action="/cadastrar_produto_servico">
+                <div class="mb-3">
+                    <label class="form-label required-field">Tipo</label>
+                    <select class="form-select" name="tipo" id="tipoProdutoServicoSelect" required>
+                        <option value="">Selecione...</option>
+                        <option value="Despesa">Despesa (Saída)</option>
+                        <option value="Receita">Receita (Entrada)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Atividade da Transação</label>
+                    <select class="form-select" name="tipo_atividade" id="tipoAtividadeProdutoServicoSelect" required>
+                        <option value="">Selecione Tipo Primeiro</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Grupo</label>
+                    <input type="text" class="form-control" name="grupo" placeholder="Ex: Materiais de Escritório, Manutenção, Venda de Recicláveis">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Subgrupo</label>
+                    <input type="text" class="form-control" name="subgrupo" placeholder="Ex: Papel, Peças, Plástico">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Item (Descrição do Produto/Serviço)</label>
+                    <input type="text" class="form-control" name="item" required placeholder="Ex: Resma de Papel A4, Troca de Óleo, PET Verde Prensado">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Data/Hora Cadastro</label>
+                    <input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroPS" readonly>
+                </div>
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg">CADASTRAR ITEM</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="contaCorrenteForm" class="form-container">
+            <h2><i class="fas fa-landmark"></i> Cadastro de Contas Correntes</h2>
+            <form method="POST" action="/cadastrar_conta_corrente" id="cadastroContaCorrenteForm">
+                <input type="hidden" name="id_conta" id="idContaHidden">
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">UVR</label>
+                        <select class="form-select" name="uvr_conta" id="uvrSelectConta" required>
+                            <option value="">Selecione...</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Associação</label>
+                        <input type="text" class="form-control" name="associacao_conta" id="associacaoInputConta" readonly>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label required-field">Banco</label>
+                    <select class="form-select" name="banco_conta" id="bancoContaSelect" required>
+                        <option value="">Carregando bancos...</option>
+                    </select>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">Agência (sem dígito)</label>
+                        <input type="text" class="form-control" name="agencia_conta" id="agenciaContaInput" placeholder="Apenas números" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">Conta Corrente (com dígito)</label>
+                        <input type="text" class="form-control" name="conta_corrente_conta" id="contaCorrenteContaInput" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Descrição / Apelido da Conta</label>
+                    <input type="text" class="form-control" name="descricao_apelido_conta" id="descricaoApelidoContaInput" placeholder="Ex: Conta Principal Movimento">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Data/Hora Cadastro</label>
+                    <input type="text" class="form-control" name="data_hora_cadastro_conta" id="dataHoraCadastroConta" readonly>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarConta">CADASTRAR CONTA</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoConta" style="display:none;" onclick="cancelarEdicaoConta()">CANCELAR EDIÇÃO</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="receitaDespesaForm" class="form-container">
+            <h2><i class="fas fa-file-invoice-dollar"></i> Registro de Transação (NF/Recibo)</h2>
+            <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm">
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">UVR</label>
+                        <select class="form-select" name="uvr_transacao" id="uvrSelectTransacao" required>
+                            <option value="">Selecione...</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Associação</label>
+                        <input type="text" class="form-control" name="associacao_transacao" id="associacaoInputTransacao" readonly>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label required-field">Tipo de Transação</label>
+                        <select class="form-select" name="tipo_transacao" id="tipoTransacaoSelect" required>
+                            <option value="">Selecione...</option>
+                            <option value="Despesa">Despesa (Pagamento)</option>
+                            <option value="Receita">Receita (Recebimento)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label required-field">Atividade da Transação</label>
+                        <select class="form-select" name="tipo_atividade_transacao" id="tipoAtividadeTransacaoSelect" required>
+                            <option value="">Selecione Tipo Primeiro</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3 p-3 bg-light rounded border">
+                    <label class="form-label required-field" id="labelFornecedorPrestadorCliente">Fornecedor / Prestador / Cliente / Associado</label>
+                    <select class="form-select" name="fornecedor_prestador_transacao" id="fornecedorPrestadorTransacaoSelect" required>
+                        <option value="">Selecione UVR e Tipo...</option>
+                    </select>
+                    
+                    <input type="hidden" name="nome_fornecedor_prestador_transacao" id="nomeFornecedorPrestadorTransacaoInput">
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Número do Documento (NF/Recibo)</label>
+                        <input type="text" class="form-control" name="numero_documento_transacao" placeholder="Opcional">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required-field">Data do Documento</label>
+                        <input type="date" class="form-control" name="data_documento_transacao" id="dataDocumentoTransacao" required>
+                    </div>
+                </div>
+
+                <hr>
+                <h4>Itens do Documento</h4>
+                <div id="itensDocumentoContainer">
+                    </div>
+                <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="btnAdicionarItem"><i class="fas fa-plus"></i> Adicionar Item</button>
+
+                <div class="row mt-3">
+                    <div class="col-md-6 offset-md-6">
+                        <label class="form-label fw-bold">VALOR TOTAL DO DOCUMENTO (R$)</label>
+                        <input type="text" class="form-control form-control-lg text-end fw-bold text-primary" name="valor_total_documento" id="valorTotalDocumentoCalculado" readonly>
+                    </div>
+                </div>
+
+                <div class="mb-3 mt-3">
+                    <label class="form-label">Data/Hora Registro</label>
+                    <input type="text" class="form-control" name="data_hora_cadastro_transacao" id="dataHoraCadastroTransacao" readonly>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success btn-lg">REGISTRAR TRANSAÇÃO</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="gestaoCadastrosContainer" class="form-container">
+            <h2><i class="fas fa-search"></i> Pesquisar Clientes/Fornecedores</h2>
+            <div class="card p-3 mb-4 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Nome ou CNPJ</label>
+                        <input type="text" id="inputBuscaCadastro" class="form-control" placeholder="Digite...">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select" id="filtroTipoCadastro">
+                            <option value="">Todos</option>
+                            <option value="Fornecedor/Prestador">Fornecedor</option>
+                            <option value="Cliente">Cliente</option>
+                        </select>
+                    </div>
+                    {% if usuario.role == 'admin' %}
+                    <div class="col-md-2">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="filtroUvrCadastro">
+                            <option value="">Todas</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-md-3 text-end align-self-end">
+                        <button class="btn btn-primary" onclick="buscarCadastros()"><i class="fas fa-search"></i> Pesquisar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light"><tr><th>Razão Social</th><th>CNPJ</th><th>Tipo</th><th>Cidade</th><th>UVR</th><th class="text-center">Ações</th></tr></thead>
+                    <tbody id="tabelaCadastrosBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="gestaoContasContainer" class="form-container">
+            <h2><i class="fas fa-search-dollar"></i> Gerenciar Contas Correntes</h2>
+            <div class="card p-3 mb-4 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Nome do Banco ou Descrição</label>
+                        <input type="text" id="inputBuscaConta" class="form-control" placeholder="Digite...">
+                    </div>
+                    {% if usuario.role == 'admin' %}
+                    <div class="col-md-3">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="filtroUvrConta">
+                            <option value="">Todas</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-md-5 text-end align-self-end">
+                        <button class="btn btn-primary" onclick="buscarContasCorrentes()"><i class="fas fa-search"></i> Pesquisar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Banco</th>
+                            <th>Agência / Conta</th>
+                            <th>Descrição</th>
+                            <th>UVR</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaContasBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="gestaoTransacoesContainer" class="form-container">
+            <h2><i class="fas fa-search-dollar"></i> Gerenciar Transações</h2>
+            
+            <div class="card p-3 mb-4 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Data Inicial</label>
+                        <input type="date" id="filtroDataIniTransacao" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data Final</label>
+                        <input type="date" id="filtroDataFimTransacao" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select" id="filtroTipoTransacao">
+                            <option value="">Todos</option>
+                            <option value="Receita">Receita</option>
+                            <option value="Despesa">Despesa</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="filtroUvrTransacao">
+                            <option value="">Todas</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-8">
+                        <input type="text" id="filtroTextoTransacao" class="form-control" placeholder="Buscar por Fornecedor, Cliente ou Nº Documento...">
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-primary w-100" onclick="buscarTransacoesGestao()"><i class="fas fa-search"></i> Pesquisar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Tipo</th>
+                            <th>Origem/Destino</th>
+                            <th>Nº Doc.</th>
+                            <th>Valor Total (R$)</th>
+                            <th>Status Pag.</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaTransacoesBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+        <div id="aprovacoesContainer" class="form-container">
+            <h2><i class="fas fa-check-double"></i> Aprovações Pendentes</h2>
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th><th>Solicitante</th><th>Registro</th><th>Alteração / Novo Nome</th><th class="text-center">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaAprovacoesBody"></tbody>
+                </table>
+                <div id="msgSemAprovacoes" class="alert alert-info text-center" style="display:none;">Nenhuma solicitação pendente.</div>
+            </div>
+        </div>
+
+        <div id="fluxoCaixaForm" class="form-container">
+            <h2><i class="fas fa-exchange-alt"></i> Fluxo de Caixa (Pagamentos/Recebimentos)</h2>
+            <div class="card p-3 mb-3 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label required-field">UVR</label>
+                        <select class="form-select" id="uvrFluxoCaixa">
+                            <option value="">Selecione...</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        </select>
+                        <input type="hidden" id="associacaoFluxoCaixa">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data Inicial</label>
+                        <input type="date" class="form-control" id="fluxoDataInicialFiltro">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data Final</label>
+                        <input type="date" class="form-control" id="fluxoDataFinalFiltro">
+                    </div>
+                </div>
+            </div>
+
+            <div id="painelFluxoResumo" style="display:none;" class="mb-4">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="card text-white bg-success mb-3">
+                            <div class="card-header">Receitas a Receber</div>
+                            <div class="card-body"><h4 class="card-title">R$ <span id="resumoReceitas">0,00</span></h4></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card text-white bg-danger mb-3">
+                            <div class="card-header">Despesas a Pagar</div>
+                            <div class="card-body"><h4 class="card-title">R$ <span id="resumoDespesas">0,00</span></h4></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card text-white bg-primary mb-3">
+                            <div class="card-header">Saldo Projetado</div>
+                            <div class="card-body"><h4 class="card-title">R$ <span id="resumoSaldo">0,00</span></h4></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+
+            <h4>Registrar Movimentação</h4>
+            <form id="formRegistrarFluxoCaixa">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Tipo Movimentação</label>
+                        <select class="form-select" id="tipoMovimentacao" required>
+                            <option value="">Selecione...</option>
+                            <option value="Pagamento">Pagamento (Saída)</option>
+                            <option value="Recebimento">Recebimento (Entrada)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label required-field" id="labelClienteFornecedorFluxo">Cliente / Fornecedor / Associado</label>
+                        <select class="form-select" id="cadastroCFSelect" required>
+                            <option value="">Selecione UVR e Tipo Mov...</option>
+                        </select>
+                        <input type="hidden" id="idCadastroCfStrHidden">
+                        <input type="hidden" id="isAssociadoRateioHidden">
+                        <input type="hidden" id="nomeCadastroCfDisplayHidden">
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white">Documentos em Aberto (Selecione para Baixar)</div>
+                    <div class="card-body" id="nfsEmAbertoContainer" style="max-height: 200px; overflow-y: auto;">
+                        <small class="text-muted">Selecione UVR, Tipo e Cadastro para ver pendências.</small>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label required-field">Conta Corrente (Origem/Destino)</label>
+                        <select class="form-select" id="contaCorrenteSelect" required>
+                            <option value="">Selecione a UVR...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Nº Doc. Bancário (Compravante)</label>
+                        <input type="text" class="form-control" name="numero_documento_bancario">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Data Efetiva</label>
+                        <input type="date" class="form-control" id="dataEfetivaFluxo" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Valor Total Pago/Recebido (R$)</label>
+                        <input type="text" class="form-control valor-monetario" id="valorEfetivo" required placeholder="0,00">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Saldo Restante da Operação</label>
+                        <input type="text" class="form-control" id="saldoOperacaoDisplay" readonly placeholder="Calculado auto...">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Data/Hora Registro</label>
+                    <input type="text" class="form-control" id="dataHoraRegistroFluxo" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-control" name="observacoes" rows="2"></textarea>
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-danger btn-lg" id="btnConfirmarFluxo">CONFIRMAR MOVIMENTAÇÃO</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="relatoriosFormContainer" class="form-container">
+            <h2><i class="fas fa-chart-line"></i> Relatórios Financeiros</h2>
+            <div class="card p-3 mb-3 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label required-field">Data Inicial</label>
+                        <input type="date" class="form-control" id="relDataInicial">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label required-field">Data Final</label>
+                        <input type="date" class="form-control" id="relDataFinal">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="relUvr">
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo Transação</label>
+                        <select class="form-select" id="relTipoTransacao">
+                            <option value="">Todas</option>
+                            <option value="Receita">Receita</option>
+                            <option value="Despesa">Despesa</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo Entidade</label>
+                        <select class="form-select" id="relTipoEntidade">
+                            <option value="">Todos</option>
+                            <option value="Fornecedor/Prestador">Fornecedor</option>
+                            <option value="Cliente">Cliente</option>
+                            <option value="Associado">Associado</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Nome Entidade</label>
+                        <select class="form-select" id="relNomeEntidade" disabled>
+                            <option value="">Selecione Tipo Entidade</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Tipo Ativ. Transação</label>
+                        <select class="form-select" id="relTipoAtividadeTransacao" disabled>
+                            <option value="">Selecione Tipo Transação</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1 p-2 border rounded">
+                    <h6 class="text-muted mb-0">Filtros de Produto/Serviço (Catálogo)</h6>
+                    <div class="col-md-4">
+                        <label class="form-label">Grupo</label>
+                        <select class="form-select" id="relGrupo" disabled><option value="">Selecione...</option></select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Subgrupo</label>
+                        <select class="form-select" id="relSubgrupo" disabled><option value="">Selecione...</option></select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Item (Descrição)</label>
+                        <select class="form-select" id="relItem" disabled><option value="">Selecione...</option></select>
+                    </div>
+                </div>
+                
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <label class="form-label">Status Pagamento</label>
+                        <select class="form-select" id="relStatusPagamento">
+                            <option value="">Todos</option>
+                            <option value="Pago/Recebido">Pago / Recebido (Total)</option>
+                            <option value="Parcial">Parcialmente Pago</option>
+                            <option value="Aberto">Em Aberto (Pendente)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Listar Por</label>
+                        <select class="form-select" id="relListarPor">
+                            <option value="transacao">Transações (Cabeçalho)</option>
+                            <option value="item">Itens Detalhados</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end justify-content-end gap-2">
+                        <button class="btn btn-warning" id="btnGerarRelatorio"><i class="fas fa-filter"></i> Gerar na Tela</button>
+                        <button class="btn btn-success" id="btnBaixarCsv" style="display:none;"><i class="fas fa-file-csv"></i> CSV</button>
+                        <button class="btn btn-danger" id="btnBaixarPdfRelatorioFinanceiro" style="display:none;"><i class="fas fa-file-pdf"></i> PDF</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="relatorioStatus" class="alert alert-info text-center" style="display:none;"></div>
+            <div class="tabela-container" style="max-height: 500px;">
+                <table class="table table-striped table-bordered table-sm" id="tabelaRelatorio">
+                    <thead class="table-dark" style="position: sticky; top: 0;"></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="extratoBancarioContainer" class="form-container">
+            <h2><i class="fas fa-file-invoice-dollar"></i> Extrato Bancário</h2>
+            <div class="card p-3 mb-3 bg-light">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">UVR</label>
+                        <select class="form-select" id="extratoUvr">
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label required-field">Conta Corrente</label>
+                        <select class="form-select" id="extratoContaCorrente" disabled>
+                            <option value="">Selecione UVR...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label required-field">Início</label>
+                        <input type="date" class="form-control" id="extratoDataInicial">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label required-field">Fim</label>
+                        <input type="date" class="form-control" id="extratoDataFinal">
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12 text-end">
+                        <button class="btn btn-primary" id="btnGerarExtrato"><i class="fas fa-search"></i> Visualizar Extrato</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="infoContaExtrato" class="alert alert-secondary mb-3" style="display:none;">
+                <h5 class="alert-heading" id="extratoNomeConta"></h5>
+                <p class="mb-0">Período: <span id="extratoPeriodo"></span></p>
+            </div>
+
+            <div id="saldoInicialExtrato" class="alert alert-info text-end" style="display:none; font-size: 1.1em;"></div>
+
+            <div class="tabela-container">
+                <table class="table table-hover table-striped" id="tabelaExtrato">
+                    <thead class="table-dark"></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            
+            <div id="saldoFinalExtrato" class="alert alert-primary text-end mt-3" style="display:none; font-size: 1.2em;"></div>
+            <div id="extratoStatus" class="alert alert-warning text-center mt-3" style="display:none;"></div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <button class="btn btn-success" id="btnBaixarCsvExtrato" style="display:none;"><i class="fas fa-file-csv"></i> Baixar CSV</button>
+                <button class="btn btn-danger" id="btnBaixarPdfExtrato" style="display:none;"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+            </div>
+        </div> <div id="gestaoProdutosServicosContainer" class="form-container">
+            <h2><i class="fas fa-box-open"></i> Gestão de Produtos e Serviços</h2>
+            
+            <div class="card p-3 mb-3 bg-light">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">1. Tipo</label>
+                        <select class="form-select form-select-sm" id="filtroTipoGestao">
+                            <option value="">Todos</option>
+                            <option value="Receita">Receitas</option>
+                            <option value="Despesa">Despesas</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">2. Grupo (Atividade)</label>
+                        <select class="form-select form-select-sm" id="filtroGrupoGestao">
+                            <option value="">Selecione o Tipo primeiro...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">3. Subgrupo</label>
+                        <select class="form-select form-select-sm" id="filtroSubgrupoGestao" disabled>
+                            <option value="">Selecione o Grupo...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3 text-end">
+                        <div class="btn-group w-100">
+                            <button class="btn btn-info text-white btn-sm" onclick="abrirModalSubgrupos()">
+                                <i class="fas fa-tags"></i> Subgrupos
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="abrirModalProduto()">
+                                <i class="fas fa-plus"></i> Produto
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabela-container">
+                <table class="table table-hover table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item (Descrição)</th>
+                            <th>Tipo</th> <th>Subgrupo</th>
+                            <th>Grupo (Atividade)</th>
+                            <th class="text-center" style="width: 100px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaProdutosBody">
+                        <tr><td colspan="4" class="text-center">Selecione um filtro ou aguarde...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <!-- Modais -->
+
+<div class="modal fade" id="modalVisualizarCadastro" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white"><h5 class="modal-title">Detalhes do Cadastro</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="row"><div class="col-md-8"><h4><span id="verCadRazao"></span></h4><p class="text-muted"><span id="verCadTipo"></span> - <span id="verCadAtiv"></span></p></div><div class="col-md-4 text-end"><span class="badge bg-secondary fs-6" id="verCadUvr"></span></div></div>
+                    <hr>
+                    <div class="row g-3"><div class="col-md-6"><strong>CNPJ/CPF:</strong> <span id="verCadCnpj"></span></div><div class="col-md-6"><strong>Telefone:</strong> <span id="verCadTel"></span></div><div class="col-12"><strong>Endereço:</strong> <span id="verCadEnd"></span></div></div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-warning" id="btnEditarCadNoModal" data-bs-dismiss="modal">Editar</button><button type="button" class="btn btn-success" id="btnImprimirCadNoModal">Imprimir Ficha</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalDetalhesAprovacao" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning"><h5 class="modal-title text-dark">Análise de Solicitação</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <strong>Solicitante:</strong> <span id="detalheSolicitante"></span> <br>
+                        <strong>Data:</strong> <span id="detalheData"></span>
+                    </div>
+                    <div id="areaComparacaoFoto" class="mb-3 text-center" style="display:none;">
+                        <h6>Nova Foto Proposta:</h6>
+                        <img id="imgFotoNovaProposta" src="" class="img-thumbnail" style="max-height: 200px;">
+                    </div>
+                    <h6>Alterações Realizadas:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead class="table-light"><tr><th>Campo</th><th>Valor Atual (Banco)</th><th>Valor Novo (Proposto)</th></tr></thead>
+                            <tbody id="tabelaComparacaoBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" id="btnRejeitarModal"><i class="fas fa-times"></i> Rejeitar</button>
+                    <button type="button" class="btn btn-success" id="btnAprovarModal"><i class="fas fa-check"></i> Aprovar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalDetalhesTransacao" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title"><i class="fas fa-info-circle"></i> Detalhes da Transação #<span id="detalheIdTransacao"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Origem/Destino:</strong> <span id="detalheOrigem" class="text-primary"></span><br>
+                            <small class="text-muted" id="detalheUvrTipo"></small>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Data Doc:</strong> <br> <span id="detalheDataTransacao"></span>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <strong>Nº Doc:</strong> <br> <span id="detalheDoc"></span>
+                        </div>
+                    </div>
+                    
+                    <h6 class="border-bottom pb-2">Itens do Documento</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descrição</th>
+                                    <th class="text-center">UN</th>
+                                    <th class="text-end">Qtd</th>
+                                    <th class="text-end">Vl. Unit</th>
+                                    <th class="text-end">Total Item</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaItensDetalheBody">
+                                </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="4" class="text-end fw-bold">TOTAL GERAL:</td>
+                                    <td class="text-end fw-bold bg-light" id="detalheValorTotal"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<div class="modal fade" id="modalSubgrupos" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">Gerenciar Subgrupos</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Selecione o Grupo (Pai)</label>
+                        <select class="form-select" id="selectGrupoPaiSubgrupo" onchange="listarSubgruposNoModal()">
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                    <hr>
+                    <h6>Adicionar / Editar Subgrupo</h6>
+                    <div class="input-group mb-3">
+                        <input type="hidden" id="idSubgrupoEdicao">
+                        <input type="text" class="form-control" id="inputNomeSubgrupo" placeholder="Nome do Subgrupo (ex: Papel)">
+                        <button class="btn btn-success" type="button" onclick="salvarSubgrupo()">Salvar</button>
+                        <button class="btn btn-secondary" type="button" id="btnCancelarEdicaoSub" onclick="limparFormSubgrupo()" style="display:none;">X</button>
+                    </div>
+                    <hr>
+                    <h6>Lista de Subgrupos Existentes</h6>
+                    <ul class="list-group" id="listaSubgruposExistentes">
+                        </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalProdutoEdicao" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="tituloModalProduto">Novo Produto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="idProdutoEdicao">
+                    <div class="mb-3">
+                        <label class="form-label required-field">Grupo (Atividade)</label>
+                        <select class="form-select" id="selectGrupoProduto" required onchange="carregarSubgruposParaProduto()">
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Subgrupo</label>
+                        <select class="form-select" id="selectSubgrupoProduto">
+                            <option value="">Selecione Grupo Primeiro</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label required-field">Item (Nome do Produto/Serviço)</label>
+                        <input type="text" class="form-control" id="inputNomeProduto" required placeholder="Ex: Papelão Ondulado">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarProduto()">Salvar Produto</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// 1. VARIÁVEIS GLOBAIS DE PERMISSÃO
+    const usuarioLogadoUvr = "{{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else '' }}";
+    const usuarioIsAdmin = "{{ 'true' if usuario and usuario.role == 'admin' else 'false' }}" === 'true';
+
+    // 2. LISTA DE BANCOS E FUNÇÃO
+    const bancosBrasil = [ 
+        { codigo: "001", nome: "Banco do Brasil S.A." }, 
+        { codigo: "104", nome: "Caixa Econômica Federal" }, 
+        { codigo: "237", nome: "Bradesco S.A." }, 
+        { codigo: "341", nome: "Itaú Unibanco S.A." }, 
+        { codigo: "033", nome: "Santander (Brasil) S.A." }, 
+        { codigo: "745", nome: "Citibank S.A." }, 
+        { codigo: "399", nome: "HSBC Bank Brasil S.A. - Banco Múltiplo" },  
+        { codigo: "077", nome: "Banco Inter S.A." }, 
+        { codigo: "260", nome: "Nu Pagamentos S.A. (Nubank)" }, 
+        { codigo: "212", nome: "Banco Original S.A." }, 
+        { codigo: "655", nome: "Banco Votorantim S.A." }, 
+        { codigo: "070", nome: "BRB - Banco de Brasília S.A." }, 
+        { codigo: "041", nome: "Banrisul - Banco do Estado do Rio Grande do Sul S.A." }, 
+        { codigo: "756", nome: "Sicoob - Banco Cooperativo do Brasil S.A." }, 
+        { codigo: "085", nome: "Ailos (Viacredi, CredCrea, etc)" }, 
+        { codigo: "099", nome: "Uniprime Central CCC Ltda" }, 
+        { codigo: "748", nome: "Sicredi - Banco Cooperativo Sicredi S.A." }, 
+        { codigo: "000", nome: "Outro (especificar no apelido)" } 
+    ];
+
+    function popularBancos() {
+        const selectBanco = $('#bancoContaSelect');
+        if (selectBanco.find('option').length <= 1 || selectBanco.val() === "") {
+            selectBanco.empty().append('<option value="">Selecione o Banco...</option>');
+            bancosBrasil.forEach(function(banco) { 
+                selectBanco.append(`<option value="${banco.codigo}|${banco.nome}">${banco.codigo} - ${banco.nome}</option>`); 
+            });
+        }
+    }
+
+    // 3. MAPA GLOBAL DE GRUPOS E SUBGRUPOS (ATUALIZADO PELO CSV)
+    // Usado em: Cadastro de Clientes, Produtos, Transações e Catálogo.
+    // Usamos 'var' para evitar erro de redeclaração se o script rodar 2x
+    var MAPA_GRUPOS_SISTEMA = {
+        "Receita": [
+            "Elétrico ou Eletrônico",
+            "Metal",
+            "Não convencionais",
+            "Outras Receitas",
+            "Papel",
+            "Plástico",
+            "Repasses Governamentais",
+            "Vidro"
+        ],
+        "Despesa": [
+            "Compras de Materiais",
+            "Despesas Administrativas",
+            "Outras Despesas",
+            "Rateio dos Associados",
+            "Serviços Contratados",
+            "Pagamento de Fornecedores"
+        ]
+    };
+
+    // Lista unificada para telas que não filtram por tipo (ex: filtros gerais)
+    var TODOS_GRUPOS_UNIFICADOS = [...MAPA_GRUPOS_SISTEMA["Receita"], ...MAPA_GRUPOS_SISTEMA["Despesa"]].sort();
+
+    // --- FUNÇÕES ATUALIZADAS PARA USAR O NOVO MAPA ---
+
+    function atualizarAtividadesCadastroClienteFornecedor() {
+        var tipoCadastro = $('#tipoCadastroCF').val(); 
+        var selectAtividade = $('#tipoAtividadeCF'); 
+        selectAtividade.empty().append('<option value="">Selecione...</option>');
+        
+        let lista = [];
+        // Fornecedor/Prestador -> Usa lista de DESPESAS
+        if (tipoCadastro === "Fornecedor/Prestador") {
+            lista = MAPA_GRUPOS_SISTEMA["Despesa"];
+        } 
+        // Cliente -> Usa lista de RECEITAS
+        else if (tipoCadastro === "Cliente") {
+            lista = MAPA_GRUPOS_SISTEMA["Receita"];
+        }
+
+        if (lista) {
+            lista.sort().forEach(function(item) { selectAtividade.append(`<option value="${item}">${item}</option>`); });
+        }
+    }
+
+    function atualizarAtividadesProdutoServico() {
+        var tipoPS = $('#tipoProdutoServicoSelect').val(); 
+        var selectAtividadePS = $('#tipoAtividadeProdutoServicoSelect'); 
+        selectAtividadePS.empty().append('<option value="">Selecione...</option>');
+        
+        let lista = [];
+        if (tipoPS === "Despesa") lista = MAPA_GRUPOS_SISTEMA["Despesa"];
+        else if (tipoPS === "Receita") lista = MAPA_GRUPOS_SISTEMA["Receita"];
+
+        if (lista) {
+            lista.sort().forEach(function(item) { selectAtividadePS.append(`<option value="${item}">${item}</option>`); });
+        }
+    }
+
+    function atualizarAtividadesTransacao() { 
+        var tipo = $('#tipoTransacaoSelect').val(); 
+        var selectAtividade = $('#tipoAtividadeTransacaoSelect'); 
+        var currentAtividade = selectAtividade.val(); 
+        selectAtividade.empty().append('<option value="">Selecione...</option>');
+        
+        let lista = [];
+        if (tipo === "Despesa") lista = MAPA_GRUPOS_SISTEMA["Despesa"];
+        else if (tipo === "Receita") lista = MAPA_GRUPOS_SISTEMA["Receita"];
+        
+        if (lista) {
+            lista.sort().forEach(function(item) { selectAtividade.append(`<option value="${item}">${item}</option>`); });
+        }
+
+        // Mantém seleção se possível
+        if (currentAtividade && lista.includes(currentAtividade)) { 
+            selectAtividade.val(currentAtividade); 
+        } else { 
+            selectAtividade.val(''); 
+        }
+    }
+
+    function atualizarDataHora(selector) {
+        const now = new Date();
+        
+        // Pega as partes da data e garante que tenham 2 dígitos (ex: 05 em vez de 5)
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+        
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        
+        // Monta a string no formato exato que o Python espera: DD/MM/AAAA HH:MM:SS
+        const str = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+        
+        $(selector).val(str);
+    }
+
+    
+    // --- INÍCIO DO DOCUMENT READY (CARREGAMENTO DA PÁGINA) ---
+    $(document).ready(function() {
+        $('.valor-monetario').mask('#.##0,00', {reverse: true});
+        $('#cnpj').mask('00.000.000/0000-00', {reverse: true});
+        $('#cepCF, #cepAssociado').mask('00000-000');
+        $('#telefoneCF, #telAssociado').mask('(00) 00000-0000');
+        $('#cpfAssociado').mask('000.000.000-00');
+        $('#rgAssociado').mask('00.000.000-0');
+
+        function preencherDataAtual(selector) {
+            const now = new Date();
+            const day = ("0" + now.getDate()).slice(-2);
+            const month = ("0" + (now.getMonth() + 1)).slice(-2);
+            const today = now.getFullYear() + "-" + (month) + "-" + (day);
+            $(selector).val(today);
+        }
+        function preencherDatasPadraoFluxo() {
+            const now = new Date();
+            const day = ("0" + now.getDate()).slice(-2);
+            const month = ("0" + (now.getMonth() + 1)).slice(-2);
+            const today = now.getFullYear() + "-" + (month) + "-" + (day);
+            
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const fDay = ("0" + firstDay.getDate()).slice(-2);
+            const fMonth = ("0" + (firstDay.getMonth() + 1)).slice(-2);
+            const firstDate = firstDay.getFullYear() + "-" + (fMonth) + "-" + (fDay);
+
+            $('#fluxoDataInicialFiltro').val(firstDate);
+            $('#fluxoDataFinalFiltro').val(today);
+        }
+
+        // --- PREENCHIMENTO AUTOMÁTICO DE ASSOCIAÇÃO ---
+        const mapUvrAssociacao = { "UVR 01": "ASCAMAR", "UVR 02": "ACAN" };
+        function preencherAssociacao(selectId, inputId) {
+            const uvr = $('#' + selectId).val();
+            $('#' + inputId).val(mapUvrAssociacao[uvr] || "");
+            if(selectId === 'uvrFluxoCaixa') $('#associacaoFluxoCaixa').val(mapUvrAssociacao[uvr] || "");
+        }
+
+// --- FUNÇÃO mostrarFormulario (ATUALIZADA) ---
+        window.mostrarFormulario = function(formId) {
+            // 1. Esconde todas as telas e mostra a selecionada
+            $('.form-container').hide();
+            $('#' + formId).show();
+
+            // 2. Lógica específica para cada tela
+            if (formId === 'clienteFornecedorForm') { 
+                atualizarDataHora('#dataHoraCadastroCF'); 
+                atualizarAtividadesCadastroClienteFornecedor(); 
+            }
+            else if (formId === 'associadoForm') { 
+                atualizarDataHora('#dataHoraCadastroAssociado'); 
+            }
+            else if (formId === 'produtoServicoForm') { 
+                atualizarDataHora('#dataHoraCadastroPS'); 
+                atualizarAtividadesProdutoServico(); 
+            }
+            else if (formId === 'contaCorrenteForm') { 
+                atualizarDataHora('#dataHoraCadastroConta'); 
+                popularBancos(); 
+            }
+            else if (formId === 'receitaDespesaForm') { 
+                atualizarDataHora('#dataHoraCadastroTransacao'); 
+                preencherDataAtual('#dataDocumentoTransacao'); 
+                
+                // Força atualização da lista de grupos
+                atualizarAtividadesTransacao(); 
+
+                if ($('#itensDocumentoContainer .item-row').length === 0) { adicionarItemLinha(); } 
+                $('#uvrSelectTransacao').trigger('change'); 
+            }
+            else if (formId === 'fluxoCaixaForm') { 
+                atualizarDataHora('#dataHoraRegistroFluxo'); 
+                preencherDataAtual('#dataEfetivaFluxo'); 
+                if(!$('#fluxoDataInicialFiltro').val()) preencherDatasPadraoFluxo();
+                $('#uvrFluxoCaixa').trigger('change'); 
+            }
+            else if (formId === 'relatoriosFormContainer') { 
+                loadRelatorioUVRs(); 
+                preencherDataAtual('#relDataInicial'); 
+                preencherDataAtual('#relDataFinal'); 
+                // Zera os filtros de catálogo do relatório
+                $('#relTipoTransacao').val('Todas').trigger('change');
+                $('#relUvr').trigger('change'); 
+            }
+            else if (formId === 'extratoBancarioContainer') { 
+                loadExtratoUVRs(); 
+                preencherDataAtual('#extratoDataInicial'); 
+                preencherDataAtual('#extratoDataFinal'); 
+            }
+            else if (formId === 'gestaoAssociadosContainer') { 
+                $('#inputBuscaAssociado').focus(); 
+            }
+            else if (formId === 'gestaoContasContainer') {
+                $('#inputBuscaConta').focus();
+                buscarContasCorrentes(); 
+            } 
+            else if (formId === 'gestaoTransacoesContainer') { 
+                if(!$('#filtroDataIniTransacao').val()) preencherDatasPadraoFluxo(); 
+                buscarTransacoesGestao(); 
+            }
+            else if (formId === 'gestaoCadastrosContainer') {
+                 // Apenas abre
+            }
+            
+            // --- NOVA TELA (ADICIONADA AQUI) ---
+            else if (formId === 'gestaoProdutosServicosContainer') {
+                // Inicializa o filtro de Grupo ao abrir a tela
+                const filtroGrupo = $('#filtroGrupoGestao');
+                // Garante que o select existe antes de tentar preencher
+                if (filtroGrupo.length > 0) {
+                    filtroGrupo.empty().append('<option value="">Todos os Grupos</option>');
+                    if (typeof TODOS_GRUPOS_UNIFICADOS !== 'undefined') {
+                        TODOS_GRUPOS_UNIFICADOS.forEach(g => filtroGrupo.append(`<option value="${g}">${g}</option>`));
+                    }
+                }
+                $('#filtroTipoGestao').val(''); // Reseta filtro de tipo
+                carregarTabelaProdutos('');     // Carrega todos os produtos
+            }
+        }
+
+        $('#btnClienteFornecedor').click(() => mostrarFormulario('clienteFornecedorForm'));
+        $('#btnAssociado').click(() => mostrarFormulario('associadoForm'));
+        $('#btnProdutoServico').click(() => mostrarFormulario('produtoServicoForm'));
+        $('#btnContaCorrente').click(() => mostrarFormulario('contaCorrenteForm'));
+        $('#btnGestaoTransacoes').click(() => mostrarFormulario('gestaoTransacoesContainer'));
+        $('#btnFluxoCaixa').click(() => mostrarFormulario('fluxoCaixaForm'));
+        $('#btnRelatorios').click(() => mostrarFormulario('relatoriosFormContainer'));
+        $('#btnExtratoBancario').click(() => mostrarFormulario('extratoBancarioContainer'));
+        $('#btnGestaoAssociados').click(() => mostrarFormulario('gestaoAssociadosContainer'));
+        $('#btnGestaoCadastros').click(() => mostrarFormulario('gestaoCadastrosContainer'));
+        $('#btnGestaoContas').click(() => mostrarFormulario('gestaoContasContainer'));
+        $('#btnReceitaDespesa').click(() => mostrarFormulario('receitaDespesaForm'));
+        $('#btnGestaoProdutosServicos').click(() => mostrarFormulario('gestaoProdutosServicosContainer'));
+        
+        $('#inputBuscaAssociado').keypress(function(e) { if(e.which == 13) buscarAssociados(); });
+
+        $('#uvrSelect').change(() => preencherAssociacao('uvrSelect', 'associacaoInput'));
+        $('#uvrSelectAssociado').change(() => preencherAssociacao('uvrSelectAssociado', 'associacaoInputAssociado'));
+        $('#uvrSelectConta').change(() => preencherAssociacao('uvrSelectConta', 'associacaoInputConta'));
+        
+        $('#uvrSelectTransacao').change(() => {
+            preencherAssociacao('uvrSelectTransacao', 'associacaoInputTransacao');
+            carregarOrigemTransacao(); 
+            $('#itensDocumentoContainer').empty(); 
+            adicionarItemLinha(); 
+        });
+        
+        $('#uvrFluxoCaixa').change(() => {
+            preencherAssociacao('uvrFluxoCaixa', 'associacaoFluxoCaixa');
+            carregarResumoFinanceiroFluxo();
+            carregarContasCorrentesFluxo($('#uvrFluxoCaixa').val(), '#contaCorrenteSelect'); 
+            atualizarCadastrosComNotasFluxo(); 
+        });
+
+        $('#fluxoDataInicialFiltro, #fluxoDataFinalFiltro').change(function() {
+            carregarResumoFinanceiroFluxo(); 
+            const idCadastro = $('#idCadastroCfStrHidden').val();
+            const isRateio = $('#isAssociadoRateioHidden').val() === 'true';
+            if(idCadastro) carregarNotasEmAbertoFluxo(idCadastro, isRateio);
+        });
+
+        $('#extratoUvr').change(() => { carregarContasCorrentesFluxo($('#extratoUvr').val(), '#extratoContaCorrente'); });
+
+        function atualizarAtividadesCadastroClienteFornecedor() {
+            var tipoCadastro = $('#tipoCadastroCF').val(); 
+            var selectAtividade = $('#tipoAtividadeCF'); 
+            selectAtividade.empty().append('<option value="">Selecione...</option>');
+            
+            let lista = [];
+            if (tipoCadastro === "Fornecedor/Prestador") {
+                lista = MAPA_GRUPOS_SISTEMA["Despesa"];
+            } else if (tipoCadastro === "Cliente") {
+                lista = MAPA_GRUPOS_SISTEMA["Receita"];
+            }
+
+            if (lista) {
+                lista.sort().forEach(function(item) { selectAtividade.append(`<option value="${item}">${item}</option>`); });
+            }
+        }
+        $('#tipoCadastroCF').change(atualizarAtividadesCadastroClienteFornecedor);
+        
+        function atualizarAtividadesProdutoServico() {
+            var tipoPS = $('#tipoProdutoServicoSelect').val(); 
+            var selectAtividadePS = $('#tipoAtividadeProdutoServicoSelect'); 
+            selectAtividadePS.empty().append('<option value="">Selecione...</option>');
+            
+            let lista = [];
+            if (tipoPS === "Despesa") { 
+                lista = MAPA_GRUPOS_SISTEMA["Despesa"];
+            } else if (tipoPS === "Receita") {
+                lista = MAPA_GRUPOS_SISTEMA["Receita"];
+            }
+
+            if (lista) {
+                lista.sort().forEach(function(item) { selectAtividadePS.append(`<option value="${item}">${item}</option>`); });
+            }
+        }
+        $('#tipoProdutoServicoSelect').change(atualizarAtividadesProdutoServico);
+
+        // --- BANCOS E CONTAS ---
+        $('#cadastroContaCorrenteForm').on('submit', function(e) {
+            const agencia = $('#agenciaContaInput').val().replace(/[^0-9]/g, '');
+            const conta = $('#contaCorrenteContaInput').val(); 
+            if (agencia.length === 0) { alert("O campo Agência é obrigatório e deve conter apenas números."); e.preventDefault(); return; }
+            if (conta.length === 0) { alert("O campo Conta Corrente é obrigatório."); e.preventDefault(); return; }
+        });
+
+        function carregarOrigemTransacao() {
+            const selectDropdown = $('#fornecedorPrestadorTransacaoSelect');
+            const uvr = $('#uvrSelectTransacao').val();
+            const tipoTransacao = $('#tipoTransacaoSelect').val(); 
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const labelOrigem = $('#labelFornecedorPrestadorCliente');
+
+            selectDropdown.empty().append('<option value="">Carregando...</option>');
+            $('#nomeFornecedorPrestadorTransacaoInput').val(''); 
+
+            if (!uvr) {
+                selectDropdown.empty().append('<option value="">Selecione a UVR...</option>');
+                labelOrigem.text('Fornecedor / Prestador / Cliente / Associado');
+                selectDropdown.prop('required', true); 
+                return;
+            }
+
+            let url = '';
+            const params = [`uvr=${encodeURIComponent(uvr)}`];
+            let tipoOrigemDesc = ''; 
+            let isRequired = true; 
+
+            if (tipoAtividade === "Rateio dos Associados") {
+                url = '/get_associados_ativos'; 
+                tipoOrigemDesc = 'Associado (para Rateio)';
+                isRequired = false; 
+            } else { 
+                let tipoCadastroFiltro = '';
+                if (tipoTransacao === 'Despesa') {
+                    tipoCadastroFiltro = 'Fornecedor/Prestador';
+                    tipoOrigemDesc = 'Fornecedor/Prestador';
+                } else if (tipoTransacao === 'Receita') {
+                    tipoCadastroFiltro = 'Cliente';
+                    tipoOrigemDesc = 'Cliente';
+                }
+
+                if (!tipoCadastroFiltro) { 
+                    selectDropdown.empty().append('<option value="">Selecione Tipo de Transação...</option>');
+                    labelOrigem.text('Fornecedor / Prestador / Cliente');
+                    selectDropdown.prop('required', true);
+                    return;
+                }
+                url = '/get_cadastros_ativos'; 
+                params.push(`tipo_cadastro_filtro=${encodeURIComponent(tipoCadastroFiltro)}`);
+            }
+            labelOrigem.text(tipoOrigemDesc);
+            selectDropdown.prop('required', isRequired); 
+
+            if (params.length > 0) { url += `?${params.join('&')}`; }
+
+            $.getJSON(url, function(data) {
+                selectDropdown.empty();
+                if (tipoAtividade === "Rateio dos Associados") {
+                    selectDropdown.append('<option value="">Rateio Geral (Nenhum Associado Específico)</option>'); 
+                } else {
+                    selectDropdown.append(`<option value="">Selecione ${tipoOrigemDesc}...</option>`);
+                }
+
+                if (data && data.length > 0) {
+                    data.forEach(function(item) {
+                        const idVal = item.id; 
+                        const nomeVal = item.nome || item.razao_social; 
+                        const tipoVal = item.tipo_cadastro || 'Associado'; 
+                        selectDropdown.append(`<option value="${idVal}" data-nome="${nomeVal}">${nomeVal} (${tipoVal})</option>`);
+                    });
+                } else if (tipoAtividade !== "Rateio dos Associados") { 
+                     selectDropdown.append(`<option value="">Nenhum ${tipoOrigemDesc} encontrado</option>`);
+                }
+            }).fail(function(jqXHR, textStatus, errorThrown) { 
+                selectDropdown.empty().append('<option value="">Erro ao carregar</option>'); 
+            });
+        }
+        
+        $('#fornecedorPrestadorTransacaoSelect').change(function() {
+            const selectedOption = $(this).find('option:selected');
+            const nomeSelecionado = selectedOption.data('nome') || (selectedOption.text() ? selectedOption.text().split(' (')[0] : '');
+            $('#nomeFornecedorPrestadorTransacaoInput').val(nomeSelecionado);
+        });
+        
+        function atualizarAtividadesTransacao() { 
+        var tipo = $('#tipoTransacaoSelect').val(); // Pega "Receita" ou "Despesa"
+        var selectAtividade = $('#tipoAtividadeTransacaoSelect'); // O campo "Atividade/Grupo"
+        
+        // Limpa as opções atuais
+        selectAtividade.empty().append('<option value="">Selecione o Grupo...</option>');
+        
+        // Se não tiver tipo selecionado, para por aqui
+        if (!tipo) return;
+
+        let lista = [];
+        
+        // Pega a lista correta do MAPA GLOBAL
+        if (tipo === "Despesa") {
+            lista = MAPA_GRUPOS_SISTEMA["Despesa"];
+        } else if (tipo === "Receita") {
+            lista = MAPA_GRUPOS_SISTEMA["Receita"];
+        }
+        
+        // Preenche o select com os Grupos
+        if (lista && lista.length > 0) {
+            lista.sort().forEach(function(item) { 
+                selectAtividade.append(`<option value="${item}">${item}</option>`); 
+            });
+        }
+    }
+        
+        $('#tipoTransacaoSelect').change(function(){ atualizarAtividadesTransacao(); });
+
+        $('#tipoAtividadeTransacaoSelect').change(function() { 
+            carregarOrigemTransacao(); 
+            $('#itensDocumentoContainer .item-row').each(function() { populateGrupos($(this)); });
+        });
+
+        function populateGrupos(rowElement) {
+            const tipoTransacao = $('#tipoTransacaoSelect').val(); 
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const grupoSelect = $(rowElement).find('.grupo-select');
+            
+            grupoSelect.empty().append('<option value="">Carregando Grupos...</option>');
+            $(rowElement).find('.subgrupo-select').empty().append('<option value="">Selecione Grupo</option>').prop('disabled', true);
+            $(rowElement).find('.item-select').empty().append('<option value="">Selecione Subgrupo</option>').prop('disabled', true);
+
+            if (!tipoTransacao || !tipoAtividade) {
+                grupoSelect.empty().append('<option value="">Selecione Tipo e Atividade da Transação</option>');
+                return;
+            }
+
+            let url = '/get_distinct_grupos'; 
+            let params = [];
+            if (tipoTransacao) params.push(`tipo=${encodeURIComponent(tipoTransacao)}`); 
+            if (tipoAtividade) params.push(`tipo_atividade=${encodeURIComponent(tipoAtividade)}`);
+            if (params.length > 0) url += `?${params.join('&')}`;
+
+            $.getJSON(url, function(data) {
+                grupoSelect.empty().append('<option value="">Selecione Grupo...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(grupo) { grupoSelect.append(`<option value="${grupo}">${grupo}</option>`); });
+                } else { grupoSelect.append('<option value="">Nenhum grupo encontrado</option>'); }
+            }).fail(function() { grupoSelect.empty().append('<option value="">Erro ao carregar grupos</option>'); });
+        }
+
+        function populateSubgrupos(rowElement, selectedGrupo) {
+            const tipoTransacao = $('#tipoTransacaoSelect').val();
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const subgrupoSelect = $(rowElement).find('.subgrupo-select');
+
+            subgrupoSelect.empty().append('<option value="">Carregando Subgrupos...</option>').prop('disabled', true);
+            $(rowElement).find('.item-select').empty().append('<option value="">Selecione Subgrupo</option>').prop('disabled', true);
+
+            if (!selectedGrupo) {
+                subgrupoSelect.empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+                return;
+            }
+            if (!tipoTransacao || !tipoAtividade) {
+                subgrupoSelect.empty().append('<option value="">Selecione Tipo e Atividade da Transação</option>').prop('disabled', true);
+                return;
+            }
+
+            let url = `/get_distinct_subgrupos?grupo=${encodeURIComponent(selectedGrupo)}`;
+            let params = [];
+            if (tipoTransacao) params.push(`tipo=${encodeURIComponent(tipoTransacao)}`); 
+            if (tipoAtividade) params.push(`tipo_atividade=${encodeURIComponent(tipoAtividade)}`);
+            if (params.length > 0) url += `&${params.join('&')}`;
+            
+            $.getJSON(url, function(data) {
+                subgrupoSelect.empty().append('<option value="">Selecione Subgrupo...</option>');
+                subgrupoSelect.append('<option value="">(Nenhum)</option>'); 
+                if (data && data.length > 0) {
+                    data.forEach(function(subgrupo) { subgrupoSelect.append(`<option value="${subgrupo}">${subgrupo}</option>`); });
+                }
+                subgrupoSelect.prop('disabled', false);
+            }).fail(function() { subgrupoSelect.empty().append('<option value="">Erro ao carregar subgrupos</option>').prop('disabled', false); });
+        }
+
+        function populateItems(rowElement, selectedGrupo, selectedSubgrupo) {
+            const tipoTransacao = $('#tipoTransacaoSelect').val();
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val(); 
+            const itemSelect = $(rowElement).find('.item-select');
+
+            itemSelect.empty().append('<option value="">Carregando Itens...</option>').prop('disabled', true);
+
+            if (!selectedGrupo) { 
+                itemSelect.empty().append('<option value="">Selecione Grupo</option>').prop('disabled', true);
+                return;
+            }
+            if (!tipoTransacao || !tipoAtividade) {
+                itemSelect.empty().append('<option value="">Selecione Tipo e Atividade da Transação</option>').prop('disabled', true);
+                return;
+            }
+
+            let url = `/get_items_for_filters?grupo=${encodeURIComponent(selectedGrupo)}&subgrupo=${encodeURIComponent(selectedSubgrupo === null ? "" : selectedSubgrupo)}`;
+            let params = [];
+            if (tipoTransacao) params.push(`tipo=${encodeURIComponent(tipoTransacao)}`); 
+            if (tipoAtividade) params.push(`tipo_atividade=${encodeURIComponent(tipoAtividade)}`);
+            if (params.length > 0) url += `&${params.join('&')}`;
+
+            $.getJSON(url, function(data) {
+                itemSelect.empty().append('<option value="">Selecione Item...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(item) { itemSelect.append(`<option value="${item}">${item}</option>`); });
+                } else { itemSelect.append('<option value="">Nenhum item encontrado</option>'); }
+                itemSelect.prop('disabled', false);
+            }).fail(function() { itemSelect.empty().append('<option value="">Erro ao carregar itens</option>').prop('disabled', false); });
+        }
+        
+        const unidadesMedida = ["UN", "PC", "CX", "KG", "G", "L", "ML", "M", "M2", "M3", "H", "SV", "PCT", "RL", "FD", "GL", "LT", "DZ", "PAR", "JG", "KIT", "OUTRO"];
+        let itemCounter = 0;
+
+        function adicionarItemLinha() {
+            itemCounter++;
+            let unidadeOptions = unidadesMedida.map(u => `<option value="${u}">${u}</option>`).join('');
+            const itemHtml = `
+                <div class="item-row" id="itemRow${itemCounter}">
+                    <div class="item-fields-grid">
+                        <div class="form-group">
+                            <label for="grupo${itemCounter}">Grupo</label>
+                            <select class="form-select grupo-select" id="grupo${itemCounter}" name="produto_servico_grupo[]">
+                                <option value="">Selecione Grupo...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="subgrupo${itemCounter}">Subgrupo</label>
+                            <select class="form-select subgrupo-select" id="subgrupo${itemCounter}" name="produto_servico_subgrupo[]" disabled>
+                                <option value="">Selecione Grupo Primeiro</option>
+                            </select>
+                        </div>
+                        <div class="form-group desc-produto-servico"> 
+                            <label for="desc${itemCounter}" class="required-field">Descrição Prod./Serv.</label>
+                            <select class="form-select item-select" id="desc${itemCounter}" name="produto_servico_descricao[]" required disabled>
+                                <option value="">Selecione Subgrupo Primeiro</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="un${itemCounter}" class="required-field">UN</label>
+                            <select class="form-select" id="un${itemCounter}" name="produto_servico_unidade[]" required>${unidadeOptions}</select>
+                        </div>
+                        <div class="form-group">
+                            <label for="qtd${itemCounter}" class="required-field">Qtd.</label>
+                            <input type="number" class="form-control item-calculavel" id="qtd${itemCounter}" name="produto_servico_quantidade[]" placeholder="Qtd." step="any" min="0.001" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vu${itemCounter}" class="required-field">Vl. Unit. (R$)</label>
+                            <input type="text" class="form-control item-calculavel valor-monetario" id="vu${itemCounter}" name="produto_servico_valor_unitario[]" placeholder="Unitário" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vt${itemCounter}">Vl. Total Item (R$)</label>
+                            <input type="text" class="form-control valor-total-item-input valor-monetario" id="vt${itemCounter}" name="produto_servico_valor_total_item[]" readonly>
+                        </div>
+                        <button type="button" class="btn btn-danger btn-sm remover-item" data-item="${itemCounter}"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+            `;
+            $('#itensDocumentoContainer').append(itemHtml);
+            populateGrupos($(`#itemRow${itemCounter}`)); 
+            $(`#vu${itemCounter}`).mask('#.##0,00', {reverse: true});
+            $(`#vt${itemCounter}`).mask('#.##0,00', {reverse: true}); 
+        }
+
+        $('#btnAdicionarItem').click(adicionarItemLinha);
+
+        $('#itensDocumentoContainer').on('click', '.remover-item', function() {
+            $(this).closest('.item-row').remove();
+            calcularValorTotalDocumento();
+        });
+        
+        $('#itensDocumentoContainer').on('change', '.grupo-select', function() {
+            const selectedGrupo = $(this).val();
+            const rowElement = $(this).closest('.item-row');
+            populateSubgrupos(rowElement, selectedGrupo);
+        });
+
+        $('#itensDocumentoContainer').on('change', '.subgrupo-select', function() {
+            const selectedSubgrupo = $(this).val(); 
+            const rowElement = $(this).closest('.item-row');
+            const selectedGrupo = $(rowElement).find('.grupo-select').val();
+            populateItems(rowElement, selectedGrupo, selectedSubgrupo);
+        });
+
+        $('#itensDocumentoContainer').on('input change keyup', '.item-calculavel', function() { 
+            let row = $(this).closest('.item-row');
+            let qtdStr = row.find('input[name="produto_servico_quantidade[]"]').val().replace(',', '.');
+            let vuStr = row.find('input[name="produto_servico_valor_unitario[]"]').val().replace("R$", "").replace(/\./g, '').replace(',', '.');
+            let qtd = parseFloat(qtdStr) || 0;
+            let vu = parseFloat(vuStr) || 0;
+            let totalItem = qtd * vu;
+            row.find('input[name="produto_servico_valor_total_item[]"]').val(totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+            calcularValorTotalDocumento();
+        });
+
+        function calcularValorTotalDocumento() {
+            let totalDocumento = 0;
+            $('#itensDocumentoContainer .item-row').each(function() {
+                let valorTotalItemStr = $(this).find('input[name="produto_servico_valor_total_item[]"]').val().replace("R$", "").replace(/\./g, '').replace(',', '.');
+                if (valorTotalItemStr) {
+                    totalDocumento += parseFloat(valorTotalItemStr) || 0;
+                }
+            });
+            $('#valorTotalDocumentoCalculado').val(totalDocumento.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        }
+        
+        $('#transacaoForm').on('submit', function(e) { 
+            if ($('#itensDocumentoContainer .item-row').length === 0) {
+                alert("Adicione pelo menos um produto/serviço à transação.");
+                e.preventDefault(); 
+                return false;
+            }
+            let itemValido = true;
+            $('#itensDocumentoContainer .item-row').each(function(index) {
+                const itemSelect = $(this).find('.item-select');
+                const grupoSelect = $(this).find('.grupo-select'); 
+                if (!itemSelect.val() && grupoSelect.val()) { 
+                    alert(`Por favor, selecione a Descrição do Produto/Serviço para o item ${index + 1}.`);
+                    itemSelect.focus();
+                    itemValido = false;
+                    return false; 
+                }
+            });
+            if (!itemValido) {
+                e.preventDefault();
+                return false;
+            }
+
+            const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val();
+            const origemSelecionada = $('#fornecedorPrestadorTransacaoSelect').val(); 
+            const nomeOrigemInputHidden = $('#nomeFornecedorPrestadorTransacaoInput');
+
+            if (tipoAtividade === "Rateio dos Associados") {
+                if (!origemSelecionada) { 
+                     nomeOrigemInputHidden.val("Rateio Geral Associados");
+                } else { 
+                    if (!nomeOrigemInputHidden.val()) { 
+                         nomeOrigemInputHidden.val($('#fornecedorPrestadorTransacaoSelect option:selected').data('nome'));
+                    }
+                }
+            } else { 
+                if (!origemSelecionada) {
+                    alert("O campo '" + $('#labelFornecedorPrestadorCliente').text() + "' é obrigatório para este Tipo de Atividade.");
+                    $('#fornecedorPrestadorTransacaoSelect').focus();
+                    e.preventDefault();
+                    return false;
+                }
+                 if (!nomeOrigemInputHidden.val()) { 
+                     nomeOrigemInputHidden.val($('#fornecedorPrestadorTransacaoSelect option:selected').data('nome'));
+                 }
+            }
+            if (!nomeOrigemInputHidden.val() && tipoAtividade !== "Rateio dos Associados" && !origemSelecionada) {
+                 alert("O campo 'Nome do Fornecedor/Prestador/Cliente/Associado' é obrigatório.");
+                 e.preventDefault();
+                 return false;
+            }
+        });
+        
+        // --- LÓGICA PARA FLUXO DE CAIXA ---
+        function carregarResumoFinanceiroFluxo() {
+            const uvr = $('#uvrFluxoCaixa').val();
+            const dataIni = $('#fluxoDataInicialFiltro').val();
+            const dataFim = $('#fluxoDataFinalFiltro').val();
+
+            if (!uvr || !dataIni || !dataFim) {
+                $('#painelFluxoResumo').hide();
+                return;
+            }
+
+            $.get(`/get_resumo_fluxo_caixa?uvr=${uvr}&data_inicial=${dataIni}&data_final=${dataFim}`, function(resumo) {
+                $('#resumoReceitas').text(parseFloat(resumo.receitas_a_receber || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#resumoDespesas').text(parseFloat(resumo.despesas_a_pagar || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#resumoSaldo').text(parseFloat(resumo.saldo_projetado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#painelFluxoResumo').show();
+            }).fail(function() {
+                $('#painelFluxoResumo').hide();
+            });
+        }
+
+        function carregarContasCorrentesFluxo(uvr, selectId) {
+            const select = $(selectId); 
+            select.empty().append('<option value="">Carregando...</option>');
+            if (!uvr) {
+                select.empty().append('<option value="">Selecione a UVR...</option>');
+                select.prop('disabled', true); 
+                return;
+            }
+            $.get(`/get_contas_correntes?uvr=${uvr}`, function(data) { 
+                select.empty().append('<option value="">Selecione a Conta...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(c => { select.append(`<option value="${c.id}" data-uvr-conta="${c.uvr}">${c.display_name}</option>`); });
+                    select.prop('disabled', false); 
+                } else {
+                    select.append('<option value="">Nenhuma conta encontrada para esta UVR</option>');
+                    select.prop('disabled', true); 
+                }
+            }).fail(function() {
+                select.empty().append('<option value="">Erro ao carregar contas</option>');
+                select.prop('disabled', true);
+            });
+        }
+
+        function atualizarCadastrosComNotasFluxo() {
+            const uvr = $('#uvrFluxoCaixa').val();
+            const tipoMov = $('#tipoMovimentacao').val();
+            const select = $('#cadastroCFSelect');
+            select.empty().append('<option value="">Carregando...</option>');
+            $('#nfsEmAbertoContainer').html('<small class="text-muted">Selecione para listar documentos.</small>');
+            $('#idCadastroCfStrHidden').val('');
+            $('#isAssociadoRateioHidden').val('');
+            $('#nomeCadastroCfDisplayHidden').val('');
+
+            if (!uvr || !tipoMov) {
+                select.empty().append('<option value="">Selecione UVR e Tipo Mov...</option>');
+                return;
+            }
+            
+            $('#labelClienteFornecedorFluxo').text(tipoMov === 'Recebimento' ? 'Cliente com Pendências' : 'Fornecedor/Associado com Pendências');
+            
+            $.get(`/get_clientes_fornecedores_com_pendencias?uvr=${uvr}&tipo_movimentacao=${tipoMov}`, function(data) {
+                select.empty().append(`<option value="">Selecione ${tipoMov === 'Recebimento' ? 'Cliente' : 'Fornecedor/Associado'}...</option>`);
+                
+                if (data && data.length > 0) {
+                    data.forEach(c => {
+                        const isRateio = c.is_associado_rateio || false;
+                        select.append(`<option value="${c.id}" 
+                            data-nome="${c.razao_social}" 
+                            data-is-associado-rateio="${isRateio}">
+                            ${c.razao_social}${isRateio ? " (Rateio)" : ""}
+                        </option>`);
+                    });
+                } else {
+                    select.append(`<option value="">Nenhum com pendências encontrado</option>`);
+                }
+            }).fail(function() { select.empty().append('<option value="">Erro ao carregar</option>'); });
+        }
+
+        $('#tipoMovimentacao').change(function() { atualizarCadastrosComNotasFluxo(); });
+
+        $('#cadastroCFSelect').change(function() {
+            const selectedOption = $(this).find('option:selected');
+            const idCadastroCfOriginal = selectedOption.val(); 
+            const nomeCadastroCfDisplay = selectedOption.data('nome') || selectedOption.text().split(' (')[0];
+            const isAssociadoRateio = selectedOption.data('is-associado-rateio') || false;
+            
+            $('#idCadastroCfStrHidden').val(idCadastroCfOriginal);
+            $('#isAssociadoRateioHidden').val(isAssociadoRateio);
+            $('#nomeCadastroCfDisplayHidden').val(nomeCadastroCfDisplay);
+
+            carregarNotasEmAbertoFluxo(idCadastroCfOriginal, isAssociadoRateio);
+        });
+
+        function carregarNotasEmAbertoFluxo(idCadastroOuNome, isRateio) { 
+            const uvr = $('#uvrFluxoCaixa').val();
+            const tipoMov = $('#tipoMovimentacao').val();
+            const dataIni = $('#fluxoDataInicialFiltro').val();
+            const dataFim = $('#fluxoDataFinalFiltro').val();
+            const container = $('#nfsEmAbertoContainer');
+
+            container.empty();
+
+            if (!idCadastroOuNome || !uvr || !tipoMov || !dataIni || !dataFim) {
+                container.html('<small class="text-muted">Informações insuficientes (Datas/Cadastro) para carregar documentos.</small>');
+                calcularSaldoOperacaoFluxo(); 
+                return;
+            }
+            
+            container.html('<small class="text-muted">Carregando documentos...</small>');
+
+            const params = new URLSearchParams({
+                uvr: uvr,
+                id_cadastro_cf: idCadastroOuNome, 
+                tipo_movimentacao: tipoMov,
+                is_associado_rateio: isRateio,
+                data_inicial: dataIni,
+                data_final: dataFim 
+            });
+            
+            $.get(`/get_notas_em_aberto?${params.toString()}`, function(notas) {
+                container.empty();
+                if (notas && notas.length > 0) {
+                    notas.forEach(nf => {
+                        let dataDocFormatada = new Date(nf.data_documento + 'T00:00:00').toLocaleDateString('pt-BR');
+                        container.append(`
+                            <div class="form-check">
+                                <input class="form-check-input nf-checkbox" type="checkbox" 
+                                    value="${nf.id}" 
+                                    id="fluxo_nf_${nf.id}" 
+                                    data-valor-pendente="${nf.valor_restante}">
+                                <label class="form-check-label" for="fluxo_nf_${nf.id}">
+                                    ${nf.numero_documento || 'Sem doc'} (${dataDocFormatada}) - 
+                                    R$ ${parseFloat(nf.valor_restante).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                </label>
+                            </div>
+                        `);
+                    });
+                } else { container.html('<small class="text-muted">Nenhum documento em aberto encontrado neste período.</small>'); }
+                calcularSaldoOperacaoFluxo(); 
+            }).fail(function() { container.html('<small class="text-danger">Erro ao carregar documentos.</small>'); calcularSaldoOperacaoFluxo(); });
+        }
+        
+        function calcularSaldoOperacaoFluxo() {
+            let valorEfetivo = parseFloat($('#valorEfetivo').val().replace(/\./g, '').replace(',', '.')) || 0;
+            let totalNfsSelecionadas = 0;
+            
+            $('.nf-checkbox:checked').each(function() {
+                totalNfsSelecionadas += parseFloat($(this).data('valor-pendente')) || 0;
+            });
+            
+            let saldo = totalNfsSelecionadas - valorEfetivo;
+            $('#saldoOperacaoDisplay').val('R$ ' + saldo.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+        }
+
+        $('#valorEfetivo').on('input change keyup paste', calcularSaldoOperacaoFluxo);
+        $('#nfsEmAbertoContainer').on('change', '.nf-checkbox', calcularSaldoOperacaoFluxo);
+
+
+        $('#formRegistrarFluxoCaixa').on('submit', function(e) {
+            e.preventDefault();
+            const uvr = $('#uvrFluxoCaixa').val();
+            const tipoMov = $('#tipoMovimentacao').val();
+            const idCadastroCfStr = $('#idCadastroCfStrHidden').val(); 
+            const idConta = $('#contaCorrenteSelect').val();
+            const dataEfetiva = $('#dataEfetivaFluxo').val();
+            const valorEfetivo = $('#valorEfetivo').val(); 
+            
+            if (!uvr || !tipoMov || !idCadastroCfStr || !idConta || !dataEfetiva || !valorEfetivo) {
+                alert("Preencha todos os campos obrigatórios do Fluxo de Caixa.");
+                return;
+            }
+            
+            const nfsSelecionadas = $('.nf-checkbox:checked');
+            if (nfsSelecionadas.length === 0) {
+                alert("Selecione pelo menos uma NF (transação) para registrar a movimentação.");
+                return;
+            }
+            
+            const formData = {
+                uvr: uvr,
+                associacao: $('#associacaoFluxoCaixa').val(),
+                tipo_movimentacao: tipoMov,
+                id_cadastro_cf_str: idCadastroCfStr,
+                is_associado_rateio: ($('#isAssociadoRateioHidden').val() === 'true'), 
+                nome_cadastro_cf_display: $('#nomeCadastroCfDisplayHidden').val(),
+                id_conta_corrente: idConta,
+                numero_documento_bancario: $('input[name="numero_documento_bancario"]').val(),
+                data_efetiva: dataEfetiva,
+                valor_efetivo: valorEfetivo.replace(/\./g, '').replace(',', '.'), 
+                data_hora_registro_fluxo: $('#dataHoraRegistroFluxo').val(), 
+                observacoes: $('textarea[name="observacoes"]').val(),
+                ids_nfs_selecionadas: nfsSelecionadas.map(function() { return this.value; }).get()
+            };
+            
+            $.ajax({
+                url: '/registrar_fluxo_caixa',
+                type: 'POST',
+                contentType: 'application/json', 
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    if (response.status === 'sucesso') {
+                        alert("Movimentação de Fluxo de Caixa registrada com sucesso!");
+                        $('#formRegistrarFluxoCaixa')[0].reset(); 
+                        $('#nfsEmAbertoContainer').empty().html('<small class="text-muted">Selecione para listar documentos.</small>');
+                        $('#saldoOperacaoDisplay').val('');
+                        preencherDataAtual('#dataEfetivaFluxo'); 
+                        atualizarDataHora('#dataHoraRegistroFluxo'); 
+                        if (uvr) {
+                            carregarResumoFinanceiroFluxo(); // Recarrega resumo
+                            atualizarCadastrosComNotasFluxo(); 
+                        }
+                    } else {
+                        alert("Erro ao registrar Fluxo de Caixa: " + (response.error || "Erro desconhecido. Verifique o console."));
+                        console.error("Erro do backend:", response);
+                    }
+                },
+                error: function(xhr) {
+                    let errorMsg = "Erro ao registrar Fluxo de Caixa.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += " Detalhes: " + xhr.responseJSON.error;
+                    } else if (xhr.statusText) {
+                        errorMsg += " Status: " + xhr.statusText;
+                    }
+                    alert(errorMsg);
+                    console.error("Erro AJAX:", xhr);
+                }
+            });
+        });
+
+
+        // --- LÓGICA PARA RELATÓRIOS FINANCEIROS ---
+        function loadRelatorioUVRs() { 
+            $.getJSON('/get_relatorio_uvrs', function(data) {
+                const selects = $('#relUvr, #extratoUvr'); 
+                selects.find('option:not(:first)').remove(); // Limpa opções anteriores, exceto a primeira ("Todas" ou "Selecione")
+                data.forEach(uvr => selects.append(`<option value="${uvr}">${uvr}</option>`));
+            }).fail(() => console.error("Erro ao carregar UVRs para relatórios/extratos."));
+        }
+        function loadExtratoUVRs() { loadRelatorioUVRs(); } // Reutiliza a função
+
+        function loadRelatorioTiposAtividadeTransacao(tipoTransacao) {
+            const select = $('#relTipoAtividadeTransacao');
+            select.find('option:not(:first)').remove().end().val(''); 
+            select.prop('disabled', true);
+            $('#relGrupo').find('option:not(:first)').remove().end().val('').prop('disabled', true); 
+            $('#relSubgrupo').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+            $('#relItem').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+
+            if (!tipoTransacao) { 
+                 loadRelatorioCatalogOptions('grupo', {}); 
+                 return;
+            }
+
+            $.getJSON(`/get_relatorio_tipos_atividade_transacao?tipo_transacao=${tipoTransacao}`, function(data) {
+                if (data && data.length > 0) {
+                    data.forEach(atv => select.append(`<option value="${atv}">${atv}</option>`));
+                    select.prop('disabled', false);
+                }
+                loadRelatorioCatalogOptions('grupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: select.val() }); 
+            }).fail(() => console.error("Erro ao carregar Tipos de Atividade da Transação para relatório."));
+        }
+        
+        function loadRelatorioCatalogOptions(optionType, filters = {}) {
+            const selectMap = {
+                'grupo': $('#relGrupo'),
+                'subgrupo': $('#relSubgrupo'),
+                'item': $('#relItem')
+            };
+            const currentSelect = selectMap[optionType];
+            currentSelect.find('option:not(:first)').remove().end().val(''); 
+            currentSelect.prop('disabled', true);
+
+            if (optionType === 'grupo') {
+                $('#relSubgrupo').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+                $('#relItem').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+            } else if (optionType === 'subgrupo') {
+                $('#relItem').find('option:not(:first)').remove().end().val('').prop('disabled', true);
+            }
+
+            if (optionType === 'subgrupo' && !filters.grupo) { return; }
+            if (optionType === 'item' && !filters.grupo ) { return; } 
+
+            let queryParams = `option_type=${optionType}`;
+            if (filters.tipo_transacao) queryParams += `&tipo_transacao=${encodeURIComponent(filters.tipo_transacao)}`;
+            if (filters.tipo_atividade_catalogo) queryParams += `&tipo_atividade_catalogo=${encodeURIComponent(filters.tipo_atividade_catalogo)}`;
+            if (filters.grupo) queryParams += `&grupo=${encodeURIComponent(filters.grupo)}`;
+            if (filters.subgrupo) queryParams += `&subgrupo=${encodeURIComponent(filters.subgrupo)}`;
+
+            $.getJSON(`/get_relatorio_catalog_options?${queryParams}`, function(data) {
+                if (data && data.length > 0) {
+                    data.forEach(opt => currentSelect.append(`<option value="${opt}">${opt}</option>`));
+                    if(optionType === 'subgrupo') { 
+                        currentSelect.append('<option value="(Nenhum)">(Nenhum)</option>'); 
+                    }
+                    currentSelect.prop('disabled', false);
+                } else if (optionType === 'subgrupo') { 
+                     currentSelect.append('<option value="(Nenhum)">(Nenhum)</option>');
+                     currentSelect.prop('disabled', false);
+                }
+            }).fail(() => console.error(`Erro ao carregar ${optionType} para relatório.`));
+        }
+
+        function loadRelatorioEntidades() {
+            const tipoEntidade = $('#relTipoEntidade').val();
+            const uvr = $('#relUvr').val();
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const selectNomeEntidade = $('#relNomeEntidade');
+            
+            selectNomeEntidade.empty().append('<option value="">Carregando...</option>').prop('disabled', true);
+
+            if (!tipoEntidade) {
+                selectNomeEntidade.empty().append('<option value="">Selecione Tipo Entidade</option>').prop('disabled', true);
+                return;
+            }
+
+            let queryParams = `tipo_entidade=${encodeURIComponent(tipoEntidade)}`;
+            if (uvr) queryParams += `&uvr=${encodeURIComponent(uvr)}`;
+            if (tipoTransacao) queryParams += `&tipo_transacao_rel=${encodeURIComponent(tipoTransacao)}`;
+
+
+            $.getJSON(`/get_relatorio_entidades_para_filtro?${queryParams}`, function(data) {
+                selectNomeEntidade.empty().append(`<option value="">Todos(as) os(as) ${tipoEntidade.toLowerCase()}s</option>`);
+                if (data && data.length > 0) {
+                    data.forEach(entidade => {
+                        selectNomeEntidade.append(`<option value="${entidade.id}" data-nome-entidade="${entidade.nome}">${entidade.nome}</option>`);
+                    });
+                    selectNomeEntidade.prop('disabled', false);
+                } else {
+                    selectNomeEntidade.append(`<option value="">Nenhum(a) ${tipoEntidade.toLowerCase()} encontrado(a)</option>`);
+                     selectNomeEntidade.prop('disabled', true); 
+                }
+            }).fail(function() {
+                selectNomeEntidade.empty().append('<option value="">Erro ao carregar entidades</option>').prop('disabled', true);
+                console.error(`Erro ao carregar entidades do tipo: ${tipoEntidade} com UVR: ${uvr} e Tipo Trans.: ${tipoTransacao}`);
+            });
+        }
+        
+        $('#relUvr, #relTipoTransacao, #relTipoEntidade').change(function() { loadRelatorioEntidades(); });
+
+        $('#relTipoAtividadeTransacao').change(function() {
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const tipoAtividadeTransacao = $(this).val(); 
+            loadRelatorioCatalogOptions('grupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: tipoAtividadeTransacao });
+        });
+
+        $('#relGrupo').change(function() {
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const tipoAtividadeTransacao = $('#relTipoAtividadeTransacao').val();
+            const grupo = $(this).val();
+            loadRelatorioCatalogOptions('subgrupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: tipoAtividadeTransacao, grupo: grupo });
+        });
+
+        $('#relSubgrupo').change(function() {
+            const tipoTransacao = $('#relTipoTransacao').val();
+            const tipoAtividadeTransacao = $('#relTipoAtividadeTransacao').val();
+            const grupo = $('#relGrupo').val();
+            const subgrupo = $(this).val();
+            loadRelatorioCatalogOptions('item', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: tipoAtividadeTransacao, grupo: grupo, subgrupo: subgrupo });
+        });
+
+        let currentReportFilters = {}; 
+        $('#btnGerarRelatorio').click(function() {
+            const nomeEntidadeSelecionada = $('#relNomeEntidade option:selected').data('nome-entidade');
+
+            currentReportFilters = {
+                data_inicial: $('#relDataInicial').val(), data_final: $('#relDataFinal').val(),
+                uvr: $('#relUvr').val(), 
+                tipo_transacao_rel: $('#relTipoTransacao').val(), // Movido para antes
+                tipo_entidade: $('#relTipoEntidade').val(), 
+                id_entidade: $('#relNomeEntidade').val(),  
+                nome_entidade_display: nomeEntidadeSelecionada || $('#relNomeEntidade option:selected').text().split(" (")[0], // Para PDF
+                tipo_atividade_transacao_rel: $('#relTipoAtividadeTransacao').val(), 
+                grupo_rel: $('#relGrupo').val(), subgrupo_rel: $('#relSubgrupo').val(), 
+                item_rel: $('#relItem').val(), status_pagamento_rel: $('#relStatusPagamento').val(),
+                listar_por: $('#relListarPor').val() 
+            };
+            
+            if (!currentReportFilters.data_inicial || !currentReportFilters.data_final) {
+                alert("Por favor, selecione Data Inicial e Data Final."); return;
+            }
+            if (new Date(currentReportFilters.data_inicial) > new Date(currentReportFilters.data_final)) {
+                alert("A Data Inicial não pode ser maior que a Data Final."); return;
+            }
+
+            $('#relatorioStatus').text('Gerando relatório...').show();
+            $('#tabelaRelatorio thead').empty(); $('#tabelaRelatorio tbody').empty();
+            $('#btnBaixarCsv').hide(); $('#btnBaixarPdfRelatorioFinanceiro').hide();
+
+            $.ajax({
+                url: '/gerar_relatorio', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(currentReportFilters),
+                success: function(data) {
+                    $('#relatorioStatus').hide();
+                    if (data.error) { alert(`Erro ao gerar relatório: ${data.error}`); return; }
+                    if (data.length === 0) { $('#relatorioStatus').text('Nenhum dado encontrado para os filtros selecionados.').show(); return; }
+
+                    const headers = [
+                        "UVR", "Associação", "Fornecedor/Cliente/Associado", "Nº Doc.", 
+                        "Data Doc.", "Data Efetiva Pag./Rec.", 
+                        "Tipo Trans.", "Tipo Ativ. Trans.", "Item Descrição", 
+                        "Tipo Item (Cat.)", "Tipo Ativ. (Cat.)", "Grupo (Cat.)", "Subgrupo (Cat.)", 
+                        "UN", "Qtd.", "Vl. Unit. (R$)", "Vl. Total Item (R$)", 
+                        "Status Pag. NF", "Valor Pago/Rec. Item (R$)" 
+                    ];
+                    const headerKeys = [
+                        "uvr", "associacao", "nome_cadastro_origem", "numero_documento", 
+                        "data_documento", "data_efetiva_pag_rec", 
+                        "tipo_transacao", "tipo_atividade_transacao", "item_descricao", 
+                        "item_tipo_catalogo", "item_tipo_atividade_catalogo", "item_grupo_catalogo", "item_subgrupo_catalogo",
+                        "unidade", "quantidade", "valor_unitario", "valor_total_item", 
+                        "status_pagamento", "valor_pago_neste_item" 
+                    ];
+                    
+                    let headerHtml = '<tr>'; headers.forEach(h => headerHtml += `<th>${h}</th>`); headerHtml += '</tr>';
+                    $('#tabelaRelatorio thead').html(headerHtml);
+                    let tbodyHtml = '';
+                    data.forEach(row => {
+                        tbodyHtml += '<tr>';
+                        headerKeys.forEach(key => {
+                            let value = row[key] !== null && row[key] !== undefined ? row[key] : '';
+                            if (key === 'data_documento' && value) { 
+                                if (String(value).includes('-')) { 
+                                     try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
+                                }
+                            } else if (key === 'data_efetiva_pag_rec' && value) { 
+                                if (String(value).includes('-')) {
+                                     try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
+                                }
+                            } else if (key === 'data_hora_registro' && value) { 
+                                if (String(value).includes('T')) {
+                                     try { value = new Date(value).toLocaleString('pt-BR'); } catch(e) { /* mantem original */ }
+                                }
+                            } else if (['valor_unitario', 'valor_total_item', 'valor_pago_neste_item'].includes(key) && value) { 
+                                try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch(e) { /* mantem original */ }
+                            } else if (key === 'quantidade' && value) {
+                                try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } catch(e) { /* mantem original */ }
+                            }
+                            tbodyHtml += `<td>${value}</td>`;
+                        });
+                        tbodyHtml += '</tr>';
+                    });
+                    $('#tabelaRelatorio tbody').html(tbodyHtml);
+                    $('#btnBaixarCsv').show();
+                    $('#btnBaixarPdfRelatorioFinanceiro').show();
+                },
+                error: function(xhr) { $('#relatorioStatus').hide(); alert(`Erro ao gerar relatório: ${xhr.responseText || 'Erro desconhecido'}`); }
+            });
+        });
+
+        function baixarArquivo(url, filters, defaultFilename) {
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filters)
+            })
+            .then(async resp => {
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    let filename = defaultFilename;
+                    const disposition = resp.headers.get('Content-Disposition');
+                    if (disposition && disposition.indexOf('attachment') !== -1) {
+                        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        const matches = filenameRegex.exec(disposition);
+                        if (matches != null && matches[1]) { filename = matches[1].replace(/['"]/g, '');}
+                    }
+                    const link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(link.href);
+                } else {
+                    const errorData = await resp.json().catch(() => null);
+                    let errorMsg = "Erro ao baixar arquivo";
+                    if (errorData && errorData.message) { errorMsg += `: ${errorData.message}`; }
+                    else if (errorData && errorData.error) { errorMsg += `: ${errorData.error}`; }
+                    else { errorMsg += `: ${resp.statusText}`; }
+                    alert(errorMsg);
+                }
+            })
+            .catch(err => {
+                console.error("Falha na requisição de download:", err);
+                alert("Erro ao baixar arquivo. Verifique o console.");
+            });
+        }
+
+        $('#btnBaixarCsv').click(function() {
+            if (Object.keys(currentReportFilters).length === 0) { alert("Gere um relatório financeiro primeiro."); return; }
+            baixarArquivo('/baixar_csv_relatorio', currentReportFilters, 'relatorio_financeiro.csv');
+        });
+        $('#btnBaixarPdfRelatorioFinanceiro').click(function() {
+            if (Object.keys(currentReportFilters).length === 0) { alert("Gere um relatório financeiro primeiro."); return; }
+            baixarArquivo('/baixar_pdf_relatorio_financeiro', currentReportFilters, 'relatorio_financeiro.pdf');
+        });
+        
+        // --- LÓGICA PARA EXTRATO BANCÁRIO ---
+        let currentExtratoFilters = {};
+        $('#btnGerarExtrato').click(function() {
+            currentExtratoFilters = {
+                id_conta_corrente_extrato: $('#extratoContaCorrente').val(),
+                data_inicial_extrato: $('#extratoDataInicial').val(),
+                data_final_extrato: $('#extratoDataFinal').val(),
+            };
+            if (!currentExtratoFilters.id_conta_corrente_extrato || !currentExtratoFilters.data_inicial_extrato || !currentExtratoFilters.data_final_extrato) {
+                alert("Por favor, selecione Conta Corrente, Data Inicial e Data Final para o extrato."); return;
+            }
+            if (new Date(currentExtratoFilters.data_inicial_extrato) > new Date(currentExtratoFilters.data_final_extrato)) {
+                alert("A Data Inicial do extrato não pode ser maior que a Data Final."); return;
+            }
+
+            $('#extratoStatus').text('Gerando extrato...').show();
+            $('#tabelaExtrato thead, #tabelaExtrato tbody').empty();
+            $('#saldoInicialExtrato, #saldoFinalExtrato, #infoContaExtrato').hide().empty();
+            $('#btnBaixarCsvExtrato, #btnBaixarPdfExtrato').hide();
+
+            $.ajax({
+                url: '/gerar_extrato_bancario', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(currentExtratoFilters),
+                success: function(data) {
+                    $('#extratoStatus').hide();
+                    if (data.error) { alert(`Erro ao gerar extrato: ${data.error}`); return; }
+                    
+                    const contaInfo = data.conta_info || {};
+                    $('#extratoNomeConta').text(contaInfo.display_name || 'N/A');
+                    $('#extratoPeriodo').text(contaInfo.periodo || 'N/A');
+                    $('#infoContaExtrato').show();
+
+                    $('#saldoInicialExtrato').html(`<strong>Saldo Inicial:</strong> R$ ${parseFloat(data.saldo_inicial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`).show();
+                    
+                    if (data.movimentacoes && data.movimentacoes.length === 0) {
+                        $('#extratoStatus').text('Nenhuma movimentação encontrada para os filtros selecionados.').show();
+                    } else if (data.movimentacoes) {
+                        const headers = ["Data", "Histórico", "Entrada (R$)", "Saída (R$)", "Saldo (R$)"];
+                        let headerHtml = '<tr>'; headers.forEach(h => headerHtml += `<th>${h}</th>`); headerHtml += '</tr>';
+                        $('#tabelaExtrato thead').html(headerHtml);
+                        let tbodyHtml = '';
+                        data.movimentacoes.forEach(mov => {
+                            tbodyHtml += `<tr>
+                                <td>${mov.data}</td>
+                                <td style="white-space: normal;">${mov.historico}</td>
+                                <td class="text-end">${parseFloat(mov.entrada || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                <td class="text-end">${parseFloat(mov.saida || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                <td class="text-end">${parseFloat(mov.saldo_parcial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                            </tr>`;
+                        });
+                        $('#tabelaExtrato tbody').html(tbodyHtml);
+                        $('#btnBaixarCsvExtrato, #btnBaixarPdfExtrato').show();
+                    }
+                    $('#saldoFinalExtrato').html(`<strong>Saldo Final:</strong> R$ ${parseFloat(data.saldo_final || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`).show();
+                },
+                error: function(xhr) { $('#extratoStatus').hide(); alert(`Erro ao gerar extrato: ${xhr.responseJSON ? xhr.responseJSON.error : (xhr.responseText || 'Erro desconhecido')}`); }
+            });
+        });
+
+        $('#btnBaixarCsvExtrato').click(function() {
+            if (Object.keys(currentExtratoFilters).length === 0 || !currentExtratoFilters.id_conta_corrente_extrato) { alert("Gere um extrato primeiro."); return; }
+            baixarArquivo('/baixar_csv_extrato', currentExtratoFilters, 'extrato_bancario.csv');
+        });
+        $('#btnBaixarPdfExtrato').click(function() {
+            if (Object.keys(currentExtratoFilters).length === 0 || !currentExtratoFilters.id_conta_corrente_extrato) { alert("Gere um extrato primeiro."); return; }
+            baixarArquivo('/baixar_pdf_extrato', currentExtratoFilters, 'extrato_bancario.pdf');
+        });
+
+        // --- TRAVA DE SEGURANÇA (PERMISSÕES DE USUÁRIO) ---
+        // Se já foi definido globalmente, não precisamos redefinir aqui
+        // Mas mantemos a lógica de UI
+        if (usuarioLogadoUvr && !usuarioIsAdmin) {
+            const uvrSelects = $('select[name="uvr"], select[name="uvr_conta"], select[name="uvr_transacao"], #extratoUvr, #relUvr, #uvrSelectAssociado, #uvrFluxoCaixa');
+            uvrSelects.each(function() {
+                const select = $(this);
+                select.val(usuarioLogadoUvr);
+                select.trigger('change'); 
+                select.prop('disabled', true); 
+                if (select.attr('name')) {
+                    const hiddenName = select.attr('name');
+                    $(`input[type="hidden"][name="${hiddenName}"]`).remove();
+                    $('<input>').attr({ type: 'hidden', name: hiddenName, value: usuarioLogadoUvr }).insertAfter(select);
+                }
+            });
+        }
+    }); // Fim do $(document).ready
+
+    // --- FUNÇÕES GLOBAIS (FORA DO READY) PARA FUNCIONAR NO ONCLICK ---
+    
+    // --- LÓGICA DE APROVAÇÕES (ADMIN) ---
+    $(document).on('click', '#btnAprovacoes', function() {
+        // CORREÇÃO: Fazemos a troca de tela manualmente, sem depender da função 'mostrarFormulario'
+        $('.form-container').hide();
+        $('#aprovacoesContainer').show();
+        
+        carregarAprovacoes();
+    });
+
+    function carregarAprovacoes() {
+        const tbody = $('#tabelaAprovacoesBody');
+        tbody.html('<tr><td colspan="5" class="text-center">Carregando...</td></tr>');
+        $('#msgSemAprovacoes').hide();
+
+        $.getJSON('/get_solicitacoes_pendentes', function(data) {
+            tbody.empty();
+            if (data.length === 0) {
+                $('#msgSemAprovacoes').show();
+                return;
+            }
+
+            data.forEach(item => {
+                tbody.append(`
+                    <tr>
+                        <td>${item.data}</td>
+                        <td>${item.solicitante}</td>
+                        <td>${item.nome_atual}</td>
+                        <td class="text-primary fw-bold">${item.nome_novo}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesSolicitacao(${item.id})" title="Ver o que mudou">
+                                <i class="fas fa-eye"></i> Detalhes
+                            </button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(function() {
+            tbody.html('<tr><td colspan="5" class="text-center text-danger">Erro ao carregar solicitações.</td></tr>');
+        });
+    }
+
+    function verDetalhesSolicitacao(id) {
+        $('#tabelaComparacaoBody').html('<tr><td colspan="3" class="text-center">Carregando comparação...</td></tr>');
+        $('#areaComparacaoFoto').hide();
+        
+        $('#btnAprovarModal').attr('onclick', `responderSolicitacao(${id}, 'aprovar')`);
+        $('#btnRejeitarModal').attr('onclick', `responderSolicitacao(${id}, 'rejeitar')`);
+
+        const modal = new bootstrap.Modal(document.getElementById('modalDetalhesAprovacao'));
+        modal.show();
+
+        $.getJSON(`/get_detalhes_solicitacao/${id}`, function(data) {
+            $('#detalheSolicitante').text(data.usuario);
+            // Debug para ver se a data está chegando
+console.log("Data recebida do servidor:", data.data); 
+
+// Preenche o campo (ou coloca um traço se estiver vazio)
+$('#detalheData').text(data.data || data.data_documento || "--/--/----");
+            
+            const tbody = $('#tabelaComparacaoBody');
+            tbody.empty();
+
+            data.comparacao.forEach(row => {
+                const rowClass = row.mudou ? 'table-warning' : '';
+                const iconChange = row.mudou ? '<i class="fas fa-exclamation-triangle text-warning"></i> ' : '';
+                
+                let valAntigo = row.valor_atual || '<span class="text-muted small">vazio</span>';
+                let valNovo = row.valor_novo || '<span class="text-muted small">vazio</span>';
+
+                if (row.mudou) valNovo = `<strong>${valNovo}</strong>`;
+
+                tbody.append(`
+                    <tr class="${rowClass}">
+                        <td>${iconChange}${row.campo}</td>
+                        <td class="text-muted">${valAntigo}</td>
+                        <td>${valNovo}</td>
+                    </tr>
+                `);
+            });
+
+            if (data.foto_nova_base64 && data.foto_nova_base64.length > 100) {
+                $('#imgFotoNovaProposta').attr('src', data.foto_nova_base64);
+                $('#areaComparacaoFoto').show();
+            }
+
+        }).fail(function(xhr) {
+            let msg = "Erro desconhecido ao buscar detalhes.";
+            if(xhr.responseJSON && xhr.responseJSON.error) {
+                msg = xhr.responseJSON.error;
+            } else if (xhr.responseText) {
+                msg = xhr.responseText;
+            }
+            alert("Erro do Sistema: " + msg);
+            var modalEl = document.getElementById('modalDetalhesAprovacao');
+            var modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if(modalInstance) modalInstance.hide();
+        });
+    }
+
+    function responderSolicitacao(id, acao) {
+        if (!confirm(`Tem certeza que deseja ${acao.toUpperCase()} esta solicitação?`)) return;
+
+        $.ajax({
+            url: '/responder_solicitacao',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ id: id, acao: acao }),
+            success: function(response) {
+                alert(response.message);
+                const modalEl = document.getElementById('modalDetalhesAprovacao');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+                carregarAprovacoes(); 
+            },
+            error: function(xhr) {
+                alert("Erro ao processar: " + (xhr.responseJSON?.error || "Erro desconhecido"));
+            }
+        });
+    }
+
+    // --- LÓGICA DE GESTÃO DE CLIENTES/FORNECEDORES ---
+    function buscarCadastros() {
+        const termo = $('#inputBuscaCadastro').val();
+        const tipo = $('#filtroTipoCadastro').val();
+        const uvr = $('#filtroUvrCadastro').val() || "";
+        const tbody = $('#tabelaCadastrosBody');
+        tbody.html('<tr><td colspan="6" class="text-center">Buscando...</td></tr>');
+        
+        const params = new URLSearchParams({ q: termo, tipo: tipo, uvr: uvr });
+        
+        $.getJSON(`/buscar_cadastros?${params.toString()}`, function(data) {
+            tbody.empty();
+            if(data.length === 0) { tbody.html('<tr><td colspan="6" class="text-center">Nenhum registro encontrado.</td></tr>'); return; }
+            
+            data.forEach(c => {
+                tbody.append(`
+                    <tr>
+                        <td>${c.razao}</td><td>${c.cnpj}</td><td>${c.tipo}</td><td>${c.cidade}</td><td>${c.uvr}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white" onclick="visualizarCadastro(${c.id})"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-sm btn-success" onclick="imprimirFichaCadastro(${c.id})"><i class="fas fa-print"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoCadastro(${c.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoCadastro(${c.id}, '${c.razao}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(() => tbody.html('<tr><td colspan="6" class="text-center text-danger">Erro ao buscar.</td></tr>'));
+    }
+
+    function visualizarCadastro(id) {
+        $.getJSON(`/get_cadastro/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+            $('#verCadRazao').text(data.razao_social); $('#verCadCnpj').text(data.cnpj);
+            $('#verCadTipo').text(data.tipo_cadastro); $('#verCadUvr').text(data.uvr);
+            $('#verCadAtiv').text(data.tipo_atividade); $('#verCadTel').text(data.telefone);
+            $('#verCadEnd').text(`${data.logradouro}, ${data.numero} - ${data.bairro}, ${data.cidade}/${data.uf}`);
+            
+            $('#btnEditarCadNoModal').attr('onclick', `iniciarEdicaoCadastro(${data.id})`);
+            $('#btnImprimirCadNoModal').attr('onclick', `imprimirFichaCadastro(${data.id})`);
+            
+            new bootstrap.Modal(document.getElementById('modalVisualizarCadastro')).show();
+        });
+    }
+
+    function iniciarEdicaoCadastro(id) {
+        var m = document.getElementById('modalVisualizarCadastro');
+        if(m) { var inst = bootstrap.Modal.getInstance(m); if(inst) inst.hide(); }
+
+        $.getJSON(`/get_cadastro/${id}`, function(data) {
+            $('.form-container').hide(); $('#clienteFornecedorForm').show();
+            
+            $('#btnSalvarCadastro').text('SALVAR ALTERAÇÕES (Enviar)').removeClass('btn-primary').addClass('btn-warning');
+            $('#btnCancelarEdicaoCadastro').show();
+            $('#cadastroForm').attr('action', '/editar_cadastro');
+            $('#idCadastroHidden').val(data.id);
+            
+            $('#uvrSelect').val(data.uvr).trigger('change');
+            $('#tipoCadastroCF').val(data.tipo_cadastro).trigger('change');
+            setTimeout(() => { $('#tipoAtividadeCF').val(data.tipo_atividade); }, 100);
+            
+            $('#cnpj').val(data.cnpj); $('#razaoSocialCF').val(data.razao_social);
+            $('#cepCF').val(data.cep); $('#logradouroCF').val(data.logradouro);
+            $('#numeroCF').val(data.numero); $('#bairroCF').val(data.bairro);
+            $('#cidadeCF').val(data.cidade); $('#ufCF').val(data.uf);
+            $('#telefoneCF').val(data.telefone);
+        });
+    }
+
+    function cancelarEdicaoCadastro() {
+        $('#cadastroForm')[0].reset();
+        $('#btnSalvarCadastro').text('CADASTRAR').removeClass('btn-warning').addClass('btn-primary');
+        $('#btnCancelarEdicaoCadastro').hide();
+        $('#cadastroForm').attr('action', '/cadastrar');
+        $('#idCadastroHidden').val('');
+        $('.form-container').hide(); $('#gestaoCadastrosContainer').show();
+    }
+    
+    function imprimirFichaCadastro(id) { window.open(`/imprimir_ficha_cadastro/${id}`, '_blank'); }
+    
+    function solicitarExclusaoCadastro(id, nome) {
+        if (confirm("Tem certeza que deseja excluir (ou solicitar exclusão) o cadastro de: " + nome + "?")) {
+            $.ajax({
+                url: "/excluir_cadastro/" + id,
+                type: 'POST',
+                success: function(response) {
+                    if (response.status === 'sucesso') {
+                        alert(response.message);
+                        buscarCadastros(); 
+                    } else {
+                        alert("Atenção: " + (response.message || "Erro desconhecido."));
+                    }
+                },
+                error: function(xhr) {
+                    let msg = "Erro ao processar exclusão.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        msg += "\nDetalhe: " + xhr.responseJSON.error;
+                    }
+                    alert(msg);
+                }
+            });
+        }
+    }
+
+    // --- LÓGICA DE GESTÃO DE CONTAS CORRENTES ---
+    function buscarContasCorrentes() {
+        const termo = $('#inputBuscaConta').val();
+        const uvr = $('#filtroUvrConta').val() || "";
+        const tbody = $('#tabelaContasBody');
+        tbody.html('<tr><td colspan="5" class="text-center">Buscando...</td></tr>');
+
+        const params = new URLSearchParams({ q: termo, uvr: uvr });
+
+        $.getJSON(`/buscar_contas_correntes_gestao?${params.toString()}`, function(data) {
+            tbody.empty();
+            if (data.length === 0) {
+                tbody.html('<tr><td colspan="5" class="text-center">Nenhuma conta encontrada.</td></tr>');
+                return;
+            }
+
+            data.forEach(c => {
+                tbody.append(`
+                    <tr>
+                        <td>${c.banco}</td>
+                        <td>Ag: ${c.agencia} | CC: ${c.conta}</td>
+                        <td>${c.descricao || '-'}</td>
+                        <td>${c.uvr}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoConta(${c.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="excluirConta(${c.id}, '${c.descricao || c.banco}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(() => tbody.html('<tr><td colspan="5" class="text-center text-danger">Erro ao buscar contas.</td></tr>'));
+    }
+
+    function iniciarEdicaoConta(id) {
+        $.getJSON(`/get_conta_corrente_detalhe/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+
+            $('.form-container').hide(); 
+            $('#contaCorrenteForm').show();
+
+            $('#cadastroContaCorrenteForm').attr('action', '/editar_conta_corrente');
+            $('#idContaHidden').val(data.id);
+            
+            // --- AJUSTE DE SEGURANÇA NO BOTÃO ---
+            const textoBotao = usuarioIsAdmin ? 'SALVAR ALTERAÇÕES' : 'SOLICITAR ALTERAÇÃO';
+            $('#btnSalvarConta').text(textoBotao).removeClass('btn-primary').addClass('btn-warning');
+            // -------------------------------------
+            
+            $('#btnCancelarEdicaoConta').show();
+
+            $('#uvrSelectConta').val(data.uvr).trigger('change');
+            $('#agenciaContaInput').val(data.agencia);
+            $('#contaCorrenteContaInput').val(data.conta_corrente);
+            $('#descricaoApelidoContaInput').val(data.descricao_conta);
+
+            const valorBancoCombinado = `${data.banco_codigo}|${data.banco_nome}`;
+            
+            popularBancos();
+            $('#bancoContaSelect').val(valorBancoCombinado);
+
+            $('html, body').animate({ scrollTop: $("#contaCorrenteForm").offset().top - 100 }, 500);
+        });
+    }
+
+    function cancelarEdicaoConta() {
+        $('#cadastroContaCorrenteForm')[0].reset();
+        $('#cadastroContaCorrenteForm').attr('action', '/cadastrar_conta_corrente');
+        $('#idContaHidden').val('');
+        $('#btnSalvarConta').text('CADASTRAR CONTA').removeClass('btn-warning').addClass('btn-primary');
+        $('#btnCancelarEdicaoConta').hide();
+        
+        $('.form-container').hide(); 
+        $('#gestaoContasContainer').show();
+    }
+
+    function excluirConta(id, nome) {
+        if (confirm(`ATENÇÃO: Tem certeza que deseja excluir a conta "${nome}"?\n\nIsso só será possível se não houver lançamentos financeiros vinculados a ela.`)) {
+            $.ajax({
+                url: `/excluir_conta_corrente/${id}`,
+                type: 'POST',
+                success: function(response) {
+                    if (response.status === 'sucesso') {
+                        alert(response.message);
+                        buscarContasCorrentes();
+                    } else {
+                        alert("Erro: " + response.error);
+                    }
+                },
+                error: function(xhr) {
+                    let msg = "Erro ao excluir.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) msg += "\n" + xhr.responseJSON.error;
+                    alert(msg);
+                }
+            });
+        }
+    }
+
+    // --- LÓGICA DE GESTÃO DE TRANSAÇÕES ---
+    function buscarTransacoesGestao() {
+        const dataIni = $('#filtroDataIniTransacao').val();
+        const dataFim = $('#filtroDataFimTransacao').val();
+        const tipo = $('#filtroTipoTransacao').val();
+        const uvr = $('#filtroUvrTransacao').val();
+        const q = $('#filtroTextoTransacao').val();
+
+        const tbody = $('#tabelaTransacoesBody');
+        tbody.html('<tr><td colspan="7" class="text-center">Buscando...</td></tr>');
+
+        const params = new URLSearchParams({
+            data_inicial: dataIni,
+            data_final: dataFim,
+            tipo: tipo,
+            uvr: uvr,
+            q: q
+        });
+
+        $.getJSON(`/buscar_transacoes_gestao?${params.toString()}`, function(data) {
+            tbody.empty();
+            if (data.length === 0) {
+                tbody.html('<tr><td colspan="7" class="text-center">Nenhuma transação encontrada.</td></tr>');
+                return;
+            }
+
+            data.forEach(t => {
+                let badgeClass = 'bg-secondary';
+                if (t.status === 'Liquidado') badgeClass = 'bg-success';
+                else if (t.status === 'Aberto') badgeClass = 'bg-danger';
+                else if (t.status.includes('Parcial')) badgeClass = 'bg-warning text-dark';
+
+                const corValor = t.tipo === 'Receita' ? 'text-success' : 'text-danger';
+
+                tbody.append(`
+                    <tr>
+                        <td>${t.data}</td>
+                        <td>${t.tipo}</td>
+                        <td>
+                            ${t.origem} <br>
+                            <small class="text-muted">${t.uvr}</small>
+                        </td>
+                        <td>${t.doc}</td>
+                        <td class="text-end fw-bold ${corValor}">${t.valor}</td>
+                        <td class="text-center"><span class="badge ${badgeClass}">${t.status}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesTransacao(${t.id})" title="Ver Itens">
+                                <i class="fas fa-list"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="alert('Exclusão em breve!')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(function() {
+            tbody.html('<tr><td colspan="7" class="text-center text-danger">Erro ao buscar dados.</td></tr>');
+        });
+    }
+
+    // --- FUNÇÃO DE DETALHES (Agora sim, no lugar certo!) ---
+// --- FUNÇÃO DE DETALHES ---
+    function verDetalhesTransacao(id) {
+        // Limpa o modal antes de abrir
+        $('#tabelaItensDetalheBody').html('<tr><td colspan="5" class="text-center">Carregando itens...</td></tr>');
+        
+        // Abre o modal
+        const modal = new bootstrap.Modal(document.getElementById('modalDetalhesTransacao'));
+        modal.show();
+
+        // Busca os dados no Python
+        $.getJSON(`/get_transacao_detalhes/${id}`, function(data) {
+            $('#detalheIdTransacao').text(data.id);
+            $('#detalheOrigem').text(data.origem);
+            $('#detalheUvrTipo').text(`${data.uvr} - ${data.tipo} (${data.atividade})`);
+            
+            // --- CORREÇÃO AQUI ---
+            $('#detalheDataTransacao').text(data.data);
+            // ---------------------
+
+            $('#detalheDoc').text(data.doc);
+            
+            const totalFmt = data.valor_total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            $('#detalheValorTotal').text(totalFmt);
+
+            const tbody = $('#tabelaItensDetalheBody');
+            tbody.empty();
+
+            data.itens.forEach(item => {
+                const qtd = item.quantidade.toLocaleString('pt-BR', {minimumFractionDigits: 3});
+                const unit = item.valor_unitario.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                const total = item.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+
+                tbody.append(`
+                    <tr>
+                        <td>${item.descricao}</td>
+                        <td class="text-center">${item.unidade}</td>
+                        <td class="text-end">${qtd}</td>
+                        <td class="text-end">${unit}</td>
+                        <td class="text-end fw-bold">${total}</td>
+                    </tr>
+                `);
+            });
+        }).fail(function() {
+            alert("Erro ao carregar detalhes da transação.");
+        });
+    }
+
+// --- LÓGICA DE GESTÃO DE PRODUTOS E SUBGRUPOS (CASCATA COMPLETA) ---
+
+    // 1. Definição do Mapa de Grupos (Separação Receita vs Despesa - Baseado no CSV)
+    const MAPA_GRUPOS = {
+        "Receita": [
+            "Elétrico ou Eletrônico",
+            "Metal",
+            "Não convencionais",
+            "Outras Receitas",
+            "Papel",
+            "Plástico",
+            "Repasses Governamentais",
+            "Vidro"
+        ],
+        "Despesa": [
+            "Compras de Materiais",
+            "Despesas Administrativas",
+            "Outras Despesas",
+            "Rateio dos Associados",
+            "Serviços Contratados",
+            "Pagamento de Fornecedores"
+        ]
+    };
+
+    // Cria uma lista única ordenada para usar nos Modais de Cadastro (onde não tem filtro de Tipo)
+    var TODOS_GRUPOS_UNIFICADOS = [...MAPA_GRUPOS["Receita"], ...MAPA_GRUPOS["Despesa"]].sort();
+
+    // 2. Inicialização e Eventos dos Filtros
+    $(document).ready(function() {
+        // Inicializa o filtro de Grupo com tudo
+        const filtroGrupo = $('#filtroGrupoGestao');
+        filtroGrupo.empty().append('<option value="">Todos os Grupos</option>');
+        TODOS_GRUPOS_UNIFICADOS.forEach(g => filtroGrupo.append(`<option value="${g}">${g}</option>`));
+
+// --- EVENTO 1: Mudou o TIPO (Receita/Despesa) ---
+        $('#filtroTipoGestao').change(function() {
+            const tipo = $(this).val();
+            const selectGrupo = $('#filtroGrupoGestao');
+            const selectSub = $('#filtroSubgrupoGestao');
+
+            // Limpa Grupos e Subgrupos
+            selectGrupo.empty().append('<option value="">Todos os Grupos</option>');
+            selectSub.empty().append('<option value="">Selecione o Grupo...</option>').prop('disabled', true);
+
+            let listaParaExibir = [];
+            
+            if (tipo === "Receita") listaParaExibir = MAPA_GRUPOS_SISTEMA["Receita"];
+            else if (tipo === "Despesa") listaParaExibir = MAPA_GRUPOS_SISTEMA["Despesa"];
+            else listaParaExibir = TODOS_GRUPOS_UNIFICADOS; // Se "Todos", mostra tudo
+
+            // Preenche o select de Grupos
+            listaParaExibir.sort().forEach(g => selectGrupo.append(`<option value="${g}">${g}</option>`));
+            
+            // Recarrega a tabela
+            carregarTabelaProdutos();
+        });
+
+        // --- EVENTO 2: Mudou o GRUPO ---
+        $('#filtroGrupoGestao').change(function() {
+            const grupo = $(this).val();
+            const selectSub = $('#filtroSubgrupoGestao');
+            
+            selectSub.empty().append('<option value="">Carregando...</option>').prop('disabled', true);
+
+            if (!grupo) {
+                selectSub.empty().append('<option value="">Selecione o Grupo...</option>');
+                carregarTabelaProdutos();
+                return;
+            }
+
+            // Busca os subgrupos desse grupo no banco de dados
+            $.getJSON(`/api/subgrupos?atividade=${encodeURIComponent(grupo)}`, function(data) {
+                selectSub.empty().append('<option value="">Todos os Subgrupos</option>');
+                
+                if (data.length > 0) {
+                    data.forEach(sub => {
+                        selectSub.append(`<option value="${sub.id}">${sub.nome}</option>`);
+                    });
+                    selectSub.prop('disabled', false);
+                } else {
+                    selectSub.append('<option value="">(Sem subgrupos)</option>');
+                }
+                
+                carregarTabelaProdutos(); // Atualiza a tabela
+            });
+        });
+
+        // --- EVENTO 3: Mudou o SUBGRUPO ---
+        $('#filtroSubgrupoGestao').change(function() {
+            carregarTabelaProdutos();
+        });
+    }); // FIM DO DOCUMENT READY
+
+    // 3. Função Principal: Carregar a Tabela
+    function carregarTabelaProdutos(grupoForcado = null) {
+        const tbody = $('#tabelaProdutosBody');
+        tbody.html('<tr><td colspan="5" class="text-center">Carregando...</td></tr>');
+
+        // Pega valores dos selects
+        let grupo = grupoForcado !== null ? grupoForcado : $('#filtroGrupoGestao').val();
+        let tipo = $('#filtroTipoGestao').val();
+        let idSubgrupo = $('#filtroSubgrupoGestao').val();
+
+        let url = '/api/produtos_crud?';
+        if (grupo) url += `&grupo=${encodeURIComponent(grupo)}`;
+        if (tipo) url += `&tipo=${encodeURIComponent(tipo)}`;
+        if (idSubgrupo) url += `&id_subgrupo=${encodeURIComponent(idSubgrupo)}`;
+
+        $.getJSON(url, function(data) {
+            tbody.empty();
+            if (data.length === 0) {
+                tbody.html('<tr><td colspan="5" class="text-center text-muted">Nenhum produto encontrado com esses filtros.</td></tr>');
+                return;
+            }
+            data.forEach(p => {
+                // Badge colorido para o Tipo
+                let badge = p.tipo === 'Receita' 
+                    ? '<span class="badge bg-success">Receita</span>' 
+                    : (p.tipo === 'Despesa' ? '<span class="badge bg-danger">Despesa</span>' : '<span class="badge bg-secondary">-</span>');
+
+                tbody.append(`
+                    <tr>
+                        <td class="fw-bold">${p.item}</td>
+                        <td class="text-center">${badge}</td>
+                        <td>${p.subgrupo_nome || '-'}</td>
+                        <td><small>${p.grupo}</small></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-warning text-white" onclick="editarProduto(${p.id}, '${p.item}', ${p.id_subgrupo}, '${p.grupo}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="excluirProduto(${p.id})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }).fail(() => tbody.html('<tr><td colspan="5" class="text-center text-danger">Erro ao carregar dados.</td></tr>'));
+    }
+
+    // --- FUNÇÕES AUXILIARES E MODAIS ---
+
+    function preencherSelectGrupos(selectId) {
+        const sel = $('#' + selectId);
+        sel.empty().append('<option value="">Selecione...</option>');
+        // Usa a lista unificada para os Modais de Cadastro
+        TODOS_GRUPOS_UNIFICADOS.forEach(g => {
+            sel.append(`<option value="${g}">${g}</option>`);
+        });
+    }
+
+    // --- GESTÃO DE SUBGRUPOS (MODAL) ---
+    function abrirModalSubgrupos() {
+        preencherSelectGrupos('selectGrupoPaiSubgrupo');
+        limparFormSubgrupo();
+        $('#listaSubgruposExistentes').html('<li class="list-group-item text-muted">Selecione um grupo acima.</li>');
+        new bootstrap.Modal(document.getElementById('modalSubgrupos')).show();
+    }
+
+    function listarSubgruposNoModal() {
+        const atividade = $('#selectGrupoPaiSubgrupo').val();
+        const lista = $('#listaSubgruposExistentes');
+        if(!atividade) { lista.html(''); return; }
+        
+        lista.html('<li class="list-group-item">Carregando...</li>');
+        
+        $.getJSON(`/api/subgrupos?atividade=${encodeURIComponent(atividade)}`, function(data) {
+            lista.empty();
+            if(data.length === 0) lista.html('<li class="list-group-item text-muted">Nenhum subgrupo cadastrado.</li>');
+            
+            data.forEach(sub => {
+                lista.append(`
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${sub.nome}
+                        <div>
+                            <button class="btn btn-sm btn-outline-warning me-1" onclick="prepararEdicaoSubgrupo(${sub.id}, '${sub.nome}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="excluirSubgrupo(${sub.id})"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </li>
+                `);
+            });
+        });
+    }
+
+    function salvarSubgrupo() {
+        const nome = $('#inputNomeSubgrupo').val();
+        const atividade = $('#selectGrupoPaiSubgrupo').val();
+        const id = $('#idSubgrupoEdicao').val();
+        
+        if(!nome || !atividade) { alert("Selecione o grupo e digite um nome."); return; }
+
+        const payload = {
+            acao: id ? 'editar' : 'novo',
+            id: id,
+            nome: nome,
+            atividade_pai: atividade
+        };
+
+        $.ajax({
+            url: '/api/subgrupos', type: 'POST', contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function(res) {
+                limparFormSubgrupo();
+                listarSubgruposNoModal();
+            },
+            error: function(xhr) { alert("Erro: " + (xhr.responseJSON?.erro || "Erro desconhecido")); }
+        });
+    }
+
+    function prepararEdicaoSubgrupo(id, nome) {
+        $('#idSubgrupoEdicao').val(id);
+        $('#inputNomeSubgrupo').val(nome).focus();
+        $('#btnCancelarEdicaoSub').show();
+    }
+
+    function limparFormSubgrupo() {
+        $('#idSubgrupoEdicao').val('');
+        $('#inputNomeSubgrupo').val('');
+        $('#btnCancelarEdicaoSub').hide();
+    }
+
+    function excluirSubgrupo(id) {
+        if(!confirm("Tem certeza? Isso apagará o subgrupo.")) return;
+        $.ajax({
+            url: '/api/subgrupos', type: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ acao: 'excluir', id: id }),
+            success: function() { listarSubgruposNoModal(); },
+            error: function(xhr) { alert(xhr.responseJSON?.erro || "Erro ao excluir. Verifique se não há produtos vinculados."); }
+        });
+    }
+
+    // --- GESTÃO DE PRODUTOS (MODAL) ---
+    function abrirModalProduto() {
+        $('#idProdutoEdicao').val('');
+        $('#tituloModalProduto').text('Novo Produto');
+        preencherSelectGrupos('selectGrupoProduto');
+        $('#selectSubgrupoProduto').empty().append('<option value="">Selecione Grupo Primeiro</option>');
+        $('#inputNomeProduto').val('');
+        new bootstrap.Modal(document.getElementById('modalProdutoEdicao')).show();
+    }
+
+    function carregarSubgruposParaProduto(subgrupoSelecionadoId = null) {
+        const grupo = $('#selectGrupoProduto').val();
+        const selectSub = $('#selectSubgrupoProduto');
+        
+        if(!grupo) { 
+            selectSub.empty().append('<option value="">Selecione Grupo Primeiro</option>'); 
+            return; 
+        }
+
+        $.getJSON(`/api/subgrupos?atividade=${encodeURIComponent(grupo)}`, function(data) {
+            selectSub.empty().append('<option value="">(Sem Subgrupo)</option>');
+            data.forEach(sub => {
+                selectSub.append(`<option value="${sub.id}">${sub.nome}</option>`);
+            });
+            if(subgrupoSelecionadoId) selectSub.val(subgrupoSelecionadoId);
+        });
+    }
+
+    function salvarProduto() {
+        const grupo = $('#selectGrupoProduto').val();
+        const nome = $('#inputNomeProduto').val();
+        
+        if(!grupo || !nome) { alert("Grupo e Nome do produto são obrigatórios."); return; }
+
+        const payload = {
+            id: $('#idProdutoEdicao').val(),
+            grupo: grupo,
+            id_subgrupo: $('#selectSubgrupoProduto').val() || null,
+            item: nome
+        };
+
+        $.ajax({
+            url: '/api/produtos_crud', type: 'POST', contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function() {
+                bootstrap.Modal.getInstance(document.getElementById('modalProdutoEdicao')).hide();
+                carregarTabelaProdutos(grupo); // Recarrega tabela filtrada pelo grupo salvo
+                $('#filtroGrupoGestao').val(grupo); // Atualiza filtro da tela
+            },
+            error: function(xhr) { alert("Erro: " + (xhr.responseJSON?.erro || "Erro desconhecido")); }
+        });
+    }
+
+    function editarProduto(id, item, idSubgrupo, grupo) {
+        $('#idProdutoEdicao').val(id);
+        $('#tituloModalProduto').text('Editar Produto');
+        $('#inputNomeProduto').val(item);
+        
+        preencherSelectGrupos('selectGrupoProduto');
+        $('#selectGrupoProduto').val(grupo);
+        
+        // Carrega subgrupos e seleciona o correto
+        carregarSubgruposParaProduto(idSubgrupo);
+        
+        new bootstrap.Modal(document.getElementById('modalProdutoEdicao')).show();
+    }
+
+    function excluirProduto(id) {
+        if(!confirm("Excluir este produto?")) return;
+        $.ajax({
+            url: `/api/produtos_crud?id=${id}`, type: 'DELETE',
+            success: function() { 
+                carregarTabelaProdutos($('#filtroGrupoGestao').val()); 
+            },
+            error: function(xhr) { alert(xhr.responseJSON?.erro || "Erro ao excluir."); }
+        });
+    }
+    
+</script>
+</body>
+</html>
