@@ -2976,7 +2976,9 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
                 
                 if (data.length > 0) {
                     data.forEach(sub => {
-                        selectSub.append(`<option value="${sub.id}">${sub.nome}</option>`);
+                        // --- CORREÇÃO BLINDADA AQUI ---
+                        // Aceita 'nome' (novo banco) OU 'nome_subgrupo' (caso venha legado)
+                        selectSub.append(`<option value="${sub.id}">${sub.nome || sub.nome_subgrupo}</option>`);
                     });
                     selectSub.prop('disabled', false);
                 } else {
@@ -3149,7 +3151,9 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
         $.getJSON(`/api/subgrupos?atividade=${encodeURIComponent(grupo)}`, function(data) {
             selectSub.empty().append('<option value="">(Sem Subgrupo)</option>');
             data.forEach(sub => {
-                selectSub.append(`<option value="${sub.id}">${sub.nome}</option>`);
+                // --- CORREÇÃO AQUI ---
+                // Usa 'nome' (novo padrão) OU 'nome_subgrupo' (caso venha legado)
+                selectSub.append(`<option value="${sub.id}">${sub.nome || sub.nome_subgrupo}</option>`);
             });
             if(subgrupoSelecionadoId) selectSub.val(subgrupoSelecionadoId);
         });
