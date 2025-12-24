@@ -2957,35 +2957,38 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
             carregarTabelaProdutos();
         });
 
-        // --- EVENTO 2: Mudou o GRUPO ---
         $('#filtroGrupoGestao').change(function() {
             const grupo = $(this).val();
             const selectSub = $('#filtroSubgrupoGestao');
             
+            // Trava o select com a mensagem de carregamento
             selectSub.empty().append('<option value="">Carregando...</option>').prop('disabled', true);
 
             if (!grupo) {
                 selectSub.empty().append('<option value="">Selecione o Grupo...</option>');
-                carregarTabelaProdutos();
+                carregarTabelaProdutos(); // Recarrega tabela sem filtro de subgrupo
                 return;
             }
 
-            // Busca os subgrupos desse grupo no banco de dados
+            // CORREÇÃO: Usamos /api/subgrupos para pegar ID e NOME
             $.getJSON(`/api/subgrupos?atividade=${encodeURIComponent(grupo)}`, function(data) {
                 selectSub.empty().append('<option value="">Todos os Subgrupos</option>');
                 
-                if (data.length > 0) {
+                if (data && data.length > 0) {
                     data.forEach(sub => {
-                        // --- CORREÇÃO BLINDADA AQUI ---
-                        // Aceita 'nome' (novo banco) OU 'nome_subgrupo' (caso venha legado)
-                        selectSub.append(`<option value="${sub.id}">${sub.nome || sub.nome_subgrupo}</option>`);
+                        // AQUI ESTÁ O TRUQUE: Usamos sub.id no value, e sub.nome no texto
+                        selectSub.append(`<option value="${sub.id}">${sub.nome}</option>`);
                     });
                     selectSub.prop('disabled', false);
                 } else {
-                    selectSub.append('<option value="">(Sem subgrupos)</option>');
+                    selectSub.append('<option value="">(Sem subgrupos cadastrados)</option>');
+                    selectSub.prop('disabled', true);
                 }
                 
-                carregarTabelaProdutos(); // Atualiza a tabela
+                carregarTabelaProdutos(); // Atualiza a tabela de produtos
+            }).fail(function() {
+                selectSub.empty().append('<option value="">Erro ao carregar</option>');
+                console.error("Falha ao carregar subgrupos para o grupo:", grupo);
             });
         });
 
