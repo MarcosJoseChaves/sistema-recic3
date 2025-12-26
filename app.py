@@ -25,20 +25,17 @@ from reportlab.lib.units import inch, cm
 # --- CONFIGURAÇÕES GLOBAIS ---
 # Estes grupos devem ser os mesmos que aparecem nas opções de "Atividade" do HTML
 GRUPOS_FIXOS_SISTEMA = [
-    "Compras de Materiais",
-    "Despesas Administrativas",
+    "Despesas de operação",
+    "Despesas de manutenção",
     "Elétrico ou Eletrônico",
     "Metal",
     "Não convencionais",
-    "Outras Despesas",
     "Outras Receitas",
     "Papel",
     "Plástico",
     "Rateio dos Associados",
     "Repasses Governamentais",
-    "Serviços Contratados",
-    "Vidro",
-    "Pagamento de Fornecedores"
+    "Vidro"    
 ]
 
 # Carrega as variáveis do arquivo .env
