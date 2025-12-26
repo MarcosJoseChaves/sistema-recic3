@@ -1094,9 +1094,8 @@ def get_distinct_grupos():
             "Repasses Governamentais", "Vidro"
         ],
         "Despesa": [
-            "Compras de Materiais", "Despesas Administrativas", 
-            "Outras Despesas", "Rateio dos Associados", 
-            "Serviços Contratados", "Pagamento de Fornecedores"
+            "Despesas de manutenção", "Despesas de operação", 
+            "Rateio dos Associados"    
         ]
     }
     
