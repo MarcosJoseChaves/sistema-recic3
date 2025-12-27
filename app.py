@@ -1313,7 +1313,7 @@ def editar_transacao():
         id_transacao = dados.get("id_transacao")
         if not id_transacao: return "ID da transação não encontrado.", 400
 
-        # Parse dos Itens (Mesma lógica do cadastro)
+        # 1. Parse dos Itens (Mesma lógica do cadastro)
         descricoes = request.form.getlist("produto_servico_descricao[]")
         unidades = request.form.getlist("produto_servico_unidade[]")
         quantidades = request.form.getlist("produto_servico_quantidade[]")
@@ -1323,18 +1323,19 @@ def editar_transacao():
         valor_total_novo = Decimal('0.00')
         
         for i in range(len(descricoes)):
+            # Tratamento de valores numéricos (Vírgula para Ponto)
             qtd = Decimal(quantidades[i].replace(",", "."))
             vu = Decimal(valores[i].replace("R$", "").replace(".", "").replace(",", ".").strip())
             total_item = qtd * vu
             
             itens_processados.append({
                 "descricao": descricoes[i], "unidade": unidades[i],
-                "quantidade": float(qtd), "valor_unitario": float(vu), # float para JSON
+                "quantidade": float(qtd), "valor_unitario": float(vu), # float para salvar no JSON
                 "valor_total_item": float(total_item)
             })
             valor_total_novo += total_item
 
-        # Dados do Cabeçalho
+        # 2. Dados do Cabeçalho
         cabecalho = {
             "uvr": dados["uvr_transacao"],
             "associacao": dados.get("associacao_transacao",""),
@@ -1350,15 +1351,19 @@ def editar_transacao():
         conn = conectar_banco()
         cur = conn.cursor()
 
-        # Verifica pagamentos para evitar quebra de integridade
-        cur.execute("SELECT valor_pago_recebido FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+        # 3. TRAVA DE SEGURANÇA (Rigidez Contábil)
+        # Verifica se já existe qualquer pagamento/recebimento vinculado
+        cur.execute("SELECT valor_pago_recebido, status_pagamento FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
         row_pag = cur.fetchone()
-        valor_ja_pago = row_pag[0] if row_pag else 0
         
-        if Decimal(str(valor_ja_pago)) > valor_total_novo:
-             return f"Erro: O novo valor total (R$ {valor_total_novo}) é menor que o valor já pago/recebido (R$ {valor_ja_pago}). Estorne pagamentos antes de reduzir o valor da nota.", 400
+        valor_ja_pago = row_pag[0] if row_pag and row_pag[0] else 0
+        status_atual = row_pag[1] if row_pag else "Aberto"
 
-        # ADMIN: Edita direto
+        if valor_ja_pago > 0:
+             return f"BLOQUEADO: Esta transação está '{status_atual}' com R$ {valor_ja_pago:.2f} quitados. Para editar a nota, você deve primeiro excluir os pagamentos/recebimentos no Fluxo de Caixa.", 400
+
+        # 4. Processamento da Edição
+        # ADMIN: Edita direto no banco
         if current_user.role == 'admin':
             # Atualiza Cabeçalho
             # Tratamento especial para Rateio (id_origem pode ser Null/Vazio)
@@ -1380,7 +1385,7 @@ def editar_transacao():
                 valor_total_novo, id_transacao
             ))
 
-            # Atualiza Itens (Apaga todos antigos e recria os novos)
+            # Atualiza Itens (Estratégia: Apaga todos antigos e recria os novos)
             cur.execute("DELETE FROM itens_transacao WHERE id_transacao = %s", (id_transacao,))
             for item in itens_processados:
                 cur.execute("""
@@ -1392,8 +1397,7 @@ def editar_transacao():
             return redirect(url_for("sucesso_transacao")) # Reutiliza página de sucesso
 
         else:
-            # USUÁRIO: Cria solicitação
-            # Empacota tudo (cabeçalho + itens) no JSON
+            # USUÁRIO COMUM: Cria solicitação de alteração
             cabecalho['itens'] = itens_processados
             cabecalho['descricao_visual'] = f"Edição NF {cabecalho['numero_documento']} - {cabecalho['nome_origem']}"
             

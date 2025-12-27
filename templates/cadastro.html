@@ -3865,6 +3865,13 @@ function solicitarExclusaoAssociado(id, nome) {
         $.getJSON(`/get_transacao_detalhes/${id}`, function(data) {
             if(data.error) { alert(data.error); return; }
 
+            // --- TRAVA DE SEGURANÇA (IMPORTANTE) ---
+            // Impede edição se já houver pagamentos (status diferente de 'Aberto')
+            if (data.status !== 'Aberto') {
+                alert(`⚠️ AÇÃO BLOQUEADA\n\nEsta transação está com status: ${data.status.toUpperCase()}.\n\nPor segurança contábil, não é possível alterar uma nota que já possui movimentação financeira registrada.\n\nSOLUÇÃO: Vá ao Fluxo de Caixa, exclua o(s) pagamento(s) referente(s) a esta nota para que ela volte ao status 'Aberto'. Em seguida, tente editar novamente.`);
+                return; // Para tudo aqui.
+            }
+
             // 2. Muda para a aba de Cadastro
             mostrarFormulario('receitaDespesaForm');
             
@@ -3878,17 +3885,15 @@ function solicitarExclusaoAssociado(id, nome) {
             $('#uvrSelectTransacao').val(data.uvr).trigger('change');
             $('#tipoTransacaoSelect').val(data.tipo).trigger('change');
             
-            // Limpa os itens antes de começar qualquer coisa para evitar conflitos
+            // Limpa os itens antes de começar qualquer coisa para evitar conflitos visual
             $('#itensDocumentoContainer').empty();
 
             // Delay para carregar dependentes (Atividade e Fornecedor)
             setTimeout(() => {
                 // Define a atividade e dispara a mudança
-                // Como a lista de itens está vazia (#itensDocumentoContainer empty), 
-                // esse trigger NÃO vai estragar nada.
                 $('#tipoAtividadeTransacaoSelect').val(data.atividade).trigger('change');
                 
-                // Formata Data
+                // Formata Data (yyyy-mm-dd)
                 if(data.data && data.data.includes('/')) {
                     const partes = data.data.split('/');
                     $('#dataDocumentoTransacao').val(`${partes[2]}-${partes[1]}-${partes[0]}`);
@@ -3916,14 +3921,14 @@ function solicitarExclusaoAssociado(id, nome) {
                 // 5. Preenche Itens (MOVIDO PARA CÁ - Roda DEPOIS do cabeçalho)
                 if (data.itens && data.itens.length > 0) {
                     data.itens.forEach(item => {
-                        // Cria a linha sem carregar listas automáticas
+                        // Cria a linha SEM carregar listas automáticas (passando false)
                         if (typeof window.adicionarItemLinha === "function") {
                             window.adicionarItemLinha(false); 
                         }
 
                         const lastRow = $('#itensDocumentoContainer .item-row').last();
                         
-                        // Injeta manualmente os valores
+                        // Injeta manualmente os valores nos selects
                         
                         // 1. Grupo
                         const selGrupo = lastRow.find('.grupo-select');
@@ -3959,7 +3964,7 @@ function solicitarExclusaoAssociado(id, nome) {
                     
                     $('#valorTotalDocumentoCalculado').val(data.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
                 } else {
-                    // Se não tem itens, cria uma linha vazia padrão
+                    // Se não tem itens, cria uma linha vazia padrão (com listas)
                     if (typeof window.adicionarItemLinha === "function") window.adicionarItemLinha(true);
                 }
                 
