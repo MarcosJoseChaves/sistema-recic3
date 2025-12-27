@@ -50,7 +50,15 @@
     flex: 1; /* Botões ocupam larguras iguais */
 }
         body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
-        .form-container { max-width: 900px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); margin-top: 20px; display: none; }
+        .form-container { 
+    max-width: 1200px; /* AUMENTADO PARA DAR MAIS ESPAÇO */
+    background: white; 
+    padding: 30px; 
+    border-radius: 10px; 
+    box-shadow: 0 0 15px rgba(0,0,0,0.1); 
+    margin-top: 20px; 
+    display: none; 
+}
         h2 { color: #2c3e50; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
         .required-field::after { content: "*"; color: red; margin-left: 5px; }
         .menu-botoes { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -549,8 +557,11 @@
                     <input type="text" class="form-control" name="data_hora_cadastro_transacao" id="dataHoraCadastroTransacao" readonly>
                 </div>
 
+                <input type="hidden" name="id_transacao" id="idTransacaoHidden">
+
                 <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-success btn-lg">REGISTRAR TRANSAÇÃO</button>
+                    <button type="submit" class="btn btn-success btn-lg" id="btnSalvarTransacao">REGISTRAR TRANSAÇÃO</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoTransacao" style="display:none;" onclick="cancelarEdicaoTransacao()">CANCELAR EDIÇÃO</button>
                 </div>
             </form>
         </div>
@@ -1130,6 +1141,60 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                 <button type="button" class="btn btn-success" id="btnImprimirNoModal"><i class="fas fa-print"></i> Imprimir Ficha</button>
                 <button type="button" class="btn btn-warning" id="btnEditarNoModal" data-bs-dismiss="modal"><i class="fas fa-edit"></i> Editar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalDetalhesTransacao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-file-invoice"></i> Detalhes da Transação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <h5 class="text-primary" id="detalheTransacaoOrigem">Nome da Origem</h5>
+                        <p class="text-muted mb-0">
+                            <strong><i class="fas fa-file-alt"></i> Doc:</strong> <span id="detalheTransacaoDoc"></span> | 
+                            <strong><i class="fas fa-calendar"></i> Data:</strong> <span id="detalheTransacaoData"></span>
+                        </p>
+                        <p class="text-muted">
+                            <strong>Tipo:</strong> <span id="detalheTransacaoTipo"></span> | 
+                            <strong>Atividade:</strong> <span id="detalheTransacaoAtividade"></span>
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <h3 class="text-success fw-bold" id="detalheTransacaoValor">R$ 0,00</h3>
+                        <span class="badge bg-secondary" id="detalheTransacaoStatus">Status</span>
+                    </div>
+                </div>
+
+                <hr>
+
+                <h6><i class="fas fa-list"></i> Itens do Documento</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Descrição</th>
+                                <th class="text-center">Unid.</th>
+                                <th class="text-center">Qtd.</th>
+                                <th class="text-end">Vlr. Unit.</th>
+                                <th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaItensDetalheBody">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-warning" id="btnEditarNoModalTransacao" data-bs-dismiss="modal">
+                    <i class="fas fa-edit"></i> Editar / Excluir Itens
+                </button>
             </div>
         </div>
     </div>
@@ -1866,86 +1931,123 @@
         const unidadesMedida = ["UN", "PC", "CX", "KG", "G", "L", "ML", "M", "M2", "M3", "H", "SV", "PCT", "RL", "FD", "GL", "LT", "DZ", "PAR", "JG", "KIT", "OUTRO"];
         let itemCounter = 0;
 
-        function adicionarItemLinha() {
-            itemCounter++;
-            let unidadeOptions = unidadesMedida.map(u => `<option value="${u}">${u}</option>`).join('');
-            const itemHtml = `
-                <div class="item-row" id="itemRow${itemCounter}">
-                    <div class="item-fields-grid">
-                        <div class="form-group">
-                            <label for="grupo${itemCounter}">Grupo</label>
-                            <select class="form-select grupo-select" id="grupo${itemCounter}" name="produto_servico_grupo[]">
-                                <option value="">Selecione Grupo...</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="subgrupo${itemCounter}">Subgrupo</label>
-                            <select class="form-select subgrupo-select" id="subgrupo${itemCounter}" name="produto_servico_subgrupo[]" disabled>
-                                <option value="">Selecione Grupo Primeiro</option>
-                            </select>
-                        </div>
-                        <div class="form-group desc-produto-servico"> 
-                            <label for="desc${itemCounter}" class="required-field">Descrição Prod./Serv.</label>
-                            <select class="form-select item-select" id="desc${itemCounter}" name="produto_servico_descricao[]" required disabled>
-                                <option value="">Selecione Subgrupo Primeiro</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="un${itemCounter}" class="required-field">UN</label>
-                            <select class="form-select" id="un${itemCounter}" name="produto_servico_unidade[]" required>${unidadeOptions}</select>
-                        </div>
-                        <div class="form-group">
-                            <label for="qtd${itemCounter}" class="required-field">Qtd.</label>
-                            <input type="number" class="form-control item-calculavel" id="qtd${itemCounter}" name="produto_servico_quantidade[]" placeholder="Qtd." step="any" min="0.001" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="vu${itemCounter}" class="required-field">Vl. Unit. (R$)</label>
-                            <input type="text" class="form-control item-calculavel valor-monetario" id="vu${itemCounter}" name="produto_servico_valor_unitario[]" placeholder="Unitário" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="vt${itemCounter}">Vl. Total Item (R$)</label>
-                            <input type="text" class="form-control valor-total-item-input valor-monetario" id="vt${itemCounter}" name="produto_servico_valor_total_item[]" readonly>
-                        </div>
-                        <button type="button" class="btn btn-danger btn-sm remover-item" data-item="${itemCounter}"><i class="fas fa-times"></i></button>
-                    </div>
-                </div>
-            `;
-            $('#itensDocumentoContainer').append(itemHtml);
-            populateGrupos($(`#itemRow${itemCounter}`)); 
-            $(`#vu${itemCounter}`).mask('#.##0,00', {reverse: true});
-            $(`#vt${itemCounter}`).mask('#.##0,00', {reverse: true}); 
+        function adicionarItemLinha(carregarListas = true) {
+        itemCounter++;
+        
+        // Gera as options de unidade (mantendo sua lógica original)
+        let unidadeOptions = "";
+        if (typeof unidadesMedida !== 'undefined') {
+            unidadeOptions = unidadesMedida.map(u => `<option value="${u}">${u}</option>`).join('');
+        } else {
+            // Fallback caso a variável não exista
+            unidadeOptions = '<option value="UN">UN</option><option value="KG">KG</option><option value="HR">HR</option>';
         }
 
-        $('#btnAdicionarItem').click(adicionarItemLinha);
-
-        $('#itensDocumentoContainer').on('click', '.remover-item', function() {
-            $(this).closest('.item-row').remove();
-            calcularValorTotalDocumento();
-        });
+        const itemHtml = `
+            <div class="item-row" id="itemRow${itemCounter}">
+                <div class="item-fields-grid">
+                    <div class="form-group">
+                        <label for="grupo${itemCounter}">Grupo</label>
+                        <select class="form-select grupo-select" id="grupo${itemCounter}" name="produto_servico_grupo[]">
+                            <option value="">Selecione Grupo...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="subgrupo${itemCounter}">Subgrupo</label>
+                        <select class="form-select subgrupo-select" id="subgrupo${itemCounter}" name="produto_servico_subgrupo[]" disabled>
+                            <option value="">Selecione Grupo Primeiro</option>
+                        </select>
+                    </div>
+                    <div class="form-group desc-produto-servico"> 
+                        <label for="desc${itemCounter}" class="required-field">Descrição Prod./Serv.</label>
+                        <select class="form-select item-select" id="desc${itemCounter}" name="produto_servico_descricao[]" required disabled>
+                            <option value="">Selecione Subgrupo Primeiro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="un${itemCounter}" class="required-field">UN</label>
+                        <select class="form-select" id="un${itemCounter}" name="produto_servico_unidade[]" required>${unidadeOptions}</select>
+                    </div>
+                    <div class="form-group">
+                        <label for="qtd${itemCounter}" class="required-field">Qtd.</label>
+                        <input type="number" class="form-control item-calculavel" id="qtd${itemCounter}" name="produto_servico_quantidade[]" placeholder="Qtd." step="any" min="0.001" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="vu${itemCounter}" class="required-field">Vl. Unit. (R$)</label>
+                        <input type="text" class="form-control item-calculavel valor-monetario" id="vu${itemCounter}" name="produto_servico_valor_unitario[]" placeholder="Unitário" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="vt${itemCounter}">Vl. Total Item (R$)</label>
+                        <input type="text" class="form-control valor-total-item-input valor-monetario" id="vt${itemCounter}" name="produto_servico_valor_total_item[]" readonly>
+                    </div>
+                    <button type="button" class="btn btn-danger btn-sm remover-item" data-item="${itemCounter}"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+        `;
         
-        $('#itensDocumentoContainer').on('change', '.grupo-select', function() {
-            const selectedGrupo = $(this).val();
-            const rowElement = $(this).closest('.item-row');
-            populateSubgrupos(rowElement, selectedGrupo);
-        });
+        $('#itensDocumentoContainer').append(itemHtml);
 
-        $('#itensDocumentoContainer').on('change', '.subgrupo-select', function() {
-            const selectedSubgrupo = $(this).val(); 
-            const rowElement = $(this).closest('.item-row');
-            const selectedGrupo = $(rowElement).find('.grupo-select').val();
-            populateItems(rowElement, selectedGrupo, selectedSubgrupo);
-        });
+        // --- AQUI ESTÁ A CORREÇÃO PRINCIPAL ---
+        // Só carrega a lista via AJAX se carregarListas for true.
+        // Na edição, passamos false para preencher manualmente e não resetar os campos.
+        if (carregarListas) {
+            populateGrupos($(`#itemRow${itemCounter}`)); 
+        }
 
-        $('#itensDocumentoContainer').on('input change keyup', '.item-calculavel', function() { 
-            let row = $(this).closest('.item-row');
-            let qtdStr = row.find('input[name="produto_servico_quantidade[]"]').val().replace(',', '.');
-            let vuStr = row.find('input[name="produto_servico_valor_unitario[]"]').val().replace("R$", "").replace(/\./g, '').replace(',', '.');
-            let qtd = parseFloat(qtdStr) || 0;
-            let vu = parseFloat(vuStr) || 0;
-            let totalItem = qtd * vu;
-            row.find('input[name="produto_servico_valor_total_item[]"]').val(totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-            calcularValorTotalDocumento();
-        });
+        $(`#vu${itemCounter}`).mask('#.##0,00', {reverse: true});
+        $(`#vt${itemCounter}`).mask('#.##0,00', {reverse: true}); 
+    }
+
+    // Torna a função acessível globalmente (importante para o botão de Editar chamar)
+    window.adicionarItemLinha = adicionarItemLinha;
+
+    // --- EVENT LISTENERS ---
+
+    // Botão Adicionar (Passa true para carregar listas)
+    $('#btnAdicionarItem').off('click').on('click', function() {
+        adicionarItemLinha(true);
+    });
+
+    // Remover Item
+    $('#itensDocumentoContainer').on('click', '.remover-item', function() {
+        $(this).closest('.item-row').remove();
+        calcularValorTotalDocumento();
+    });
+    
+    // Mudança de Grupo -> Carrega Subgrupo
+    $('#itensDocumentoContainer').on('change', '.grupo-select', function() {
+        const selectedGrupo = $(this).val();
+        const rowElement = $(this).closest('.item-row');
+        populateSubgrupos(rowElement, selectedGrupo);
+    });
+
+    // Mudança de Subgrupo -> Carrega Item
+    $('#itensDocumentoContainer').on('change', '.subgrupo-select', function() {
+        const selectedSubgrupo = $(this).val(); 
+        const rowElement = $(this).closest('.item-row');
+        const selectedGrupo = $(rowElement).find('.grupo-select').val();
+        populateItems(rowElement, selectedGrupo, selectedSubgrupo);
+    });
+
+    // Cálculo Automático
+    $('#itensDocumentoContainer').on('input change keyup', '.item-calculavel', function() { 
+        let row = $(this).closest('.item-row');
+        
+        // Pega QTD (Input Number usa ponto)
+        let qtdVal = row.find('input[name="produto_servico_quantidade[]"]').val();
+        let qtd = parseFloat(qtdVal) || 0;
+
+        // Pega Valor Unitário (Input Text usa Vírgula e Máscara)
+        let vuStr = row.find('input[name="produto_servico_valor_unitario[]"]').val();
+        let vu = parseFloat(vuStr.replace("R$", "").replace(/\./g, '').replace(',', '.')) || 0;
+
+        let totalItem = qtd * vu;
+        
+        // Formata e coloca no total
+        row.find('input[name="produto_servico_valor_total_item[]"]').val(totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        
+        calcularValorTotalDocumento();
+    });
 
         function calcularValorTotalDocumento() {
             let totalDocumento = 0;
@@ -3138,7 +3240,7 @@ function solicitarExclusaoAssociado(id, nome) {
         }
     }
 
-    // --- LÓGICA DE GESTÃO DE TRANSAÇÕES ---
+// --- LÓGICA DE GESTÃO DE TRANSAÇÕES (ATUALIZADA) ---
     function buscarTransacoesGestao() {
         const dataIni = $('#filtroDataIniTransacao').val();
         const dataFim = $('#filtroDataFimTransacao').val();
@@ -3172,6 +3274,10 @@ function solicitarExclusaoAssociado(id, nome) {
 
                 const corValor = t.tipo === 'Receita' ? 'text-success' : 'text-danger';
 
+                // Escapa aspas simples no nome da origem para não quebrar o HTML do botão excluir
+                const origemSegura = t.origem ? t.origem.replace(/'/g, "\\'") : "";
+                const docSeguro = t.doc ? t.doc.replace(/'/g, "\\'") : "";
+
                 tbody.append(`
                     <tr>
                         <td>${t.data}</td>
@@ -3187,7 +3293,12 @@ function solicitarExclusaoAssociado(id, nome) {
                             <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesTransacao(${t.id})" title="Ver Itens">
                                 <i class="fas fa-list"></i>
                             </button>
-                            <button class="btn btn-sm btn-danger" onclick="alert('Exclusão em breve!')"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-warning text-white me-1" onclick="iniciarEdicaoTransacao(${t.id})" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoTransacao(${t.id}, '${docSeguro} - ${origemSegura}')" title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </td>
                     </tr>
                 `);
@@ -3746,6 +3857,208 @@ function solicitarExclusaoAssociado(id, nome) {
     // Ativa a função de CEP
     configurarBuscaCep('#cepCF', 'CF');
     configurarBuscaCep('#cepAssociado', 'Associado');
+
+// --- FUNÇÕES DE EDIÇÃO/EXCLUSÃO DE TRANSAÇÕES ---
+
+    function iniciarEdicaoTransacao(id) {
+        // 1. Busca os detalhes completos
+        $.getJSON(`/get_transacao_detalhes/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+
+            // 2. Muda para a aba de Cadastro
+            mostrarFormulario('receitaDespesaForm');
+            
+            // 3. Ajusta o formulário para modo "Edição"
+            $('#transacaoForm').attr('action', '/editar_transacao');
+            $('#idTransacaoHidden').val(data.id);
+            $('#btnSalvarTransacao').text('SALVAR ALTERAÇÕES').removeClass('btn-success').addClass('btn-warning');
+            $('#btnCancelarEdicaoTransacao').show();
+            
+            // 4. Preenche Cabeçalho (UVR e Tipo)
+            $('#uvrSelectTransacao').val(data.uvr).trigger('change');
+            $('#tipoTransacaoSelect').val(data.tipo).trigger('change');
+            
+            // Limpa os itens antes de começar qualquer coisa para evitar conflitos
+            $('#itensDocumentoContainer').empty();
+
+            // Delay para carregar dependentes (Atividade e Fornecedor)
+            setTimeout(() => {
+                // Define a atividade e dispara a mudança
+                // Como a lista de itens está vazia (#itensDocumentoContainer empty), 
+                // esse trigger NÃO vai estragar nada.
+                $('#tipoAtividadeTransacaoSelect').val(data.atividade).trigger('change');
+                
+                // Formata Data
+                if(data.data && data.data.includes('/')) {
+                    const partes = data.data.split('/');
+                    $('#dataDocumentoTransacao').val(`${partes[2]}-${partes[1]}-${partes[0]}`);
+                }
+                
+                $('input[name="numero_documento_transacao"]').val(data.doc === '-' ? '' : data.doc);
+
+                // Seleciona Fornecedor/Cliente
+                setTimeout(() => {
+                    let found = false;
+                    $('#fornecedorPrestadorTransacaoSelect option').each(function() {
+                        if ($(this).data('nome') === data.origem) {
+                            $(this).prop('selected', true);
+                            found = true;
+                        }
+                    });
+                    
+                    if(found) {
+                        $('#fornecedorPrestadorTransacaoSelect').trigger('change');
+                    } else if (data.origem) {
+                        $('#nomeFornecedorPrestadorTransacaoInput').val(data.origem);
+                    }
+                }, 300); // Pequeno delay interno para o fornecedor
+
+                // 5. Preenche Itens (MOVIDO PARA CÁ - Roda DEPOIS do cabeçalho)
+                if (data.itens && data.itens.length > 0) {
+                    data.itens.forEach(item => {
+                        // Cria a linha sem carregar listas automáticas
+                        if (typeof window.adicionarItemLinha === "function") {
+                            window.adicionarItemLinha(false); 
+                        }
+
+                        const lastRow = $('#itensDocumentoContainer .item-row').last();
+                        
+                        // Injeta manualmente os valores
+                        
+                        // 1. Grupo
+                        const selGrupo = lastRow.find('.grupo-select');
+                        if (item.grupo) {
+                            selGrupo.empty().append(`<option value="${item.grupo}" selected>${item.grupo}</option>`);
+                        } else {
+                            selGrupo.empty().append(`<option value="" selected>Original</option>`);
+                        }
+
+                        // 2. Subgrupo
+                        const selSub = lastRow.find('.subgrupo-select');
+                        if (item.subgrupo) {
+                            selSub.empty().append(`<option value="${item.subgrupo}" selected>${item.subgrupo}</option>`).prop('disabled', false);
+                        } else {
+                            selSub.empty().append('<option value="" selected>(Nenhum)</option>').prop('disabled', false);
+                        }
+
+                        // 3. Item (Descrição)
+                        const selDesc = lastRow.find('.item-select');
+                        selDesc.empty().append(`<option value="${item.descricao}" selected>${item.descricao}</option>`).prop('disabled', false);
+                        
+                        // 4. Unidade e Quantidade
+                        lastRow.find('select[name="produto_servico_unidade[]"]').val(item.unidade);
+                        lastRow.find('input[name="produto_servico_quantidade[]"]').val(item.quantidade);
+
+                        // 5. Valores Monetários
+                        const valorFmt = item.valor_unitario.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        const totalFmt = item.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                        lastRow.find('input[name="produto_servico_valor_unitario[]"]').val(valorFmt);
+                        lastRow.find('input[name="produto_servico_valor_total_item[]"]').val(totalFmt);
+                    });
+                    
+                    $('#valorTotalDocumentoCalculado').val(data.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2}));
+                } else {
+                    // Se não tem itens, cria uma linha vazia padrão
+                    if (typeof window.adicionarItemLinha === "function") window.adicionarItemLinha(true);
+                }
+                
+                // Rola a tela
+                $('html, body').animate({ scrollTop: $("#receitaDespesaForm").offset().top - 100 }, 500);
+
+            }, 500); // Fim do setTimeout principal
+
+        }).fail(function() { alert("Erro ao carregar dados para edição."); });
+    }
+    
+    // --- FUNÇÃO PARA VER DETALHES (E LISTAR ITENS) ---
+    function verDetalhesTransacao(id) {
+        // Busca dados no Python
+        $.getJSON(`/get_transacao_detalhes/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+
+            // Preenche Cabeçalho
+            $('#detalheTransacaoOrigem').text(data.origem);
+            $('#detalheTransacaoDoc').text(data.doc);
+            $('#detalheTransacaoData').text(data.data);
+            $('#detalheTransacaoTipo').text(data.tipo);
+            $('#detalheTransacaoAtividade').text(data.atividade);
+            
+            // Valor e Status
+            const valorFmt = data.valor_total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            $('#detalheTransacaoValor').text(valorFmt);
+            
+            // Cor do valor
+            if(data.tipo === 'Receita') $('#detalheTransacaoValor').removeClass('text-danger').addClass('text-success');
+            else $('#detalheTransacaoValor').removeClass('text-success').addClass('text-danger');
+
+            $('#detalheTransacaoStatus').text(data.status);
+
+            // Preenche Tabela de Itens
+            const tbody = $('#tabelaItensDetalheBody');
+            tbody.empty();
+            
+            if(data.itens && data.itens.length > 0) {
+                data.itens.forEach(item => {
+                    const vlrUnit = item.valor_unitario.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    const vlrTotal = item.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                    
+                    tbody.append(`
+                        <tr>
+                            <td>${item.descricao}</td>
+                            <td class="text-center">${item.unidade}</td>
+                            <td class="text-center">${item.quantidade}</td>
+                            <td class="text-end">R$ ${vlrUnit}</td>
+                            <td class="text-end fw-bold">R$ ${vlrTotal}</td>
+                        </tr>
+                    `);
+                });
+            } else {
+                tbody.append('<tr><td colspan="5" class="text-center text-muted">Nenhum item detalhado.</td></tr>');
+            }
+
+            // Configura o botão de "Editar" para abrir o formulário principal com este ID
+            $('#btnEditarNoModalTransacao').attr('onclick', `iniciarEdicaoTransacao(${data.id})`);
+
+            // Abre o modal
+            new bootstrap.Modal(document.getElementById('modalDetalhesTransacao')).show();
+
+        }).fail(function() { alert("Erro ao carregar detalhes."); });
+    }
+    function cancelarEdicaoTransacao() {
+        $('#transacaoForm')[0].reset();
+        $('#transacaoForm').attr('action', '/registrar_transacao_financeira');
+        $('#idTransacaoHidden').val('');
+        $('#btnSalvarTransacao').text('REGISTRAR TRANSAÇÃO').removeClass('btn-warning').addClass('btn-success');
+        $('#btnCancelarEdicaoTransacao').hide();
+        
+        $('#itensDocumentoContainer').empty();
+        adicionarItemLinha(); // Volta a ter 1 linha vazia
+        
+        mostrarFormulario('gestaoTransacoesContainer');
+    }
+
+    function solicitarExclusaoTransacao(id, docInfo) {
+        if (confirm(`Tem certeza que deseja excluir a transação: ${docInfo}?\n\nCUIDADO: Se houver pagamentos vinculados, a exclusão será bloqueada.`)) {
+            $.ajax({
+                url: `/excluir_transacao/${id}`,
+                type: 'POST',
+                success: function(response) {
+                    if (response.status === 'sucesso') {
+                        alert(response.message);
+                        buscarTransacoesGestao();
+                    } else {
+                        alert("Erro: " + (response.message || "Erro desconhecido."));
+                    }
+                },
+                error: function(xhr) {
+                    let msg = "Erro ao excluir.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) msg += "\n" + xhr.responseJSON.error;
+                    alert(msg);
+                }
+            });
+        }
+    }
 
 </script>
 </body>

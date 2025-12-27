@@ -1304,6 +1304,115 @@ def registrar_transacao_financeira():
     finally:
         if conn: conn.close()
 
+@app.route("/editar_transacao", methods=["POST"])
+@login_required
+def editar_transacao():
+    conn = None
+    try:
+        dados = request.form
+        id_transacao = dados.get("id_transacao")
+        if not id_transacao: return "ID da transação não encontrado.", 400
+
+        # Parse dos Itens (Mesma lógica do cadastro)
+        descricoes = request.form.getlist("produto_servico_descricao[]")
+        unidades = request.form.getlist("produto_servico_unidade[]")
+        quantidades = request.form.getlist("produto_servico_quantidade[]")
+        valores = request.form.getlist("produto_servico_valor_unitario[]")
+        
+        itens_processados = []
+        valor_total_novo = Decimal('0.00')
+        
+        for i in range(len(descricoes)):
+            qtd = Decimal(quantidades[i].replace(",", "."))
+            vu = Decimal(valores[i].replace("R$", "").replace(".", "").replace(",", ".").strip())
+            total_item = qtd * vu
+            
+            itens_processados.append({
+                "descricao": descricoes[i], "unidade": unidades[i],
+                "quantidade": float(qtd), "valor_unitario": float(vu), # float para JSON
+                "valor_total_item": float(total_item)
+            })
+            valor_total_novo += total_item
+
+        # Dados do Cabeçalho
+        cabecalho = {
+            "uvr": dados["uvr_transacao"],
+            "associacao": dados.get("associacao_transacao",""),
+            "data_documento": dados["data_documento_transacao"],
+            "tipo_transacao": dados["tipo_transacao"],
+            "tipo_atividade": dados["tipo_atividade_transacao"],
+            "numero_documento": dados.get("numero_documento_transacao", ""),
+            "id_origem": dados.get("fornecedor_prestador_transacao"),
+            "nome_origem": dados.get("nome_fornecedor_prestador_transacao"),
+            "valor_total": float(valor_total_novo)
+        }
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        # Verifica pagamentos para evitar quebra de integridade
+        cur.execute("SELECT valor_pago_recebido FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+        row_pag = cur.fetchone()
+        valor_ja_pago = row_pag[0] if row_pag else 0
+        
+        if Decimal(str(valor_ja_pago)) > valor_total_novo:
+             return f"Erro: O novo valor total (R$ {valor_total_novo}) é menor que o valor já pago/recebido (R$ {valor_ja_pago}). Estorne pagamentos antes de reduzir o valor da nota.", 400
+
+        # ADMIN: Edita direto
+        if current_user.role == 'admin':
+            # Atualiza Cabeçalho
+            # Tratamento especial para Rateio (id_origem pode ser Null/Vazio)
+            id_origem_sql = None
+            if cabecalho['id_origem'] and cabecalho['id_origem'].isdigit():
+                id_origem_sql = int(cabecalho['id_origem'])
+
+            cur.execute("""
+                UPDATE transacoes_financeiras SET
+                    uvr=%s, associacao=%s, data_documento=%s, tipo_transacao=%s,
+                    tipo_atividade=%s, numero_documento=%s, 
+                    id_cadastro_origem=%s, nome_cadastro_origem=%s,
+                    valor_total_documento=%s
+                WHERE id=%s
+            """, (
+                cabecalho['uvr'], cabecalho['associacao'], cabecalho['data_documento'],
+                cabecalho['tipo_transacao'], cabecalho['tipo_atividade'], cabecalho['numero_documento'],
+                id_origem_sql, cabecalho['nome_origem'],
+                valor_total_novo, id_transacao
+            ))
+
+            # Atualiza Itens (Apaga todos antigos e recria os novos)
+            cur.execute("DELETE FROM itens_transacao WHERE id_transacao = %s", (id_transacao,))
+            for item in itens_processados:
+                cur.execute("""
+                    INSERT INTO itens_transacao (id_transacao, descricao, unidade, quantidade, valor_unitario, valor_total_item)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (id_transacao, item['descricao'], item['unidade'], item['quantidade'], item['valor_unitario'], item['valor_total_item']))
+            
+            conn.commit()
+            return redirect(url_for("sucesso_transacao")) # Reutiliza página de sucesso
+
+        else:
+            # USUÁRIO: Cria solicitação
+            # Empacota tudo (cabeçalho + itens) no JSON
+            cabecalho['itens'] = itens_processados
+            cabecalho['descricao_visual'] = f"Edição NF {cabecalho['numero_documento']} - {cabecalho['nome_origem']}"
+            
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('transacoes_financeiras', id_transacao, 'EDICAO', json.dumps(cabecalho), current_user.username))
+            
+            conn.commit()
+            return pagina_sucesso_base("Solicitação Enviada", "A edição da transação foi enviada para aprovação.")
+
+    except Exception as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro edição transacao: {e}")
+        return f"Erro: {e}", 500
+    finally:
+        if conn: conn.close()
+
 @app.route("/get_clientes_fornecedores_com_pendencias", methods=["GET"])
 def get_clientes_fornecedores_com_pendencias():
     uvr = request.args.get("uvr")
@@ -2766,7 +2875,6 @@ def responder_solicitacao():
                         (novo_uvr, nova_assoc,
                          d.get("razao_social"), re.sub(r'[^0-9]', '', d.get("cnpj","")), re.sub(r'[^0-9]', '', d.get("cep","")), d.get("logradouro"), d.get("numero"), d.get("bairro"), d.get("cidade"), d.get("uf"), d.get("telefone"), d.get("tipo_atividade"), d.get("tipo_cadastro"), id_reg))
                 
-                # --- NOVO BLOCO PARA CONTAS CORRENTES ---
                 elif tabela == 'contas_correntes':
                     cur.execute("""UPDATE contas_correntes SET 
                         uvr=%s, associacao=%s, banco_codigo=%s, banco_nome=%s, 
@@ -2774,7 +2882,35 @@ def responder_solicitacao():
                         WHERE id=%s""",
                         (d.get("uvr"), d.get("associacao",""), d.get("banco_codigo"), d.get("banco_nome"),
                          d.get("agencia"), d.get("conta_corrente"), d.get("descricao_conta"), id_reg))
-                # ----------------------------------------
+                
+                # --- NOVO BLOCO: TRANSAÇÕES FINANCEIRAS ---
+                elif tabela == 'transacoes_financeiras':
+                    # 1. Atualiza Cabeçalho
+                    id_origem = d.get("id_origem")
+                    if id_origem and str(id_origem).isdigit(): id_origem = int(id_origem)
+                    else: id_origem = None
+
+                    cur.execute("""
+                        UPDATE transacoes_financeiras SET
+                            uvr=%s, associacao=%s, data_documento=%s, tipo_transacao=%s,
+                            tipo_atividade=%s, numero_documento=%s, 
+                            id_cadastro_origem=%s, nome_cadastro_origem=%s,
+                            valor_total_documento=%s
+                        WHERE id=%s
+                    """, (
+                        d["uvr"], d.get("associacao",""), d["data_documento"],
+                        d["tipo_transacao"], d["tipo_atividade"], d.get("numero_documento",""),
+                        id_origem, d.get("nome_origem"), d["valor_total"], id_reg
+                    ))
+
+                    # 2. Atualiza Itens (Apaga antigos e insere os do JSON)
+                    cur.execute("DELETE FROM itens_transacao WHERE id_transacao = %s", (id_reg,))
+                    for item in d["itens"]:
+                        cur.execute("""
+                            INSERT INTO itens_transacao (id_transacao, descricao, unidade, quantidade, valor_unitario, valor_total_item)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (id_reg, item['descricao'], item['unidade'], item['quantidade'], item['valor_unitario'], item['valor_total_item']))
+                # ------------------------------------------
 
                 msg = "Edição aprovada e aplicada!"
 
@@ -3381,17 +3517,31 @@ def get_detalhes_solicitacao(id):
             sql_atual = "SELECT nome, cpf, rg, data_nascimento, data_admissao, status, uvr, associacao, cep, logradouro, endereco_numero, bairro, cidade, uf, telefone FROM associados WHERE id = %s"
             cols = ["nome","cpf","rg","data_nascimento","data_admissao","status","uvr","associacao","cep","logradouro","endereco_numero","bairro","cidade","uf","telefone"]
             labels = {"nome":"Nome","cpf":"CPF","rg":"RG","data_nascimento":"Nascimento","data_admissao":"Admissão","status":"Status","uvr":"UVR","associacao":"Assoc","cep":"CEP","logradouro":"Logradouro","endereco_numero":"Núm","bairro":"Bairro","cidade":"Cidade","uf":"UF","telefone":"Tel"}
+        
         elif tabela == 'cadastros':
             sql_atual = "SELECT razao_social, cnpj, tipo_cadastro, tipo_atividade, uvr, associacao, cep, logradouro, numero, bairro, cidade, uf, telefone FROM cadastros WHERE id = %s"
             cols = ["razao_social","cnpj","tipo_cadastro","tipo_atividade","uvr","associacao","cep","logradouro","numero","bairro","cidade","uf","telefone"]
             labels = {"razao_social":"Razão Social","cnpj":"CNPJ","tipo_cadastro":"Tipo","tipo_atividade":"Atividade","uvr":"UVR","associacao":"Assoc","cep":"CEP","logradouro":"Logradouro","numero":"Núm","bairro":"Bairro","cidade":"Cidade","uf":"UF","telefone":"Tel"}
         
-        # --- NOVO BLOCO PARA CONTAS CORRENTES ---
         elif tabela == 'contas_correntes':
             sql_atual = "SELECT uvr, associacao, banco_codigo, banco_nome, agencia, conta_corrente, descricao_conta FROM contas_correntes WHERE id = %s"
             cols = ["uvr", "associacao", "banco_codigo", "banco_nome", "agencia", "conta_corrente", "descricao_conta"]
             labels = {"uvr":"UVR", "associacao":"Assoc", "banco_codigo":"Cód Banco", "banco_nome":"Nome Banco", "agencia":"Agência", "conta_corrente":"Conta", "descricao_conta":"Descrição"}
-        # ----------------------------------------
+        
+        # --- TRANSAÇÕES FINANCEIRAS ---
+        elif tabela == 'transacoes_financeiras':
+            sql_atual = """
+                SELECT uvr, associacao, data_documento, tipo_transacao, tipo_atividade, 
+                       numero_documento, nome_cadastro_origem AS nome_origem, 
+                       valor_total_documento AS valor_total 
+                FROM transacoes_financeiras WHERE id = %s
+            """
+            cols = ["uvr", "associacao", "data_documento", "tipo_transacao", "tipo_atividade", "numero_documento", "nome_origem", "valor_total"]
+            labels = {
+                "uvr": "UVR", "associacao": "Associação", "data_documento": "Data Doc.", 
+                "tipo_transacao": "Tipo", "tipo_atividade": "Atividade", 
+                "numero_documento": "Nº Doc", "nome_origem": "Origem/Destino", "valor_total": "Total (R$)"
+            }
 
         if not sql_atual: return jsonify({"error": "Tabela desconhecida"}), 400
 
@@ -3411,7 +3561,60 @@ def get_detalhes_solicitacao(id):
             if val_novo == "None": val_novo = ""
             
             comp.append({ "campo": l, "valor_atual": val_atual, "valor_novo": val_novo, "mudou": val_atual != val_novo })
+        
+        # --- LÓGICA ESPECIAL PARA ITENS DA TRANSAÇÃO (GERA TABELA HTML) ---
+        if tabela == 'transacoes_financeiras':
+            # 1. Busca Itens do Banco (Antigos)
+            cur.execute("""
+                SELECT descricao, unidade, quantidade, valor_unitario, valor_total_item 
+                FROM itens_transacao WHERE id_transacao = %s ORDER BY id ASC
+            """, (id_reg,))
+            itens_db = cur.fetchall()
             
+            # 2. Busca Itens do JSON (Novos)
+            itens_novos = d_novos.get('itens', [])
+
+            # Função auxiliar para gerar HTML
+            def gerar_html_tabela(lista_itens, origem):
+                if not lista_itens: return '<small class="text-muted">Nenhum item</small>'
+                
+                html = '<table class="table table-sm table-bordered mb-0" style="font-size:0.7rem; background-color: #fff;">'
+                html += '<thead class="table-light"><tr><th>Desc</th><th>Qtd</th><th>Tot</th></tr></thead><tbody>'
+                
+                for it in lista_itens:
+                    if origem == 'db':
+                        desc, un, qtd, unit, tot = it[0], it[1], it[2], it[3], it[4]
+                    else: # json
+                        desc = it.get('descricao')
+                        un = it.get('unidade')
+                        qtd = it.get('quantidade')
+                        tot = it.get('valor_total_item')
+                    
+                    try: qtd_fmt = f"{float(qtd):g}" 
+                    except: qtd_fmt = str(qtd)
+                    
+                    try: tot_fmt = f"{float(tot):.2f}".replace('.', ',')
+                    except: tot_fmt = str(tot)
+
+                    html += f'<tr><td>{desc}</td><td>{qtd_fmt} {un}</td><td>{tot_fmt}</td></tr>'
+                
+                html += '</tbody></table>'
+                return html
+
+            html_atual = gerar_html_tabela(itens_db, 'db')
+            html_novo = gerar_html_tabela(itens_novos, 'json')
+            
+            # Compara strings HTML (não é perfeito, mas serve para indicar mudança visual)
+            mudou_itens = (html_atual != html_novo)
+
+            comp.append({
+                "campo": "Detalhamento de Itens",
+                "valor_atual": html_atual,
+                "valor_novo": html_novo,
+                "mudou": mudou_itens
+            })
+        # ------------------------------------------------------------------
+
         return jsonify({
             "id_solicitacao": id, "usuario": usuario, 
             "data": data_solic.strftime('%d/%m %H:%M') if data_solic else "Data desc.",
@@ -3422,6 +3625,7 @@ def get_detalhes_solicitacao(id):
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
     finally:
         if conn: conn.close()
+        
 # --- GESTÃO DE TRANSAÇÕES (CRUD) ---
 
 @app.route("/buscar_transacoes_gestao", methods=["GET"])
@@ -3525,12 +3729,15 @@ def get_transacao_detalhes(id):
         if not cabecalho:
             return jsonify({"error": "Transação não encontrada"}), 404
 
-        # 2. Busca os itens individuais dessa transação
+        # 2. Busca os itens e faz JOIN para descobrir Grupo e Subgrupo originais
+        # Usamos LEFT JOIN pois o produto pode ter sido excluído do catálogo, mas o registro histórico fica
         cur.execute("""
-            SELECT descricao, unidade, quantidade, valor_unitario, valor_total_item
-            FROM itens_transacao
-            WHERE id_transacao = %s
-            ORDER BY id ASC
+            SELECT it.descricao, it.unidade, it.quantidade, it.valor_unitario, it.valor_total_item,
+                   ps.grupo, ps.subgrupo
+            FROM itens_transacao it
+            LEFT JOIN produtos_servicos ps ON it.descricao = ps.item
+            WHERE it.id_transacao = %s
+            ORDER BY it.id ASC
         """, (id,))
         itens_db = cur.fetchall()
 
@@ -3542,7 +3749,10 @@ def get_transacao_detalhes(id):
                 "unidade": item[1],
                 "quantidade": float(item[2]),
                 "valor_unitario": float(item[3]),
-                "valor_total": float(item[4])
+                "valor_total": float(item[4]),
+                # Se não achar no catálogo, manda string vazia ou mantém null
+                "grupo": item[5] or "",
+                "subgrupo": item[6] or ""
             })
 
         # Formata datas e valores do cabeçalho
@@ -3736,6 +3946,48 @@ def api_produtos_crud():
         return jsonify({"erro": str(e)}), 500
     finally:
         conn.close()
+@app.route("/excluir_transacao/<int:id>", methods=["POST"])
+@login_required
+def excluir_transacao(id):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        # Verifica se tem pagamentos vinculados
+        cur.execute("SELECT valor_pago_recebido FROM transacoes_financeiras WHERE id = %s", (id,))
+        row = cur.fetchone()
+        if not row: return jsonify({"error": "Transação não encontrada"}), 404
+        
+        valor_pago = row[0]
+        if valor_pago > 0:
+            return jsonify({"error": "Não é possível excluir esta transação pois ela possui pagamentos/recebimentos registrados no Fluxo de Caixa. Estorne os pagamentos antes."}), 400
+
+        # Pega dados para o log/solicitação
+        cur.execute("SELECT numero_documento, nome_cadastro_origem FROM transacoes_financeiras WHERE id = %s", (id,))
+        dados_reg = cur.fetchone()
+        desc = f"NF {dados_reg[0]} - {dados_reg[1]}"
+
+        if current_user.role == 'admin':
+            cur.execute("DELETE FROM transacoes_financeiras WHERE id = %s", (id,))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Transação excluída com sucesso."})
+        else:
+            # Solicitação
+            dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "descricao": desc})
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('transacoes_financeiras', id, 'EXCLUSAO', dados_json, current_user.username))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada."})
+
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
