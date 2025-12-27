@@ -21,6 +21,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.lib import colors
 from reportlab.lib.units import inch, cm
+from reportlab.lib.utils import ImageReader
 
 # --- CONFIGURAÇÕES GLOBAIS ---
 # Estes grupos devem ser os mesmos que aparecem nas opções de "Atividade" do HTML
@@ -42,6 +43,7 @@ GRUPOS_FIXOS_SISTEMA = [
 load_dotenv()
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite aumentado para 64MB
 app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
 
 login_manager = LoginManager()
@@ -495,21 +497,18 @@ def cadastrar():
         if conn: conn.close()
 
 @app.route("/cadastrar_associado", methods=["POST"])
-@login_required # <--- Mantive a proteção de login que é importante
+@login_required 
 def cadastrar_associado():
     conn = None
     try:
-        # Usamos .to_dict() para poder modificar o dicionário (inserir dados extras se precisar)
         dados = request.form.to_dict()
 
-        # --- CORREÇÃO DE SEGURANÇA (UVR) ---
-        # Se o usuário não for admin, força a UVR dele
+        # Segurança de UVR
         if current_user.uvr_acesso and current_user.role != 'admin':
             dados["uvr"] = current_user.uvr_acesso
-        # -----------------------------------
 
-        # Campos obrigatórios
-        required_fields = { "numero": "Número", "nome": "Nome", "cpf": "CPF", "rg": "RG",
+        # Campos obrigatórios (sem 'numero')
+        required_fields = { "nome": "Nome", "cpf": "CPF", "rg": "RG",
                             "data_nascimento": "Data de Nascimento", "data_admissao": "Data de Admissão",
                             "status": "Status", "cep": "CEP", "telefone": "Telefone",
                             "uvr": "UVR", "data_hora_cadastro": "Data/Hora"}
@@ -517,14 +516,12 @@ def cadastrar_associado():
         for field, msg in required_fields.items():
             if not dados.get(field): return f"{msg} é obrigatório(a).", 400
 
-        # Validação e Limpeza de CPF/CEP
+        # Validações
         cpf_num = re.sub(r'[^0-9]', '', dados["cpf"])
         if not validar_cpf(cpf_num): return "CPF inválido.", 400
-
         cep_num = re.sub(r'[^0-9]', '', dados["cep"])
         if not validar_cep(cep_num): return "CEP inválido.", 400
         
-        # Tratamento de Datas
         try:
             data_nascimento = datetime.strptime(dados["data_nascimento"], '%Y-%m-%d').date()
             data_admissao = datetime.strptime(dados["data_admissao"], '%Y-%m-%d').date()
@@ -532,43 +529,54 @@ def cadastrar_associado():
         except ValueError as e:
             return f"Formato de data inválido: {e}", 400
 
-        # --- CAPTURA DA FOTO ---
-        # Pega a string base64 que veio do campo oculto no HTML
-        foto = dados.get("foto_base64", "")
-        # -----------------------
+        # --- LÓGICA DE FOTO INTELIGENTE (CORREÇÃO) ---
+        foto_final = ""
+        
+        # 1. Verifica se veio da WEBCAM (string base64 já pronta)
+        foto_webcam = dados.get("foto_webcam_base64", "")
+        if foto_webcam and len(foto_webcam) > 100:
+            foto_final = foto_webcam
+        
+        # 2. Se não tem webcam, verifica se veio ARQUIVO (upload)
+        elif 'foto_associado' in request.files:
+            arquivo = request.files['foto_associado']
+            if arquivo and arquivo.filename:
+                # Converte o arquivo enviado para Base64 para salvar no banco igual à webcam
+                conteudo_arquivo = arquivo.read()
+                encoded_string = base64.b64encode(conteudo_arquivo).decode('utf-8')
+                mime_type = arquivo.content_type or "image/jpeg"
+                foto_final = f"data:{mime_type};base64,{encoded_string}"
+        # -----------------------------------------------
 
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # INSERT atualizado com a coluna foto_base64
+        # Gera próximo número
+        cur.execute("SELECT MAX(CAST(numero AS INTEGER)) FROM associados")
+        res_num = cur.fetchone()
+        proximo_numero = (res_num[0] + 1) if res_num and res_num[0] else 1
+        numero_gerado_str = str(proximo_numero)
+        
         cur.execute("""
             INSERT INTO associados (numero, uvr, associacao, nome, cpf, rg, data_nascimento,
                                     data_admissao, status, cep, logradouro, endereco_numero,
                                     bairro, cidade, uf, telefone, data_hora_cadastro, foto_base64)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            dados["numero"], dados["uvr"], dados.get("associacao",""), dados["nome"],
+            numero_gerado_str, dados["uvr"], dados.get("associacao",""), dados["nome"],
             cpf_num, dados["rg"], data_nascimento, data_admissao, dados["status"],
             cep_num, dados.get("logradouro", ""), dados.get("endereco_numero", ""), 
             dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf", ""), 
-            dados["telefone"], data_hora, foto
+            dados["telefone"], data_hora, foto_final
         ))
         
         conn.commit()
         return redirect(url_for("sucesso_associado"))
 
-    except psycopg2.IntegrityError as e:
-        if conn: conn.rollback()
-        if 'associados_cpf_key' in str(e): return "CPF já cadastrado.", 400
-        app.logger.error(f"Erro de integridade em /cadastrar_associado: {e}")
-        return f"Erro de integridade: {e}", 400
-    except ValueError as e:
-        app.logger.error(f"Erro de valor em /cadastrar_associado: {e}")
-        return f"Formato de dados inválido: {e}", 400
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro inesperado em /cadastrar_associado: {e}")
-        return f"Erro ao cadastrar associado: {e}", 500
+        app.logger.error(f"Erro cadastro associado: {e}")
+        return f"Erro: {e}", 500
     finally:
         if conn: conn.close()
 
@@ -713,87 +721,86 @@ def editar_associado():
     conn = None
     try:
         dados = request.form.to_dict()
-        app.logger.info(f"Tentativa de edição de associado: {dados}") # Log para ajudar no debug
-
         id_associado = dados.get("id_associado")
-        if not id_associado:
-            return "Erro: ID do associado não encontrado. Tente recarregar a página.", 400
+        if not id_associado: return "ID não encontrado.", 400
 
-        # Validações e Limpeza
+        # Tratamento básico de dados
         cpf_num = re.sub(r'[^0-9]', '', dados.get("cpf", ""))
         cep_num = re.sub(r'[^0-9]', '', dados.get("cep", ""))
         
-        # Tratamento de Datas (Tenta converter, se falhar ou vazio, usa None ou mantém original se for string válida)
-        def processar_data(data_str):
-            if not data_str: return None
-            try:
-                return datetime.strptime(data_str, '%Y-%m-%d').date()
-            except ValueError:
-                return None # Ou lançar erro se data for obrigatória
+        def processar_data(d):
+            if not d: return None
+            try: return datetime.strptime(d, '%Y-%m-%d').date()
+            except: return None
 
-        data_nascimento = processar_data(dados.get("data_nascimento"))
-        data_admissao = processar_data(dados.get("data_admissao"))
+        data_nasc = processar_data(dados.get("data_nascimento"))
+        data_adm = processar_data(dados.get("data_admissao"))
 
-        if not data_nascimento or not data_admissao:
-             return "Erro: Datas de nascimento ou admissão inválidas.", 400
+        # --- LÓGICA DE FOTO NA EDIÇÃO ---
+        foto_final = ""
+        
+        # 1. Prioridade: Nova foto de Webcam
+        foto_webcam = dados.get("foto_webcam_base64", "")
+        if foto_webcam and len(foto_webcam) > 100:
+            foto_final = foto_webcam
+        
+        # 2. Prioridade: Novo Arquivo de Upload
+        elif 'foto_associado' in request.files:
+            arquivo = request.files['foto_associado']
+            if arquivo and arquivo.filename:
+                conteudo = arquivo.read()
+                encoded = base64.b64encode(conteudo).decode('utf-8')
+                mime = arquivo.content_type or "image/jpeg"
+                foto_final = f"data:{mime};base64,{encoded}"
+        
+        # 3. Se não enviou nada novo, mantém a existente (que vem num campo hidden)
+        if not foto_final:
+            foto_final = dados.get("foto_existente_base64", "")
+        # --------------------------------
 
         conn = conectar_banco()
         cur = conn.cursor()
 
-        # --- LÓGICA DE FOTO ---
-        # Se o campo foto_base64 estiver vazio, significa que o usuário NÃO tirou nova foto.
-        # Nesse caso, não queremos apagar a foto antiga (UPDATE ... SET foto_base64 = '').
-        # Queremos MANTER a antiga.
-        # Para simplificar: O JavaScript já deve enviar a foto antiga no campo hidden se não mudou.
-        # Mas vamos garantir aqui.
-        foto_nova = dados.get("foto_base64", "")
-        
-        # --- CAMINHO 1: É ADMIN? SALVA DIRETO! ---
         if current_user.role == 'admin':
-            sql = """
+            cur.execute("""
                 UPDATE associados SET 
                     nome=%s, cpf=%s, rg=%s, data_nascimento=%s, data_admissao=%s,
                     status=%s, uvr=%s, associacao=%s, cep=%s, logradouro=%s,
                     endereco_numero=%s, bairro=%s, cidade=%s, uf=%s, telefone=%s,
                     foto_base64=%s
                 WHERE id=%s
-            """
-            cur.execute(sql, (
-                dados["nome"], cpf_num, dados["rg"], data_nascimento, data_admissao,
+            """, (
+                dados["nome"], cpf_num, dados["rg"], data_nasc, data_adm,
                 dados["status"], dados["uvr"], dados.get("associacao", ""), cep_num,
                 dados.get("logradouro", ""), dados.get("endereco_numero", ""),
-                dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf", ""),
-                dados["telefone"], foto_nova, 
-                int(id_associado) # Garante que é inteiro
+                dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf"),
+                dados["telefone"], foto_final, int(id_associado)
             ))
             conn.commit()
-            msg_retorno = "Alterações salvas com sucesso!"
-
-        # --- CAMINHO 2: É USUÁRIO COMUM? CRIA SOLICITAÇÃO! ---
+            msg = "Alterações salvas com sucesso!"
         else:
-            # Serializa dados para JSON (convertendo datas para string)
-            dados_json = dados.copy()
-            dados_json['data_nascimento'] = str(data_nascimento)
-            dados_json['data_admissao'] = str(data_admissao)
-            
+            # Para usuário comum, salva na solicitação
             import json
-            dados_serializados = json.dumps(dados_json)
+            dados_json = dados.copy()
+            dados_json['foto_base64'] = foto_final # Garante que a foto vai no JSON
+            # Converte datas para string para não quebrar o JSON
+            if data_nasc: dados_json['data_nascimento'] = str(data_nasc)
+            if data_adm: dados_json['data_admissao'] = str(data_adm)
 
             cur.execute("""
                 INSERT INTO solicitacoes_alteracao 
                 (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante)
                 VALUES (%s, %s, %s, %s, %s)
-            """, ('associados', int(id_associado), 'EDICAO', dados_serializados, current_user.username))
-            
+            """, ('associados', int(id_associado), 'EDICAO', json.dumps(dados_json), current_user.username))
             conn.commit()
-            msg_retorno = "Solicitação de edição enviada para aprovação do Administrador."
+            msg = "Solicitação enviada para aprovação."
 
-        return pagina_sucesso_base("Processado", msg_retorno)
+        return pagina_sucesso_base("Processado", msg)
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro ao editar associado: {e}", exc_info=True) # Log completo do erro
-        return f"Erro interno ao processar edição: {e}", 500
+        app.logger.error(f"Erro edição: {e}")
+        return f"Erro: {e}", 500
     finally:
         if conn: conn.close()
 
@@ -2834,13 +2841,39 @@ def imprimir_ficha_associado(id):
         story.append(Paragraph(f"Ficha Cadastral do Associado - {dados['assoc']}", style_titulo))
         story.append(Spacer(1, 0.5*cm))
 
-        # --- PROCESSAMENTO DA FOTO ---
+        # --- PROCESSAMENTO DA FOTO (CORRIGIDO PROPORÇÃO) ---
         img_obj = None
         if dados['foto'] and len(dados['foto']) > 100:
             try:
                 img_str = dados['foto'].split(",")[1] if "," in dados['foto'] else dados['foto']
                 img_data = base64.b64decode(img_str)
-                img_obj = ReportLabImage(io.BytesIO(img_data), width=3*cm, height=4*cm)
+                
+                # Cria um objeto de arquivo na memória
+                imagem_io = io.BytesIO(img_data)
+                
+                # Lê as dimensões originais da imagem para calcular a proporção
+                utils_img = ImageReader(imagem_io)
+                iw, ih = utils_img.getSize() 
+                aspect = ih / float(iw) # Calcula a proporção (Altura / Largura)
+                
+                # Define limites máximos (A coluna do PDF tem 3.5cm de largura)
+                max_w = 3.5 * cm
+                max_h = 5.0 * cm 
+                
+                # Cálculo inteligente: Ajusta pela largura máxima primeiro
+                display_w = max_w
+                display_h = max_w * aspect
+                
+                # Se a altura resultante for muito grande (foto muito vertical), ajusta pela altura máxima
+                if display_h > max_h:
+                    display_h = max_h
+                    display_w = display_h / aspect
+                
+                # Reinicia o ponteiro do arquivo para o ReportLab ler do início
+                imagem_io.seek(0)
+                
+                # Cria a imagem com as dimensões calculadas
+                img_obj = ReportLabImage(imagem_io, width=display_w, height=display_h)
             except Exception as e: 
                 app.logger.error(f"Erro imagem PDF: {e}")
 
@@ -2908,6 +2941,7 @@ def imprimir_ficha_associado(id):
         # --- TABELA PRINCIPAL (TEXTO x FOTO) ---
         if img_obj:
             # Coluna 1: Lista de Elementos de Texto | Coluna 2: Foto
+            # Ajuste de largura da coluna da foto para acomodar até 3.5cm + bordas
             data_main = [[elementos_texto, img_obj]]
             widths_main = [12.5*cm, 3.5*cm]
             style_main = [
@@ -2915,6 +2949,7 @@ def imprimir_ficha_associado(id):
                 ('ALIGN', (1,0), (1,0), 'CENTER'), # Centraliza foto
                 ('BORDER', (1,0), (1,0), 1, colors.black), # Borda na foto
                 ('TOPPADDING', (1,0), (1,0), 5), # Padding na foto
+                ('BOTTOMPADDING', (1,0), (1,0), 5),
             ]
         else:
             data_main = [[elementos_texto]]
@@ -3172,6 +3207,43 @@ def excluir_cadastro(id):
             
     except Exception as e:
         if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route("/excluir_associado/<int:id>", methods=["POST"])
+@login_required
+def excluir_associado(id):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        # Busca dados para registrar quem foi excluído (histórico)
+        cur.execute("SELECT nome FROM associados WHERE id = %s", (id,))
+        row = cur.fetchone()
+        nome_registro = row[0] if row else "Desconhecido"
+
+        if current_user.role == 'admin':
+            # Se for Admin, apaga de verdade
+            cur.execute("DELETE FROM associados WHERE id = %s", (id,))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Associado excluído permanentemente."})
+        else:
+            # Se for Usuário Comum, cria uma SOLICITAÇÃO para o admin aprovar
+            import json
+            dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "nome": nome_registro})
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('associados', id, 'EXCLUSAO', dados_json, current_user.username))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
+            
+    except Exception as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro ao excluir associado: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
