@@ -1424,6 +1424,47 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="modalVisualizarCaixa" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-eye"></i> Detalhes do Lançamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Data do Lançamento</label>
+                    <input type="text" class="form-control" id="viewCaixaData" readonly>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Número do Documento</label>
+                    <input type="text" class="form-control" id="viewCaixaDoc" readonly>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Atividade de Transação (Grupo)</label>
+                    <input type="text" class="form-control" id="viewCaixaAtividade" readonly>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Valor (R$)</label>
+                    <input type="text" class="form-control fw-bold" id="viewCaixaValor" readonly style="background-color: #e9ecef;">
+                </div>
+
+                <div class="mb-3" id="viewCaixaInfoExtra" style="display:none;">
+                    <div class="alert alert-success py-2 small">
+                        <i class="fas fa-link"></i> Lançamento vinculado a Transação/NF.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
 // 1. VARIÁVEIS GLOBAIS DE PERMISSÃO
     const usuarioLogadoUvr = "{{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else '' }}";
@@ -2699,7 +2740,6 @@
                     if (data.movimentacoes && data.movimentacoes.length === 0) {
                         $('#extratoStatus').text('Nenhuma movimentação encontrada para os filtros selecionados.').show();
                     } else if (data.movimentacoes) {
-                        // --- AQUI ESTÁ A ATUALIZAÇÃO DOS BOTÕES ---
                         
                         // 1. Cabeçalho com a coluna "Ações"
                         const headers = ["Data", "Histórico", "Entrada (R$)", "Saída (R$)", "Saldo (R$)", "Ações"];
@@ -2721,8 +2761,8 @@
                                 <td class="text-end fw-bold">${parseFloat(mov.saldo_parcial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                                 
                                 <td class="text-center">
-                                    <button class="btn btn-sm btn-warning me-1" onclick="editarMovimentacao(${mov.id})" title="Editar">
-                                        <i class="fas fa-edit"></i>
+                                    <button class="btn btn-sm btn-info me-1 text-white" onclick="visualizarMovimentacao(${mov.id})" title="Ver Detalhes">
+                                        <i class="fas fa-eye"></i>
                                     </button>
                                     <button class="btn btn-sm btn-danger" onclick="excluirMovimentacao(${mov.id}, '${descSegura}')" title="Excluir/Estornar">
                                         <i class="fas fa-trash"></i>
@@ -2760,9 +2800,7 @@
         });
 
         // --- TRAVA DE SEGURANÇA (PERMISSÕES DE USUÁRIO) ---
-        // Se já foi definido globalmente, não precisamos redefinir aqui
-        // Mas mantemos a lógica de UI
-        if (usuarioLogadoUvr && !usuarioIsAdmin) {
+        if (typeof usuarioLogadoUvr !== 'undefined' && usuarioLogadoUvr && typeof usuarioIsAdmin !== 'undefined' && !usuarioIsAdmin) {
             const uvrSelects = $('select[name="uvr"], select[name="uvr_conta"], select[name="uvr_transacao"], #extratoUvr, #relUvr, #uvrSelectAssociado, #uvrFluxoCaixa');
             uvrSelects.each(function() {
                 const select = $(this);
@@ -4148,20 +4186,26 @@ function solicitarExclusaoAssociado(id, nome) {
     }
 // --- FUNÇÕES DE CRUD DO FLUXO DE CAIXA (Adicione isto ao final do script) ---
 
-    function editarMovimentacao(id) {
+function visualizarMovimentacao(id) {
         $.getJSON(`/get_movimentacao_detalhes/${id}`, function(data) {
             if(data.error) { alert(data.error); return; }
             
-            $('#editCaixaId').val(data.id);
-            $('#editCaixaData').val(data.data);
-            $('#editCaixaDescricao').val(data.descricao);
-            $('#editCaixaCategoria').val(data.categoria);
+            // Preenche os novos campos
+            $('#viewCaixaData').val(data.data);
+            $('#viewCaixaDoc').val(data.documento_exibicao);
+            $('#viewCaixaAtividade').val(data.atividade);
             
-            // Valor formatado apenas para visualização
             const valorFmt = parseFloat(data.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2});
-            $('#editCaixaValor').val(valorFmt);
+            $('#viewCaixaValor').val(valorFmt);
 
-            new bootstrap.Modal(document.getElementById('modalEditarCaixa')).show();
+            // Aviso visual de vínculo
+            if(data.vinculado) {
+                $('#viewCaixaInfoExtra').show();
+            } else {
+                $('#viewCaixaInfoExtra').hide();
+            }
+
+            new bootstrap.Modal(document.getElementById('modalVisualizarCaixa')).show();
         });
     }
 

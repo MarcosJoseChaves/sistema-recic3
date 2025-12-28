@@ -4036,53 +4036,52 @@ def get_movimentacao_detalhes(id):
     conn = conectar_banco()
     cur = conn.cursor()
     try:
-        # Verifica se está vinculado a alguma transação (NF)
-        cur.execute("SELECT COUNT(*) FROM fluxo_caixa_transacoes_link WHERE id_fluxo_caixa = %s", (id,))
-        qtd_links = cur.fetchone()[0]
-        is_linked = (qtd_links > 0)
-
-        # Busca dados usando os nomes CORRETOS das colunas
+        # Busca dados do Fluxo e cruza com Transações para pegar Doc e Atividade
         cur.execute("""
-            SELECT id, data_efetiva, observacoes, categoria, valor_efetivo, tipo_movimentacao 
-            FROM fluxo_caixa WHERE id = %s
+            SELECT 
+                fc.id, 
+                fc.data_efetiva, 
+                fc.valor_efetivo, 
+                fc.tipo_movimentacao, 
+                fc.numero_documento_bancario,
+                STRING_AGG(DISTINCT tf.numero_documento, ', ') as docs_nfs,
+                STRING_AGG(DISTINCT tf.tipo_atividade, ', ') as atividades
+            FROM fluxo_caixa fc
+            LEFT JOIN fluxo_caixa_transacoes_link fctl ON fc.id = fctl.id_fluxo_caixa
+            LEFT JOIN transacoes_financeiras tf ON fctl.id_transacao_financeira = tf.id
+            WHERE fc.id = %s
+            GROUP BY fc.id, fc.data_efetiva, fc.valor_efetivo, fc.tipo_movimentacao, fc.numero_documento_bancario
         """, (id,))
+        
         row = cur.fetchone()
         
         if not row: return jsonify({"error": "Não encontrado"}), 404
         
+        doc_bancario = row[4] or ""
+        docs_nfs = row[5] or ""
+        atividades = row[6] or ""
+        
+        # Lógica para exibir o documento principal
+        # Se tiver NF vinculada, mostra ela. Se não, mostra o doc bancário.
+        display_doc = docs_nfs if docs_nfs else doc_bancario
+        if not display_doc: display_doc = "-"
+
+        # Se tiver doc bancário E nota, mostra ambos
+        if docs_nfs and doc_bancario:
+            display_doc = f"NF: {docs_nfs} | Bancário: {doc_bancario}"
+
         return jsonify({
             "id": row[0],
-            "data": row[1].strftime('%Y-%m-%d'),
-            "descricao": row[2] or "", # 'observacoes' no banco vira 'descricao' na tela
-            "categoria": row[3] or "",
-            "valor": float(row[4]),
-            "tipo": row[5],
-            "vinculado": is_linked
+            "data": row[1].strftime('%d/%m/%Y'),
+            "valor": float(row[2]),
+            "tipo": row[3],
+            "documento_exibicao": display_doc,
+            "atividade": atividades or "Não informada (Manual)",
+            "vinculado": (docs_nfs != "")
         })
-    finally:
-        conn.close()
-
-@app.route("/editar_movimentacao", methods=["POST"])
-@login_required
-def editar_movimentacao():
-    if current_user.role != 'admin': return "Acesso negado", 403
-    
-    dados = request.form
-    conn = conectar_banco()
-    cur = conn.cursor()
-    try:
-        # Atualiza usando os nomes CORRETOS das colunas
-        cur.execute("""
-            UPDATE fluxo_caixa 
-            SET data_efetiva=%s, observacoes=%s, categoria=%s 
-            WHERE id=%s
-        """, (dados['data'], dados['descricao'], dados['categoria'], dados['id']))
-        conn.commit()
-        return redirect(url_for('index'))
     except Exception as e:
-        conn.rollback()
-        app.logger.error(f"Erro ao editar movimentação: {e}")
-        return f"Erro: {e}", 500
+        app.logger.error(f"Erro ao buscar detalhes da movimentação: {e}")
+        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 
