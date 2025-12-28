@@ -91,14 +91,14 @@ def validar_cpf(cpf):
     digito2 = (11 - (soma % 11)) % 10 if (soma % 11) > 1 else 0
     return int(cpf[10]) == digito2
 
-# --- CRIAÇÃO DE TABELAS (COM CORREÇÃO FOTO) ---
+# --- CRIAÇÃO DE TABELAS (ATUALIZADO COM TODAS AS MIGRAÇÕES) ---
 def criar_tabelas_se_nao_existir():
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Tabelas Base
+        # 1. Tabelas Base
         cur.execute("""
             CREATE TABLE IF NOT EXISTS cadastros (
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50),
@@ -110,13 +110,12 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
-        # --- CORREÇÃO AUTOMÁTICA (MIGRATION) PARA CADASTROS ---
+        # Migração Cadastros
         try:
             cur.execute("ALTER TABLE cadastros ADD COLUMN IF NOT EXISTS associacao VARCHAR(50);")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
-        # -----------------------------------------------------
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS associados (
@@ -129,13 +128,12 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # --- FIX: GARANTE COLUNA FOTO EM ASSOCIADOS ---
+        # Migração Associados (Foto)
         try:
             cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS foto_base64 TEXT;")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
-        # --------------------------------
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS transacoes_financeiras (
@@ -148,7 +146,7 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # Updates de Colunas Transações
+        # Migração Transações
         try:
             cur.execute("ALTER TABLE transacoes_financeiras ADD COLUMN IF NOT EXISTS valor_pago_recebido DECIMAL(12, 2) DEFAULT 0.00;")
             cur.execute("ALTER TABLE transacoes_financeiras ADD COLUMN IF NOT EXISTS status_pagamento VARCHAR(30) DEFAULT 'Aberto';")
@@ -164,13 +162,31 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
+        # 2. Tabela de Subgrupos
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS subgrupos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(255) NOT NULL,
+                atividade_pai VARCHAR(255) NOT NULL,
+                UNIQUE(nome, atividade_pai)
+            )
+        """)
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS produtos_servicos (
                 id SERIAL PRIMARY KEY, tipo VARCHAR(20) NOT NULL, tipo_atividade VARCHAR(255) NOT NULL, 
                 grupo VARCHAR(255), subgrupo VARCHAR(255), item VARCHAR(255) NOT NULL UNIQUE, 
-                data_hora_cadastro TIMESTAMP NOT NULL
+                data_hora_cadastro TIMESTAMP NOT NULL,
+                id_subgrupo INTEGER REFERENCES subgrupos(id)
             )
         """)
+        
+        # Migração Produtos (Vincular ID Subgrupo)
+        try:
+            cur.execute("ALTER TABLE produtos_servicos ADD COLUMN IF NOT EXISTS id_subgrupo INTEGER REFERENCES subgrupos(id);")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS contas_correntes (
@@ -181,15 +197,32 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
+        # --- FIX: MIGRAÇÃO CONTAS CORRENTES (O que faltava) ---
+        try:
+            cur.execute("ALTER TABLE contas_correntes ADD COLUMN IF NOT EXISTS associacao VARCHAR(50);")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
+        # ------------------------------------------------------
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS fluxo_caixa (
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50) NOT NULL,
                 tipo_movimentacao VARCHAR(20) NOT NULL, id_cadastro_cf INTEGER REFERENCES cadastros(id), 
                 nome_cadastro_cf VARCHAR(255), id_conta_corrente INTEGER NOT NULL REFERENCES contas_correntes(id),
                 numero_documento_bancario VARCHAR(100), data_efetiva DATE NOT NULL, valor_efetivo DECIMAL(12, 2) NOT NULL,
-                saldo_operacao_calculado DECIMAL(12, 2) NOT NULL, data_hora_registro_fluxo TIMESTAMP NOT NULL, observacoes TEXT
+                saldo_operacao_calculado DECIMAL(12, 2) NOT NULL, data_hora_registro_fluxo TIMESTAMP NOT NULL, 
+                observacoes TEXT, categoria VARCHAR(100)
             )
         """)
+        
+        # Migração Fluxo de Caixa
+        try:
+            cur.execute("ALTER TABLE fluxo_caixa ADD COLUMN IF NOT EXISTS observacoes TEXT;")
+            cur.execute("ALTER TABLE fluxo_caixa ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS fluxo_caixa_transacoes_link (
@@ -227,8 +260,6 @@ def criar_tabelas_se_nao_existir():
         if conn: conn.rollback()
     finally:
         if conn: conn.close()
-
-criar_tabelas_se_nao_existir()
 
 def migrar_dados_antigos_produtos():
     """Migra subgrupos texto para a tabela 'subgrupos' e vincula IDs."""
@@ -2481,7 +2512,7 @@ def baixar_pdf_extrato():
         return jsonify({"error": f"Erro ao gerar PDF do extrato: {str(e)}"}), 500
 
 
-# --- ROTAS E FUNÇÕES PARA EXTRATO BANCÁRIO (Função fetch_extrato_data original) ---
+# --- ROTAS E FUNÇÕES PARA EXTRATO BANCÁRIO (Função fetch_extrato_data ATUALIZADA) ---
 def fetch_extrato_data(filters): 
     conn = None
     try:
@@ -2510,8 +2541,10 @@ def fetch_extrato_data(filters):
         
         app.logger.info(f"Extrato - Saldo inicial calculado para conta {id_conta_corrente} antes de {data_inicial}: {saldo_inicial}")
 
+        # --- QUERY ATUALIZADA COM ID ---
         cur.execute("""
             SELECT 
+                fc.id, 
                 fc.data_efetiva,
                 fc.tipo_movimentacao,
                 fc.valor_efetivo,
@@ -2530,13 +2563,14 @@ def fetch_extrato_data(filters):
         movimentacoes = []
         saldo_acumulado_periodo = saldo_inicial
         for row in cur.fetchall():
-            data_mov = row[0]
-            tipo_mov = row[1]
-            valor_mov = Decimal(row[2])
-            nome_cf = row[3] or ""
-            doc_bancario = row[4] or ""
-            obs = row[5] or ""
-            nfs = row[6] or ""
+            id_mov = row[0] # NOVO CAMPO ID
+            data_mov = row[1]
+            tipo_mov = row[2]
+            valor_mov = Decimal(row[3])
+            nome_cf = row[4] or ""
+            doc_bancario = row[5] or ""
+            obs = row[6] or ""
+            nfs = row[7] or ""
 
             entrada = Decimal('0.00')
             saida = Decimal('0.00')
@@ -2554,11 +2588,13 @@ def fetch_extrato_data(filters):
             if obs: historico += f" - Obs: {obs}"
 
             movimentacoes.append({
+                "id": id_mov, # Importante para o CRUD
                 "data": data_mov.strftime('%d/%m/%Y'),
                 "historico": historico.strip(),
                 "entrada": str(entrada), 
                 "saida": str(saida),     
-                "saldo_parcial": str(saldo_acumulado_periodo) 
+                "saldo_parcial": str(saldo_acumulado_periodo),
+                "descricao_simples": f"{tipo_mov} - {nome_cf}"
             })
         
         cur.execute("SELECT uvr, associacao, banco_nome, agencia, conta_corrente, descricao_conta FROM contas_correntes WHERE id = %s", (id_conta_corrente,))
@@ -3992,6 +4028,117 @@ def excluir_transacao(id):
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+# --- ROTAS DE GESTÃO DO FLUXO DE CAIXA (CRUD) ---
+
+@app.route("/get_movimentacao_detalhes/<int:id>")
+@login_required
+def get_movimentacao_detalhes(id):
+    conn = conectar_banco()
+    cur = conn.cursor()
+    try:
+        # Verifica se está vinculado a alguma transação (NF)
+        cur.execute("SELECT COUNT(*) FROM fluxo_caixa_transacoes_link WHERE id_fluxo_caixa = %s", (id,))
+        qtd_links = cur.fetchone()[0]
+        is_linked = (qtd_links > 0)
+
+        # Busca dados usando os nomes CORRETOS das colunas
+        cur.execute("""
+            SELECT id, data_efetiva, observacoes, categoria, valor_efetivo, tipo_movimentacao 
+            FROM fluxo_caixa WHERE id = %s
+        """, (id,))
+        row = cur.fetchone()
+        
+        if not row: return jsonify({"error": "Não encontrado"}), 404
+        
+        return jsonify({
+            "id": row[0],
+            "data": row[1].strftime('%Y-%m-%d'),
+            "descricao": row[2] or "", # 'observacoes' no banco vira 'descricao' na tela
+            "categoria": row[3] or "",
+            "valor": float(row[4]),
+            "tipo": row[5],
+            "vinculado": is_linked
+        })
+    finally:
+        conn.close()
+
+@app.route("/editar_movimentacao", methods=["POST"])
+@login_required
+def editar_movimentacao():
+    if current_user.role != 'admin': return "Acesso negado", 403
+    
+    dados = request.form
+    conn = conectar_banco()
+    cur = conn.cursor()
+    try:
+        # Atualiza usando os nomes CORRETOS das colunas
+        cur.execute("""
+            UPDATE fluxo_caixa 
+            SET data_efetiva=%s, observacoes=%s, categoria=%s 
+            WHERE id=%s
+        """, (dados['data'], dados['descricao'], dados['categoria'], dados['id']))
+        conn.commit()
+        return redirect(url_for('index'))
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao editar movimentação: {e}")
+        return f"Erro: {e}", 500
+    finally:
+        conn.close()
+
+@app.route("/excluir_movimentacao/<int:id>", methods=["POST"])
+@login_required
+def excluir_movimentacao(id):
+    if current_user.role != 'admin': 
+        return jsonify({"error": "Apenas administradores podem excluir."}), 403
+
+    conn = conectar_banco()
+    cur = conn.cursor()
+    try:
+        # 1. Busca se há vínculos com Transações (NFs) para estornar
+        cur.execute("""
+            SELECT id_transacao_financeira, valor_aplicado_nesta_nf 
+            FROM fluxo_caixa_transacoes_link 
+            WHERE id_fluxo_caixa = %s
+        """, (id,))
+        links = cur.fetchall()
+        
+        # 2. Para cada NF vinculada, reverte o saldo
+        for id_transacao, valor_estorno in links:
+            cur.execute("SELECT valor_total_documento, valor_pago_recebido FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+            row_t = cur.fetchone()
+            
+            if row_t:
+                total_doc = row_t[0]
+                pago_atual = row_t[1]
+                
+                novo_pago = pago_atual - valor_estorno
+                if novo_pago < 0: novo_pago = 0
+                
+                # Recalcula status
+                novo_status = "Aberto"
+                if novo_pago > 0:
+                    if novo_pago >= total_doc: novo_status = "Liquidado"
+                    else: novo_status = "Parcialmente Pago/Recebido"
+                
+                cur.execute("""
+                    UPDATE transacoes_financeiras 
+                    SET valor_pago_recebido = %s, status_pagamento = %s 
+                    WHERE id = %s
+                """, (novo_pago, novo_status, id_transacao))
+
+        # 3. Exclui do Fluxo de Caixa (o DELETE CASCADE no banco remove os links automaticamente)
+        cur.execute("DELETE FROM fluxo_caixa WHERE id = %s", (id,))
+        conn.commit()
+        
+        return jsonify({"status": "sucesso", "message": "Movimentação excluída e saldos estornados!"})
+
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao excluir movimentação: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):

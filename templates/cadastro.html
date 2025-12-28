@@ -1377,7 +1377,53 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="modalEditarCaixa" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title text-dark"><i class="fas fa-edit"></i> Editar Lançamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/editar_movimentacao" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="editCaixaId">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" name="data" id="editCaixaData" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        <input type="text" class="form-control" name="descricao" id="editCaixaDescricao" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Categoria</label>
+                        <select class="form-select" name="categoria" id="editCaixaCategoria" required>
+                            <option value="Receita de Vendas">Receita de Vendas</option>
+                            <option value="Aporte">Aporte</option>
+                            <option value="Pagamento Fornecedor">Pagamento Fornecedor</option>
+                            <option value="Despesas Operacionais">Despesas Operacionais</option>
+                            <option value="Impostos e Taxas">Impostos e Taxas</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
 
+                    <div class="mb-3">
+                        <label class="form-label">Valor (R$)</label>
+                        <input type="text" class="form-control" id="editCaixaValor" readonly style="background-color: #e9ecef;">
+                        <small class="text-muted">* O valor não pode ser alterado na edição rápida. Para corrigir valor, exclua e lance novamente.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <script>
 // 1. VARIÁVEIS GLOBAIS DE PERMISSÃO
     const usuarioLogadoUvr = "{{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else '' }}";
@@ -2609,14 +2655,16 @@
             baixarArquivo('/baixar_pdf_relatorio_financeiro', currentReportFilters, 'relatorio_financeiro.pdf');
         });
         
-        // --- LÓGICA PARA EXTRATO BANCÁRIO ---
+// --- LÓGICA PARA EXTRATO BANCÁRIO ---
         let currentExtratoFilters = {};
+        
         $('#btnGerarExtrato').click(function() {
             currentExtratoFilters = {
                 id_conta_corrente_extrato: $('#extratoContaCorrente').val(),
                 data_inicial_extrato: $('#extratoDataInicial').val(),
                 data_final_extrato: $('#extratoDataFinal').val(),
             };
+
             if (!currentExtratoFilters.id_conta_corrente_extrato || !currentExtratoFilters.data_inicial_extrato || !currentExtratoFilters.data_final_extrato) {
                 alert("Por favor, selecione Conta Corrente, Data Inicial e Data Final para o extrato."); return;
             }
@@ -2624,54 +2672,88 @@
                 alert("A Data Inicial do extrato não pode ser maior que a Data Final."); return;
             }
 
+            // Limpa a tela antes de buscar
             $('#extratoStatus').text('Gerando extrato...').show();
             $('#tabelaExtrato thead, #tabelaExtrato tbody').empty();
             $('#saldoInicialExtrato, #saldoFinalExtrato, #infoContaExtrato').hide().empty();
             $('#btnBaixarCsvExtrato, #btnBaixarPdfExtrato').hide();
 
             $.ajax({
-                url: '/gerar_extrato_bancario', type: 'POST', contentType: 'application/json',
+                url: '/gerar_extrato_bancario', 
+                type: 'POST', 
+                contentType: 'application/json',
                 data: JSON.stringify(currentExtratoFilters),
                 success: function(data) {
                     $('#extratoStatus').hide();
                     if (data.error) { alert(`Erro ao gerar extrato: ${data.error}`); return; }
                     
+                    // Preenche Info da Conta
                     const contaInfo = data.conta_info || {};
                     $('#extratoNomeConta').text(contaInfo.display_name || 'N/A');
                     $('#extratoPeriodo').text(contaInfo.periodo || 'N/A');
                     $('#infoContaExtrato').show();
 
+                    // Saldo Inicial
                     $('#saldoInicialExtrato').html(`<strong>Saldo Inicial:</strong> R$ ${parseFloat(data.saldo_inicial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`).show();
                     
                     if (data.movimentacoes && data.movimentacoes.length === 0) {
                         $('#extratoStatus').text('Nenhuma movimentação encontrada para os filtros selecionados.').show();
                     } else if (data.movimentacoes) {
-                        const headers = ["Data", "Histórico", "Entrada (R$)", "Saída (R$)", "Saldo (R$)"];
-                        let headerHtml = '<tr>'; headers.forEach(h => headerHtml += `<th>${h}</th>`); headerHtml += '</tr>';
+                        // --- AQUI ESTÁ A ATUALIZAÇÃO DOS BOTÕES ---
+                        
+                        // 1. Cabeçalho com a coluna "Ações"
+                        const headers = ["Data", "Histórico", "Entrada (R$)", "Saída (R$)", "Saldo (R$)", "Ações"];
+                        let headerHtml = '<tr>'; 
+                        headers.forEach(h => headerHtml += `<th class="text-center">${h}</th>`); 
+                        headerHtml += '</tr>';
                         $('#tabelaExtrato thead').html(headerHtml);
+                        
                         let tbodyHtml = '';
                         data.movimentacoes.forEach(mov => {
+                            // Proteção de strings para evitar erro no javascript ao clicar
+                            const descSegura = (mov.descricao_simples || mov.historico).replace(/'/g, "\\'");
+
                             tbodyHtml += `<tr>
-                                <td>${mov.data}</td>
+                                <td class="text-center">${mov.data}</td>
                                 <td style="white-space: normal;">${mov.historico}</td>
-                                <td class="text-end">${parseFloat(mov.entrada || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                                <td class="text-end">${parseFloat(mov.saida || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                                <td class="text-end">${parseFloat(mov.saldo_parcial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                <td class="text-end text-success">${parseFloat(mov.entrada || 0) > 0 ? parseFloat(mov.entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''}</td>
+                                <td class="text-end text-danger">${parseFloat(mov.saida || 0) > 0 ? parseFloat(mov.saida).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''}</td>
+                                <td class="text-end fw-bold">${parseFloat(mov.saldo_parcial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-warning me-1" onclick="editarMovimentacao(${mov.id})" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="excluirMovimentacao(${mov.id}, '${descSegura}')" title="Excluir/Estornar">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
                             </tr>`;
                         });
+                        
                         $('#tabelaExtrato tbody').html(tbodyHtml);
                         $('#btnBaixarCsvExtrato, #btnBaixarPdfExtrato').show();
                     }
+                    
+                    // Saldo Final
                     $('#saldoFinalExtrato').html(`<strong>Saldo Final:</strong> R$ ${parseFloat(data.saldo_final || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`).show();
                 },
-                error: function(xhr) { $('#extratoStatus').hide(); alert(`Erro ao gerar extrato: ${xhr.responseJSON ? xhr.responseJSON.error : (xhr.responseText || 'Erro desconhecido')}`); }
+                error: function(xhr) { 
+                    $('#extratoStatus').hide(); 
+                    let msg = "Erro desconhecido";
+                    if(xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
+                    else if(xhr.responseText) msg = xhr.responseText;
+                    alert(`Erro ao gerar extrato: ${msg}`); 
+                }
             });
         });
 
+        // Botões de Download
         $('#btnBaixarCsvExtrato').click(function() {
             if (Object.keys(currentExtratoFilters).length === 0 || !currentExtratoFilters.id_conta_corrente_extrato) { alert("Gere um extrato primeiro."); return; }
             baixarArquivo('/baixar_csv_extrato', currentExtratoFilters, 'extrato_bancario.csv');
         });
+        
         $('#btnBaixarPdfExtrato').click(function() {
             if (Object.keys(currentExtratoFilters).length === 0 || !currentExtratoFilters.id_conta_corrente_extrato) { alert("Gere um extrato primeiro."); return; }
             baixarArquivo('/baixar_pdf_extrato', currentExtratoFilters, 'extrato_bancario.pdf');
@@ -4059,6 +4141,48 @@ function solicitarExclusaoAssociado(id, nome) {
                 error: function(xhr) {
                     let msg = "Erro ao excluir.";
                     if (xhr.responseJSON && xhr.responseJSON.error) msg += "\n" + xhr.responseJSON.error;
+                    alert(msg);
+                }
+            });
+        }
+    }
+// --- FUNÇÕES DE CRUD DO FLUXO DE CAIXA (Adicione isto ao final do script) ---
+
+    function editarMovimentacao(id) {
+        $.getJSON(`/get_movimentacao_detalhes/${id}`, function(data) {
+            if(data.error) { alert(data.error); return; }
+            
+            $('#editCaixaId').val(data.id);
+            $('#editCaixaData').val(data.data);
+            $('#editCaixaDescricao').val(data.descricao);
+            $('#editCaixaCategoria').val(data.categoria);
+            
+            // Valor formatado apenas para visualização
+            const valorFmt = parseFloat(data.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+            $('#editCaixaValor').val(valorFmt);
+
+            new bootstrap.Modal(document.getElementById('modalEditarCaixa')).show();
+        });
+    }
+
+    function excluirMovimentacao(id, desc) {
+        if(confirm(`ATENÇÃO: Deseja realmente excluir/estornar este lançamento?\n\n"${desc}"\n\nSe ele estiver vinculado a uma Nota Fiscal, o status da nota voltará para "Aberto".`)) {
+            $.ajax({
+                url: `/excluir_movimentacao/${id}`,
+                type: 'POST',
+                success: function(res) {
+                    if(res.status === 'sucesso') {
+                        alert(res.message);
+                        // Atualiza a tabela simulando um clique no botão de gerar
+                        $('#btnGerarExtrato').click(); 
+                    } else {
+                        alert("Erro: " + res.error);
+                    }
+                },
+                error: function(xhr) {
+                    let msg = "Erro ao excluir.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
+                    else if (xhr.responseText) msg = xhr.responseText;
                     alert(msg);
                 }
             });
