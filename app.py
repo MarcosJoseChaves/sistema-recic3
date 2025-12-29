@@ -4556,6 +4556,10 @@ def baixar_relatorio_financeiro():
     elif formato == 'pdf':
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer, pagesize=A4)
+        # --- MARCA DE TESTE (Apagar depois) ---
+        p.setFont("Helvetica-Bold", 20)
+        p.drawString(100, 800, "VERSÃO DE TESTE ATUALIZADA AGORA!")
+        #
         width, height = A4
         y = height - 50
 
