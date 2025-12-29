@@ -4686,3 +4686,5 @@ if __name__ == "__main__":
     
     app.logger.info("Iniciando o aplicativo Flask...")
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+# Atualizacao Forcada do Sistema - v3.1
