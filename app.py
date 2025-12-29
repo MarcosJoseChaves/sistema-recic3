@@ -2882,7 +2882,7 @@ def responder_solicitacao():
                 cur.execute(sql_del, (id_reg,))
                 msg = "Registro excluído com sucesso!"
             else:
-                # Executa a edição
+                # Executa a edição (APROVAÇÃO)
                 if isinstance(d_json, str): d = json.loads(d_json)
                 else: d = d_json
 
@@ -2923,7 +2923,6 @@ def responder_solicitacao():
                         (d.get("uvr"), d.get("associacao",""), d.get("banco_codigo"), d.get("banco_nome"),
                          d.get("agencia"), d.get("conta_corrente"), d.get("descricao_conta"), id_reg))
                 
-                # --- NOVO BLOCO: TRANSAÇÕES FINANCEIRAS ---
                 elif tabela == 'transacoes_financeiras':
                     # 1. Atualiza Cabeçalho
                     id_origem = d.get("id_origem")
@@ -2950,7 +2949,22 @@ def responder_solicitacao():
                             INSERT INTO itens_transacao (id_transacao, descricao, unidade, quantidade, valor_unitario, valor_total_item)
                             VALUES (%s, %s, %s, %s, %s, %s)
                         """, (id_reg, item['descricao'], item['unidade'], item['quantidade'], item['valor_unitario'], item['valor_total_item']))
-                # ------------------------------------------
+
+                # --- LÓGICA PARA PATRIMÔNIO ---
+                elif tabela == 'patrimonio':
+                    # Remove campos auxiliares de visualização que não existem no banco
+                    d.pop('nome_visual', None)
+                    
+                    # Constrói a query de UPDATE dinamicamente baseada nas chaves do JSON
+                    campos = list(d.keys())
+                    valores = list(d.values())
+                    valores.append(id_reg) # ID para o WHERE no final
+                    
+                    set_clause = ", ".join([f"{campo}=%s" for campo in campos])
+                    
+                    sql_update = f"UPDATE patrimonio SET {set_clause} WHERE id=%s"
+                    cur.execute(sql_update, tuple(valores))
+                # ------------------------------
 
                 msg = "Edição aprovada e aplicada!"
 
@@ -3527,6 +3541,8 @@ def get_detalhes_solicitacao(id):
     try:
         conn = conectar_banco()
         cur = conn.cursor()
+        
+        # 1. Busca os dados brutos da solicitação
         cur.execute("SELECT id_registro, dados_novos, usuario_solicitante, data_solicitacao, tabela_alvo, tipo_solicitacao FROM solicitacoes_alteracao WHERE id = %s", (id,))
         solic = cur.fetchone()
         
@@ -3534,6 +3550,7 @@ def get_detalhes_solicitacao(id):
         
         id_reg, dados_novos_json, usuario, data_solic, tabela, tipo = solic
         
+        # 2. Converte o JSON dos novos dados em Dicionário Python
         d_novos = {}
         if dados_novos_json:
             if isinstance(dados_novos_json, str):
@@ -3541,14 +3558,19 @@ def get_detalhes_solicitacao(id):
                 except: d_novos = {}
             else: d_novos = dados_novos_json
         
+        # 3. Se for EXCLUSÃO, retorna resumo simples (pois não há "dados novos" para comparar campo a campo)
         if tipo == 'EXCLUSAO':
+             # Tenta pegar um nome amigável do JSON se existir (ex: nome_visual)
+             nome_item = d_novos.get('nome_visual') or d_novos.get('descricao') or f"ID {id_reg}"
+             
              return jsonify({
                 "id_solicitacao": id, "usuario": usuario, 
                 "data": data_solic.strftime('%d/%m %H:%M') if data_solic else "Data desc.",
                 "tipo": "EXCLUSAO", "tabela": tabela,
-                "info_extra": f"Solicitação para EXCLUIR permanentemente o registro ID {id_reg}."
+                "info_extra": f"Solicitação para EXCLUIR permanentemente: {nome_item}"
             })
 
+        # 4. Se for EDIÇÃO, prepara a comparação (DE -> PARA)
         sql_atual = ""
         cols = []
         labels = {}
@@ -3568,7 +3590,6 @@ def get_detalhes_solicitacao(id):
             cols = ["uvr", "associacao", "banco_codigo", "banco_nome", "agencia", "conta_corrente", "descricao_conta"]
             labels = {"uvr":"UVR", "associacao":"Assoc", "banco_codigo":"Cód Banco", "banco_nome":"Nome Banco", "agencia":"Agência", "conta_corrente":"Conta", "descricao_conta":"Descrição"}
         
-        # --- TRANSAÇÕES FINANCEIRAS ---
         elif tabela == 'transacoes_financeiras':
             sql_atual = """
                 SELECT uvr, associacao, data_documento, tipo_transacao, tipo_atividade, 
@@ -3583,26 +3604,59 @@ def get_detalhes_solicitacao(id):
                 "numero_documento": "Nº Doc", "nome_origem": "Origem/Destino", "valor_total": "Total (R$)"
             }
 
-        if not sql_atual: return jsonify({"error": "Tabela desconhecida"}), 400
+        # --- NOVO BLOCO: PATRIMÔNIO ---
+        elif tabela == 'patrimonio':
+            sql_atual = """
+                SELECT uvr, descricao, tipo_bem, categoria, placa, codigo_patrimonio, 
+                       status_bem, nome_responsavel, observacoes_gerais
+                FROM patrimonio WHERE id = %s
+            """
+            cols = ["uvr", "descricao", "tipo_bem", "categoria", "placa", "codigo_patrimonio", "status_bem", "nome_responsavel", "observacoes_gerais"]
+            labels = {
+                "uvr": "UVR", "descricao": "Descrição", "tipo_bem": "Tipo", "categoria": "Categoria",
+                "placa": "Placa", "codigo_patrimonio": "Cód. Patrimônio", "status_bem": "Status", 
+                "nome_responsavel": "Responsável", "observacoes_gerais": "Observações"
+            }
+        # ------------------------------
 
+        if not sql_atual: 
+            return jsonify({"error": f"Tabela '{tabela}' desconhecida ou não configurada para detalhes."}), 400
+
+        # Busca os dados ATUAIS no banco
         cur.execute(sql_atual, (id_reg,))
         atual = cur.fetchone()
+        
         d_atuais = {}
         if atual:
-            for i, c in enumerate(cols): d_atuais[c] = str(atual[i]) if atual[i] is not None else ""
+            for i, c in enumerate(cols): 
+                # Converte None para string vazia
+                d_atuais[c] = str(atual[i]) if atual[i] is not None else ""
         else:
-            for c in cols: d_atuais[c] = "(Registro não encontrado)"
+            for c in cols: d_atuais[c] = "(Registro não encontrado - Talvez excluído?)"
 
+        # Monta a lista de comparação
         comp = []
         for k, l in labels.items():
-            val_atual = d_atuais.get(k,"")
-            val_novo = str(d_novos.get(k,"")) if d_novos.get(k) is not None else ""
+            val_atual = d_atuais.get(k,"").strip()
+            
+            # Pega valor novo do JSON
+            raw_novo = d_novos.get(k)
+            if raw_novo is None: val_novo = ""
+            else: val_novo = str(raw_novo).strip()
+            
+            # Normalizações para evitar falso positivo na comparação
             if val_atual == "None": val_atual = ""
             if val_novo == "None": val_novo = ""
             
-            comp.append({ "campo": l, "valor_atual": val_atual, "valor_novo": val_novo, "mudou": val_atual != val_novo })
+            # Adiciona na lista visual
+            comp.append({ 
+                "campo": l, 
+                "valor_atual": val_atual, 
+                "valor_novo": val_novo, 
+                "mudou": val_atual != val_novo 
+            })
         
-        # --- LÓGICA ESPECIAL PARA ITENS DA TRANSAÇÃO (GERA TABELA HTML) ---
+        # --- LÓGICA ESPECIAL PARA ITENS DA TRANSAÇÃO (TABELA HTML) ---
         if tabela == 'transacoes_financeiras':
             # 1. Busca Itens do Banco (Antigos)
             cur.execute("""
@@ -3614,7 +3668,7 @@ def get_detalhes_solicitacao(id):
             # 2. Busca Itens do JSON (Novos)
             itens_novos = d_novos.get('itens', [])
 
-            # Função auxiliar para gerar HTML
+            # Função auxiliar interna
             def gerar_html_tabela(lista_itens, origem):
                 if not lista_itens: return '<small class="text-muted">Nenhum item</small>'
                 
@@ -3644,7 +3698,6 @@ def get_detalhes_solicitacao(id):
             html_atual = gerar_html_tabela(itens_db, 'db')
             html_novo = gerar_html_tabela(itens_novos, 'json')
             
-            # Compara strings HTML (não é perfeito, mas serve para indicar mudança visual)
             mudou_itens = (html_atual != html_novo)
 
             comp.append({
@@ -3655,11 +3708,17 @@ def get_detalhes_solicitacao(id):
             })
         # ------------------------------------------------------------------
 
+        # Verifica se tem foto nova (Patrimônio ou Associado)
+        foto_nova = d_novos.get("foto_bem_base64") or d_novos.get("foto_base64") or ""
+
         return jsonify({
             "id_solicitacao": id, "usuario": usuario, 
             "data": data_solic.strftime('%d/%m %H:%M') if data_solic else "Data desc.",
-            "tipo": "EDICAO", "comparacao": comp, "foto_nova_base64": d_novos.get("foto_base64","")
+            "tipo": "EDICAO", 
+            "comparacao": comp, 
+            "foto_nova_base64": foto_nova
         })
+
     except Exception as e:
         app.logger.error(f"Erro em get_detalhes_solicitacao: {e}")
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
@@ -4138,6 +4197,269 @@ def excluir_movimentacao(id):
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+# --- GESTÃO DE PATRIMÔNIO / FROTA ---
+
+@app.route("/cadastrar_patrimonio", methods=["POST"])
+@login_required
+def cadastrar_patrimonio():
+    conn = None
+    try:
+        dados = request.form
+        
+        # Checkboxes
+        permite_abast = True if dados.get("permite_abastecimento") else False
+        permite_manut = True if dados.get("permite_manutencao") else False
+        bem_publico = True if dados.get("eh_bem_publico") else False
+        uso_compartilhado = True if dados.get("uso_compartilhado") else False
+        
+        # Foto
+        foto_final = ""
+        foto_webcam = dados.get("foto_bem_base64_webcam")
+        if foto_webcam and "data:image" in foto_webcam:
+            foto_final = foto_webcam
+        elif 'foto_bem_upload' in request.files:
+            arquivo = request.files['foto_bem_upload']
+            if arquivo and arquivo.filename:
+                conteudo = arquivo.read()
+                encoded = base64.b64encode(conteudo).decode('utf-8')
+                mime = arquivo.content_type or "image/jpeg"
+                foto_final = f"data:{mime};base64,{encoded}"
+
+        def data_or_none(d): return d if d else None
+        
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            INSERT INTO patrimonio (
+                uvr, associacao, tipo_bem, categoria, descricao, codigo_patrimonio, marca, modelo,
+                ano_fabricacao, numero_serie_chassi, situacao_propriedade, entidade_proprietaria,
+                orgao_cedente, numero_termo_comodato, data_inicio_comodato, data_fim_comodato,
+                placa, renavam, combustivel, capacidade_carga, controle_por, medidor_inicial, medidor_atual,
+                local_instalacao, setor_uso, nome_responsavel, nome_operador_principal,
+                status_bem, estado_conservacao, permite_abastecimento, permite_manutencao,
+                alerta_preventiva, observacoes_gerais, foto_bem_base64, eh_bem_publico, uso_compartilhado
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            dados["uvr_patrimonio"], dados.get("associacao_patrimonio",""), dados["tipo_bem"], dados["categoria_bem"],
+            dados["descricao_bem"], dados["codigo_patrimonio"], dados["marca_bem"], dados["modelo_bem"],
+            dados["ano_fabricacao"] or 0, dados["serie_chassi"], dados["situacao_propriedade"], dados["entidade_proprietaria"],
+            dados["orgao_cedente"], dados["num_termo"], data_or_none(dados["data_inicio_comodato"]), data_or_none(dados["data_fim_comodato"]),
+            dados["placa"], dados["renavam"], dados["combustivel"], dados["capacidade_carga"], dados["controle_por"],
+            dados["medidor_inicial"] or 0, dados["medidor_inicial"] or 0,
+            dados["local_instalacao"], dados["setor_uso"], dados["nome_responsavel"], dados["nome_operador"],
+            dados["status_bem"], dados["estado_conservacao"], permite_abast, permite_manut,
+            dados["alerta_preventiva"] or 0, dados["observacoes_gerais"], foto_final, bem_publico, uso_compartilhado
+        ))
+        conn.commit()
+        return pagina_sucesso_base("Sucesso", "Bem/Patrimônio cadastrado com sucesso!")
+        
+    except Exception as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro ao cadastrar patrimônio: {e}")
+        return f"Erro: {e}", 500
+    finally:
+        if conn: conn.close()
+
+@app.route("/buscar_patrimonio", methods=["GET"])
+@login_required
+def buscar_patrimonio():
+    conn = None
+    try:
+        termo = request.args.get("q", "").lower()
+        categoria = request.args.get("categoria", "")
+        uvr = request.args.get("uvr", "")
+
+        sql = "SELECT id, descricao, tipo_bem, placa, status_bem, nome_responsavel, medidor_atual, controle_por, categoria, codigo_patrimonio FROM patrimonio WHERE 1=1"
+        params = []
+        
+        if current_user.role == 'admin':
+            if uvr and uvr != "Todas":
+                sql += " AND uvr = %s"
+                params.append(uvr)
+        elif current_user.uvr_acesso:
+            sql += " AND uvr = %s"
+            params.append(current_user.uvr_acesso)
+            
+        if categoria and categoria != "Todos":
+            sql += " AND categoria = %s"
+            params.append(categoria)
+            
+        if termo:
+            sql += " AND (LOWER(descricao) LIKE %s OR placa LIKE %s OR codigo_patrimonio LIKE %s)"
+            params.extend([f"%{termo}%", f"%{termo}%", f"%{termo}%"])
+            
+        sql += " ORDER BY descricao ASC"
+        
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute(sql, tuple(params))
+        res = []
+        for r in cur.fetchall():
+            medida = f"{float(r[6]):.0f} {r[7]}" if r[6] is not None else "-"
+            # r[3] é placa, r[9] é código
+            identificacao = r[3] if r[3] else (r[9] or "-")
+            
+            res.append({
+                "id": r[0], "descricao": r[1], "tipo": r[2], "placa": identificacao,
+                "status": r[4], "responsavel": r[5] or "-", "medidor": medida, "categoria": r[8]
+            })
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route("/get_patrimonio_detalhes/<int:id>")
+@login_required
+def get_patrimonio_detalhes(id):
+    conn = conectar_banco()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM patrimonio WHERE id = %s", (id,))
+        if cur.rowcount == 0: return jsonify({"error": "Não encontrado"}), 404
+        
+        # Mapeia colunas dinamicamente
+        columns = [desc[0] for desc in cur.description]
+        row = cur.fetchone()
+        data = dict(zip(columns, row))
+        
+        # Formata datas e decimais para JSON
+        for k, v in data.items():
+            if isinstance(v, (date, datetime)): data[k] = v.strftime('%Y-%m-%d')
+            if isinstance(v, Decimal): data[k] = float(v)
+            
+        return jsonify(data)
+    finally:
+        conn.close()
+
+@app.route("/editar_patrimonio", methods=["POST"])
+@login_required
+def editar_patrimonio():
+    conn = None
+    try:
+        dados = request.form
+        id_pat = dados.get("id_patrimonio")
+        
+        # 1. Prepara os dados (com tratamento de tipos)
+        permite_abast = True if dados.get("permite_abastecimento") else False
+        permite_manut = True if dados.get("permite_manutencao") else False
+        bem_publico = True if dados.get("eh_bem_publico") else False
+        uso_comp = True if dados.get("uso_compartilhado") else False
+        
+        def data_or_none(d): return d if d else None
+
+        # Foto (Lógica: Webcam > Upload > Manter Antiga)
+        foto_final = None
+        foto_webcam = dados.get("foto_bem_base64_webcam")
+        if foto_webcam and "data:image" in foto_webcam:
+            foto_final = foto_webcam
+        elif 'foto_bem_upload' in request.files:
+            arquivo = request.files['foto_bem_upload']
+            if arquivo and arquivo.filename:
+                conteudo = arquivo.read()
+                encoded = base64.b64encode(conteudo).decode('utf-8')
+                mime = arquivo.content_type or "image/jpeg"
+                foto_final = f"data:{mime};base64,{encoded}"
+        
+        # Monta dicionário de dados limpos
+        dados_tratados = {
+            "uvr": dados["uvr_patrimonio"],
+            "associacao": dados.get("associacao_patrimonio",""),
+            "tipo_bem": dados["tipo_bem"], "categoria": dados["categoria_bem"],
+            "descricao": dados["descricao_bem"], "codigo_patrimonio": dados["codigo_patrimonio"],
+            "marca": dados["marca_bem"], "modelo": dados["modelo_bem"],
+            "ano_fabricacao": dados["ano_fabricacao"] or 0, "numero_serie_chassi": dados["serie_chassi"],
+            "situacao_propriedade": dados["situacao_propriedade"], "entidade_proprietaria": dados["entidade_proprietaria"],
+            "orgao_cedente": dados["orgao_cedente"], "numero_termo_comodato": dados["num_termo"],
+            "data_inicio_comodato": data_or_none(dados["data_inicio_comodato"]),
+            "data_fim_comodato": data_or_none(dados["data_fim_comodato"]),
+            "placa": dados["placa"], "renavam": dados["renavam"],
+            "combustivel": dados["combustivel"], "capacidade_carga": dados["capacidade_carga"],
+            "controle_por": dados["controle_por"], "medidor_inicial": dados["medidor_inicial"] or 0,
+            "local_instalacao": dados["local_instalacao"], "setor_uso": dados["setor_uso"],
+            "nome_responsavel": dados["nome_responsavel"], "nome_operador_principal": dados["nome_operador"],
+            "status_bem": dados["status_bem"], "estado_conservacao": dados["estado_conservacao"],
+            "permite_abastecimento": permite_abast, "permite_manutencao": permite_manut,
+            "alerta_preventiva": dados["alerta_preventiva"] or 0, "observacoes_gerais": dados["observacoes_gerais"],
+            "eh_bem_publico": bem_publico, "uso_compartilhado": uso_comp
+        }
+        
+        if foto_final:
+            dados_tratados["foto_bem_base64"] = foto_final
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        # --- FLUXO DE DECISÃO ---
+        if current_user.role == 'admin':
+            # ADMIN: UPDATE DIRETO
+            campos_sql = ", ".join([f"{k}=%s" for k in dados_tratados.keys()])
+            valores = list(dados_tratados.values())
+            valores.append(id_pat)
+            
+            cur.execute(f"UPDATE patrimonio SET {campos_sql} WHERE id=%s", tuple(valores))
+            conn.commit()
+            return pagina_sucesso_base("Sucesso", "Patrimônio atualizado com sucesso!")
+        else:
+            # USUÁRIO: SOLICITAÇÃO
+            # Adiciona nome para facilitar visualização na lista de aprovação
+            dados_tratados["nome_visual"] = f"{dados_tratados['descricao']} ({dados_tratados['placa'] or dados_tratados['codigo_patrimonio']})"
+            
+            # Serializa dados (converter date para string)
+            def json_serial(obj):
+                if isinstance(obj, (datetime, date)): return obj.isoformat()
+                return str(obj)
+
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('patrimonio', id_pat, 'EDICAO', json.dumps(dados_tratados, default=json_serial), current_user.username))
+            
+            conn.commit()
+            return pagina_sucesso_base("Solicitação Enviada", "As alterações foram enviadas para aprovação do administrador.")
+
+    except Exception as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro edição patrimonio: {e}")
+        return f"Erro: {e}", 500
+    finally:
+        if conn: conn.close()
+
+@app.route("/excluir_patrimonio/<int:id>", methods=["POST"])
+@login_required
+def excluir_patrimonio(id):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        # Busca descrição para o log
+        cur.execute("SELECT descricao FROM patrimonio WHERE id=%s", (id,))
+        row = cur.fetchone()
+        desc = row[0] if row else "Item Desconhecido"
+
+        if current_user.role == 'admin':
+            cur.execute("DELETE FROM patrimonio WHERE id=%s", (id,))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Item excluído permanentemente."})
+        else:
+            # Solicitação
+            dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "nome_visual": desc})
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('patrimonio', id, 'EXCLUSAO', dados_json, current_user.username))
+            conn.commit()
+            return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
+            
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
