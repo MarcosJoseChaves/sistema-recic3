@@ -9,12 +9,18 @@ import psycopg2
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
+# Import do Cursor para o Banco de Dados
+from psycopg2.extras import RealDictCursor
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
+# Import do Flask (incluindo send_file e make_response para downloads)
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# ReportLab Imports (Para PDF)
+# --- REPORTLAB IMPORTS (CORRIGIDO) ---
+# Esta é a linha que faltava e causava o erro "NameError: name 'canvas' is not defined":
+from reportlab.pdfgen import canvas 
+
 from reportlab.lib.pagesizes import letter, A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image as ReportLabImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -22,6 +28,8 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.lib import colors
 from reportlab.lib.units import inch, cm
 from reportlab.lib.utils import ImageReader
+
+# --- FIM DOS IMPORTS ---
 
 # --- CONFIGURAÇÕES GLOBAIS ---
 # Estes grupos devem ser os mesmos que aparecem nas opções de "Atividade" do HTML
@@ -1203,12 +1211,14 @@ def registrar_transacao_financeira():
     try:
         dados = request.form
         app.logger.info(f"Dados para registrar transação: {dados}")
+
+        # Lista de campos obrigatórios (Data/Hora removida para não travar)
         required_fields = { 
             "uvr_transacao": "UVR", "data_documento_transacao": "Data do Documento", 
             "tipo_transacao": "Tipo (Receita/Despesa)",
-            "tipo_atividade_transacao": "Tipo de Atividade", 
-            "data_hora_cadastro_transacao": "Data/Hora do Cadastro"
+            "tipo_atividade_transacao": "Tipo de Atividade"
         }
+        
         for field, msg in required_fields.items():
             if not dados.get(field):
                 return f"{msg} é obrigatório(a).", 400
@@ -1284,11 +1294,28 @@ def registrar_transacao_financeira():
         
         try:
             data_documento = datetime.strptime(dados["data_documento_transacao"], '%Y-%m-%d').date()
-            data_hora_registro = datetime.strptime(dados["data_hora_cadastro_transacao"], '%d/%m/%Y %H:%M:%S')
+            
+            # Tratamento da Data/Hora (com fallback se vier vazia)
+            data_hora_str = dados.get("data_hora_cadastro_transacao")
+            if data_hora_str and data_hora_str.strip():
+                # Tenta formato com vírgula (padrão navegador BR) ou sem (padrão Python)
+                try:
+                    data_hora_registro = datetime.strptime(data_hora_str, '%d/%m/%Y %H:%M:%S')
+                except ValueError:
+                    try:
+                        data_hora_registro = datetime.strptime(data_hora_str, '%d/%m/%Y, %H:%M:%S')
+                    except ValueError:
+                         data_hora_registro = datetime.now() # Desiste e usa agora
+            else:
+                data_hora_registro = datetime.now()
+                
         except ValueError as e:
             return f"Formato de data inválido: {e}", 400
 
-        conn = conectar_banco()
+        # --- CORREÇÃO AQUI: USANDO O NOME CERTO DA FUNÇÃO ---
+        conn = conectar_banco() 
+        # ----------------------------------------------------
+        
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO transacoes_financeiras
@@ -1318,16 +1345,8 @@ def registrar_transacao_financeira():
         return redirect(url_for("sucesso_transacao"))
     except psycopg2.Error as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro de DB em /registrar_transacao_financeira: {e} - {getattr(e, 'diag', '')}")
+        app.logger.error(f"Erro de DB em /registrar_transacao_financeira: {e}")
         return f"Erro no banco de dados: {e}", 500
-    except ValueError as e: 
-        if conn: conn.rollback()
-        app.logger.error(f"Erro de valor em /registrar_transacao_financeira: {e}")
-        return f"Erro de formato de dados: {e}", 400
-    except InvalidOperation as e: 
-        if conn: conn.rollback()
-        app.logger.error(f"Erro de operação Decimal em /registrar_transacao_financeira: {e}")
-        return f"Erro de formato numérico: {e}", 400
     except Exception as e:
         if conn: conn.rollback()
         app.logger.error(f"Erro inesperado em /registrar_transacao_financeira: {e}", exc_info=True)
@@ -3730,44 +3749,47 @@ def get_detalhes_solicitacao(id):
 @app.route("/buscar_transacoes_gestao", methods=["GET"])
 @login_required
 def buscar_transacoes_gestao():
-    # Pega os filtros que vieram do Javascript
+    # 1. Pega os filtros que vieram do Javascript
     data_ini = request.args.get("data_inicial")
-    data_fim = request.args.get("data_final")
+    data_final = request.args.get("data_final")
     tipo = request.args.get("tipo")
-    uvr_tela = request.args.get("uvr")
+    uvr_solicitada = request.args.get("uvr") # Filtro de UVR do Admin
     termo = request.args.get("q", "").lower()
 
     conn = None
     try:
-        conn = conectar_banco()
+        # --- CORREÇÃO FEITA AQUI: Usando conectar_banco() ---
+        conn = conectar_banco() 
         cur = conn.cursor()
 
-        # SQL Base
+        # 2. SQL Base
         sql = """
-            SELECT id, data_documento, tipo_transacao, nome_cadastro_origem, 
-                   numero_documento, valor_total_documento, status_pagamento, uvr
+            SELECT id, uvr, data_documento, tipo_transacao, nome_cadastro_origem, 
+                   numero_documento, valor_total_documento, status_pagamento
             FROM transacoes_financeiras 
             WHERE 1=1
         """
         params = []
 
-        # --- Lógica de Segurança UVR ---
+        # 3. Lógica de Segurança UVR
         if current_user.role == 'admin':
-            if uvr_tela and uvr_tela != "Todas":
+            # Se for Admin, obedece o filtro da tela (se tiver)
+            if uvr_solicitada and uvr_solicitada != "Todas" and uvr_solicitada != "":
                 sql += " AND uvr = %s"
-                params.append(uvr_tela)
-        elif current_user.uvr_acesso:
+                params.append(uvr_solicitada)
+        else:
+            # Se NÃO for Admin, trava na UVR do usuário (ignora o filtro da tela)
             sql += " AND uvr = %s"
             params.append(current_user.uvr_acesso)
         
-        # --- Aplica os outros filtros ---
+        # 4. Aplica os outros filtros
         if data_ini:
             sql += " AND data_documento >= %s"
             params.append(data_ini)
         
-        if data_fim:
+        if data_final:
             sql += " AND data_documento <= %s"
-            params.append(data_fim)
+            params.append(data_final)
             
         if tipo and tipo != "Todos":
             sql += " AND tipo_transacao = %s"
@@ -3775,7 +3797,8 @@ def buscar_transacoes_gestao():
 
         if termo:
             sql += " AND (LOWER(nome_cadastro_origem) LIKE %s OR numero_documento LIKE %s)"
-            params.extend([f"%{termo}%", f"%{termo}%"])
+            termo_like = f"%{termo}%"
+            params.extend([termo_like, termo_like])
 
         # Ordenar: Mais recentes primeiro
         sql += " ORDER BY data_documento DESC, id DESC LIMIT 100"
@@ -3783,22 +3806,24 @@ def buscar_transacoes_gestao():
         cur.execute(sql, tuple(params))
         rows = cur.fetchall()
 
+        # 5. Monta o JSON para o Frontend
         resultados = []
         for r in rows:
-            # Formata a data para ficar bonitinha (dd/mm/aaaa)
-            data_fmt = r[1].strftime('%d/%m/%Y') if r[1] else "-"
-            # Formata o valor para dinheiro
-            val_fmt = f"{float(r[5]):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            # Formata a data para ficar bonita (dd/mm/aaaa)
+            data_fmt = r[2].strftime('%d/%m/%Y') if r[2] else "-"
+            
+            # Formata valor para float simples
+            val_float = float(r[6]) if r[6] else 0.00
 
             resultados.append({
                 "id": r[0],
-                "data": data_fmt,
-                "tipo": r[2],
-                "origem": r[3],
-                "doc": r[4] or "-",
-                "valor": val_fmt,
-                "status": r[6],
-                "uvr": r[7]
+                "uvr": r[1],
+                "data_documento": data_fmt,
+                "tipo_transacao": r[3],
+                "nome_cadastro_origem": r[4],
+                "numero_documento": r[5] or "-",
+                "valor_total_documento": val_float,
+                "status_pagamento": r[7]
             })
 
         return jsonify(resultados)
@@ -3808,6 +3833,7 @@ def buscar_transacoes_gestao():
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
 @app.route("/get_transacao_detalhes/<int:id>", methods=["GET"])
 @login_required
 def get_transacao_detalhes(id):
@@ -4045,48 +4071,31 @@ def api_produtos_crud():
         return jsonify({"erro": str(e)}), 500
     finally:
         conn.close()
-@app.route("/excluir_transacao/<int:id>", methods=["POST"])
+@app.route('/excluir_transacao/<int:id>', methods=['POST'])
 @login_required
 def excluir_transacao(id):
-    conn = None
+    # Segurança: Apenas Admin pode excluir (opcional, remova o if se quiser liberar)
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Permissão negada. Apenas administradores podem excluir.'}), 403
+
+    conn = conectar_banco()
+    cur = conn.cursor()
     try:
-        conn = conectar_banco()
-        cur = conn.cursor()
+        # 1. Primeiro exclui os itens da transação (para não dar erro de chave estrangeira)
+        cur.execute("DELETE FROM itens_transacao WHERE id_transacao = %s", (id,))
         
-        # Verifica se tem pagamentos vinculados
-        cur.execute("SELECT valor_pago_recebido FROM transacoes_financeiras WHERE id = %s", (id,))
-        row = cur.fetchone()
-        if not row: return jsonify({"error": "Transação não encontrada"}), 404
+        # 2. Depois exclui a transação principal
+        cur.execute("DELETE FROM transacoes_financeiras WHERE id = %s", (id,))
         
-        valor_pago = row[0]
-        if valor_pago > 0:
-            return jsonify({"error": "Não é possível excluir esta transação pois ela possui pagamentos/recebimentos registrados no Fluxo de Caixa. Estorne os pagamentos antes."}), 400
-
-        # Pega dados para o log/solicitação
-        cur.execute("SELECT numero_documento, nome_cadastro_origem FROM transacoes_financeiras WHERE id = %s", (id,))
-        dados_reg = cur.fetchone()
-        desc = f"NF {dados_reg[0]} - {dados_reg[1]}"
-
-        if current_user.role == 'admin':
-            cur.execute("DELETE FROM transacoes_financeiras WHERE id = %s", (id,))
-            conn.commit()
-            return jsonify({"status": "sucesso", "message": "Transação excluída com sucesso."})
-        else:
-            # Solicitação
-            dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "descricao": desc})
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('transacoes_financeiras', id, 'EXCLUSAO', dados_json, current_user.username))
-            conn.commit()
-            return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada."})
-
+        conn.commit()
+        return jsonify({'message': 'Transação excluída com sucesso!'}), 200
     except Exception as e:
-        if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        conn.rollback()
+        app.logger.error(f"Erro ao excluir transação {id}: {e}")
+        return jsonify({'error': str(e)}), 500
     finally:
-        if conn: conn.close()
+        conn.close()
+
 # --- ROTAS DE GESTÃO DO FLUXO DE CAIXA (CRUD) ---
 
 @app.route("/get_movimentacao_detalhes/<int:id>")
@@ -4460,7 +4469,190 @@ def excluir_patrimonio(id):
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+@app.route('/baixar_relatorio_financeiro')
+@login_required
+def baixar_relatorio_financeiro():
+    formato = request.args.get('formato')
+    data_ini = request.args.get('data_inicial')
+    data_final = request.args.get('data_final')
+    tipo = request.args.get('tipo')
+    uvr_solicitada = request.args.get('uvr')
 
+    # Segurança de UVR
+    if current_user.role == 'admin':
+        uvr_filtro = uvr_solicitada
+    else:
+        uvr_filtro = current_user.uvr_acesso
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    # --- CORREÇÃO AQUI: Trocamos 'produtos_servicos' por 'produtos' ---
+    sql = """
+        SELECT 
+            t.data_documento,
+            t.uvr,
+            t.tipo_transacao,
+            t.nome_cadastro_origem,
+            t.numero_documento,
+            it.valor_total_item,
+            COALESCE(p.grupo, 'Outros') as grupo,
+            COALESCE(p.subgrupo, 'Geral') as subgrupo,
+            it.descricao as item_desc
+        FROM transacoes_financeiras t
+        LEFT JOIN itens_transacao it ON t.id = it.id_transacao
+        LEFT JOIN produtos p ON it.descricao = p.nome 
+        WHERE 1=1
+    """
+    # ------------------------------------------------------------------
+
+    params = []
+
+    if uvr_filtro and uvr_filtro != "Todas" and uvr_filtro != "":
+        sql += " AND t.uvr = %s"
+        params.append(uvr_filtro)
+    if data_ini:
+        sql += " AND t.data_documento >= %s"
+        params.append(data_ini)
+    if data_final:
+        sql += " AND t.data_documento <= %s"
+        params.append(data_final)
+    if tipo and tipo != "Todas":
+        sql += " AND t.tipo_transacao = %s"
+        params.append(tipo)
+
+    sql += " ORDER BY t.data_documento DESC"
+    
+    cur.execute(sql, tuple(params))
+    dados = cur.fetchall()
+    conn.close()
+
+    # --- GERAR CSV ---
+    if formato == 'csv':
+        si = io.StringIO()
+        cw = csv.writer(si, delimiter=';') # Ponto e vírgula para Excel BR
+        cw.writerow(['Data', 'UVR', 'Tipo', 'Origem', 'N Doc', 'Grupo', 'Subgrupo', 'Item', 'Valor'])
+        
+        for row in dados:
+            data_fmt = row['data_documento'].strftime('%d/%m/%Y') if row['data_documento'] else '-'
+            # Converte Decimal para string com vírgula
+            valor_dec = row['valor_total_item']
+            if isinstance(valor_dec, Decimal):
+                valor_fmt = f"{valor_dec:.2f}".replace('.', ',')
+            else:
+                valor_fmt = str(valor_dec).replace('.', ',')
+
+            cw.writerow([
+                data_fmt, row['uvr'], row['tipo_transacao'], row['nome_cadastro_origem'],
+                row['numero_documento'], row['grupo'], row['subgrupo'], row['item_desc'], valor_fmt
+            ])
+            
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = f"attachment; filename=relatorio_{data_ini}_{data_final}.csv"
+        output.headers["Content-type"] = "text/csv; charset=utf-8-sig" # utf-8-sig para acentos no Excel
+        return output
+
+    # --- GERAR PDF (Simples) ---
+    elif formato == 'pdf':
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        y = height - 50
+
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(30, y, f"Relatório Financeiro ({data_ini} a {data_final})")
+        y -= 30
+        p.setFont("Helvetica", 9)
+
+        # Cabeçalho
+        p.drawString(30, y, "Data")
+        p.drawString(85, y, "Tipo")
+        p.drawString(140, y, "Descrição / Origem")
+        p.drawString(450, y, "Valor (R$)")
+        y -= 20
+        p.line(30, y+15, 550, y+15)
+
+        total = 0
+        for row in dados:
+            if y < 50: # Nova página se acabar o espaço
+                p.showPage()
+                y = height - 50
+                p.setFont("Helvetica", 9)
+            
+            data_fmt = row['data_documento'].strftime('%d/%m/%Y') if row['data_documento'] else '-'
+            valor = float(row['valor_total_item']) if row['valor_total_item'] else 0.0
+            total += valor
+            
+            p.drawString(30, y, data_fmt)
+            p.drawString(85, y, (row['tipo_transacao'] or '')[:10])
+            # Corta texto longo para não invadir o valor
+            origem_texto = (row['nome_cadastro_origem'] or '')[:50]
+            p.drawString(140, y, origem_texto)
+            
+            p.drawRightString(550, y, f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            y -= 15
+
+        y -= 10
+        p.line(30, y+15, 550, y+15)
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(350, y, "TOTAL:")
+        p.drawRightString(550, y, f"R$ {total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+        p.showPage()
+        p.save()
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name=f"relatorio_{data_ini}_{data_final}.pdf", mimetype='application/pdf')
+
+    return "Formato inválido", 400
+@app.route('/criar_tabela_produtos_fix')
+def criar_tabela_produtos_fix():
+    conn = conectar_banco()
+    cur = conn.cursor()
+    log = []
+    try:
+        # 1. Garante que a tabela nova existe
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS produtos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(255) NOT NULL,
+                grupo VARCHAR(100),
+                subgrupo VARCHAR(100),
+                unidade VARCHAR(20),
+                valor_padrao DECIMAL(10,2),
+                tipo VARCHAR(50),
+                uvr VARCHAR(20)
+            );
+        """)
+        log.append("✅ Tabela 'produtos' verificada.")
+
+        # 2. Migração Cirúrgica (Baseada nas colunas que você me passou)
+        # Mapeamento: item -> nome, grupo -> grupo, subgrupo -> subgrupo, valor_padrao -> valor_padrao, tipo -> tipo
+        # Como não tem 'unidade' na antiga, vamos definir como 'UN' por padrão.
+        
+        cur.execute("""
+            INSERT INTO produtos (nome, grupo, subgrupo, valor_padrao, tipo, unidade)
+            SELECT 
+                item,             -- Vai para 'nome'
+                grupo,            -- Vai para 'grupo'
+                subgrupo,         -- Vai para 'subgrupo'
+                valor_padrao,     -- Vai para 'valor_padrao'
+                tipo,             -- Vai para 'tipo'
+                'UN'              -- Unidade padrão
+            FROM produtos_servicos 
+            WHERE item NOT IN (SELECT nome FROM produtos);
+        """)
+        
+        linhas_copiadas = cur.rowcount
+        log.append(f"🚀 Sucesso! {linhas_copiadas} produtos foram migrados da tabela antiga para a nova.")
+        
+        conn.commit()
+        return f"<h1>Migração Concluída!</h1><p>{'<br>'.join(log)}</p><br><a href='/'>Voltar e Testar Relatórios</a>"
+
+    except Exception as e:
+        conn.rollback()
+        return f"<h1>Erro na Migração:</h1><p>{str(e)}</p>"
+    finally:
+        conn.close()
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
     return f"""<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>{titulo}</title>
@@ -4481,7 +4673,6 @@ def sucesso_produto_servico(): return pagina_sucesso_base("Sucesso", "Produto/Se
 def sucesso_conta_corrente(): return pagina_sucesso_base("Sucesso", "Conta Corrente cadastrada com sucesso!")
 @app.route("/sucesso_denuncia")
 def sucesso_denuncia(): return pagina_sucesso_base("Sucesso", "Denúncia registrada com sucesso!")
-
 
 if __name__ == "__main__":
     import logging

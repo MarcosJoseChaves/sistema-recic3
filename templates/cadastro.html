@@ -77,658 +77,809 @@
 <body>
 
 <div class="container text-center">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3>Sistema de Gestão - {{ usuario.nome_completo if usuario else 'Visitante' }} 
-                <small class="text-muted fs-6">({{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else 'Admin' }})</small>
-            </h3>
-            <div>
-                <a href="/alterar_senha" class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-key"></i> Alterar Senha</a>
-                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</a>
-            </div>
-        </div>
-
-        <div class="container mb-5" id="menuPrincipal">
-            <div class="row g-4">
-                
-                <div class="col-md-4">
-                    <div class="card h-100 dashboard-card">
-                        <div class="card-header card-header-custom bg-primary text-white">
-                            <i class="fas fa-users me-2"></i> Cadastros Gerais
-                        </div>
-                        <div class="card-body">
-                            <small class="text-muted d-block mb-2">PESSOAS & ENTIDADES</small>
-                            <div class="btn-group-dashboard">
-                                <button id="btnClienteFornecedor" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus"></i> Novo</button>
-                                <button id="btnGestaoCadastros" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Pesquisar</button>
-                            </div>
-
-                            <div class="btn-group-dashboard">
-                                <button id="btnAssociado" class="btn btn-outline-primary btn-sm"><i class="fas fa-user-plus"></i> Associado</button>
-                                <button id="btnGestaoAssociados" class="btn btn-primary btn-sm"><i class="fas fa-users"></i> Gerenciar</button>
-                            </div>
-
-                            <hr>
-                            <small class="text-muted d-block mb-2">PATRIMÔNIO & ESTRUTURA</small>
-                            <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="mostrarFormulario('gestaoPatrimonioContainer')">
-                                <i class="fas fa-truck-moving"></i> Frota & Equipamentos
-                            </button>
-
-                            {% if usuario and usuario.role == 'admin' %}
-                            <hr>
-                            <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
-                            <button id="btnGestaoProdutosServicos" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm"><i class="fas fa-box-open"></i> Catálogo de Produtos</button>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="card h-100 dashboard-card">
-                        <div class="card-header card-header-custom bg-success text-white">
-                            <i class="fas fa-wallet me-2"></i> Operacional Financeiro
-                        </div>
-                        <div class="card-body">
-                            <small class="text-muted d-block mb-2">LANÇAMENTOS (Dia a Dia)</small>
-                            <button id="btnReceitaDespesa" class="btn btn-success w-100 btn-dashboard shadow-sm"><i class="fas fa-plus-circle"></i> Nova Receita / Despesa</button>
-                            <button id="btnGestaoTransacoes" class="btn btn-outline-success w-100 btn-dashboard"><i class="fas fa-search-dollar"></i> Pesquisar Transações</button>
-
-                            <hr>
-                            <small class="text-muted d-block mb-2">BANCÁRIO</small>
-                            <div class="btn-group-dashboard">
-                                <button id="btnContaCorrente" class="btn btn-outline-dark btn-sm"><i class="fas fa-landmark"></i> Nova Conta</button>
-                                <button id="btnGestaoContas" class="btn btn-dark btn-sm"><i class="fas fa-list"></i> Listar Contas</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {% if usuario and usuario.role == 'admin' %}
-                <div class="col-md-4">
-                    <div class="card h-100 dashboard-card">
-                        <div class="card-header card-header-custom bg-warning text-dark">
-                            <i class="fas fa-chart-line me-2"></i> Gestão & Controle
-                        </div>
-                        <div class="card-body">
-                            <small class="text-muted d-block mb-2">FLUXO DE CAIXA</small>
-                            <button id="btnFluxoCaixa" class="btn btn-danger w-100 btn-dashboard mb-3 text-white"><i class="fas fa-exchange-alt"></i> Baixas & Conciliação</button>
-                            
-                            <small class="text-muted d-block mb-2">RELATÓRIOS</small>
-                            <div class="btn-group-dashboard">
-                                <button id="btnExtratoBancario" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-invoice-dollar"></i> Extrato</button>
-                                <button id="btnRelatorios" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-alt"></i> Financeiro</button>
-                            </div>
-                            
-                            <hr>
-                            <small class="text-muted d-block mb-2">ADMINISTRAÇÃO</small>
-                            <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
-                                <i class="fas fa-check-double"></i> Aprovações Pendentes
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>Sistema de Gestão - {{ usuario.nome_completo if usuario else 'Visitante' }} 
+            <small class="text-muted fs-6">({{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else 'Admin' }})</small>
+        </h3>
+        <div>
+            <a href="/alterar_senha" class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-key"></i> Alterar Senha</a>
+            <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</a>
         </div>
     </div>
 
-    <div class="container d-flex justify-content-center flex-column align-items-center">
+    <div class="container mb-5" id="menuPrincipal">
+        <div class="row g-4">
+            
+            <div class="col-md-4">
+                <div class="card h-100 dashboard-card">
+                    <div class="card-header card-header-custom bg-primary text-white">
+                        <i class="fas fa-users me-2"></i> Cadastros Gerais
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted d-block mb-2">PESSOAS & ENTIDADES</small>
+                        <div class="btn-group-dashboard">
+                            <button id="btnClienteFornecedor" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus"></i> Novo</button>
+                            <button id="btnGestaoCadastros" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Pesquisar</button>
+                        </div>
 
-        <div id="clienteFornecedorForm" class="form-container">
-            <h2><i class="fas fa-user-plus"></i> Cadastro de Cliente / Fornecedor</h2>
-            <form method="POST" action="/cadastrar" id="cadastroForm">
-                <input type="hidden" name="id_cadastro" id="idCadastroHidden">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label required-field">UVR</label>
-                        <select class="form-select" name="uvr" id="uvrSelect" required>
+                        <div class="btn-group-dashboard">
+                            <button id="btnAssociado" class="btn btn-outline-primary btn-sm"><i class="fas fa-user-plus"></i> Associado</button>
+                            <button id="btnGestaoAssociados" class="btn btn-primary btn-sm"><i class="fas fa-users"></i> Gerenciar</button>
+                        </div>
+
+                        <hr>
+                        <small class="text-muted d-block mb-2">PATRIMÔNIO & ESTRUTURA</small>
+                        <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="mostrarFormulario('gestaoPatrimonioContainer')">
+                            <i class="fas fa-truck-moving"></i> Frota & Equipamentos
+                        </button>
+
+                        {% if usuario and usuario.role == 'admin' %}
+                        <hr>
+                        <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
+                        <button id="btnGestaoProdutosServicos" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm"><i class="fas fa-box-open"></i> Catálogo de Produtos</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card h-100 dashboard-card">
+                    <div class="card-header card-header-custom bg-success text-white">
+                        <i class="fas fa-wallet me-2"></i> Operacional Financeiro
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted d-block mb-2">LANÇAMENTOS (Dia a Dia)</small>
+                        <button id="btnReceitaDespesa" class="btn btn-success w-100 btn-dashboard shadow-sm"><i class="fas fa-plus-circle"></i> Nova Receita / Despesa</button>
+                        <button id="btnGestaoTransacoes" class="btn btn-outline-success w-100 btn-dashboard"><i class="fas fa-search-dollar"></i> Pesquisar Transações</button>
+
+                        <hr>
+                        <small class="text-muted d-block mb-2">BANCÁRIO</small>
+                        <div class="btn-group-dashboard">
+                            <button id="btnContaCorrente" class="btn btn-outline-dark btn-sm"><i class="fas fa-landmark"></i> Nova Conta</button>
+                            <button id="btnGestaoContas" class="btn btn-dark btn-sm"><i class="fas fa-list"></i> Listar Contas</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if usuario and usuario.role == 'admin' %}
+            <div class="col-md-4">
+                <div class="card h-100 dashboard-card">
+                    <div class="card-header card-header-custom bg-warning text-dark">
+                        <i class="fas fa-chart-line me-2"></i> Gestão & Controle
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted d-block mb-2">FLUXO DE CAIXA</small>
+                        <button id="btnFluxoCaixa" class="btn btn-danger w-100 btn-dashboard mb-3 text-white"><i class="fas fa-exchange-alt"></i> Baixas & Conciliação</button>
+                        
+                        <small class="text-muted d-block mb-2">RELATÓRIOS</small>
+                        <div class="btn-group-dashboard">
+                            <button id="btnExtratoBancario" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-invoice-dollar"></i> Extrato</button>
+                            <button id="btnRelatorios" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-alt"></i> Financeiro</button>
+                        </div>
+                        
+                        <hr>
+                        <small class="text-muted d-block mb-2">ADMINISTRAÇÃO</small>
+                        <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
+                            <i class="fas fa-check-double"></i> Aprovações Pendentes
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="container d-flex justify-content-center flex-column align-items-center">
+
+    <div id="clienteFornecedorForm" class="form-container">
+        <h2><i class="fas fa-user-plus"></i> Cadastro de Cliente / Fornecedor</h2>
+        <form method="POST" action="/cadastrar" id="cadastroForm">
+            <input type="hidden" name="id_cadastro" id="idCadastroHidden">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label required-field">UVR</label>
+                    <select class="form-select" name="uvr" id="uvrSelect" required>
+                        <option value="">Selecione...</option>
+                        <option value="UVR 01">UVR 01</option>
+                        <option value="UVR 02">UVR 02</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Associação</label>
+                    <input type="text" class="form-control" name="associacao" id="associacaoInput" readonly>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label required-field">Tipo de Cadastro</label>
+                <select class="form-select" name="tipo_cadastro" id="tipoCadastroCF" required>
+                    <option value="">Selecione...</option>
+                    <option value="Fornecedor/Prestador">Fornecedor / Prestador de Serviço</option>
+                    <option value="Cliente">Cliente (Comprador de Material)</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label required-field">Data/Hora Cadastro</label>
+                <input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroCF" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label required-field">Razão Social / Nome Completo</label>
+                <input type="text" class="form-control" name="razao_social" id="razaoSocialCF" required>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label required-field">CNPJ / CPF</label><input type="text" class="form-control" name="cnpj" id="cnpj" required></div>
+                <div class="col-md-6 mb-3"><label class="form-label required-field">Telefone / Contato</label><input type="text" class="form-control" name="telefone" id="telefoneCF" required></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label required-field">CEP</label><input type="text" class="form-control" name="cep" id="cepCF" required></div>
+                <div class="col-md-8 mb-3"><label class="form-label">Logradouro</label><input type="text" class="form-control" name="logradouro" id="logradouroCF"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Número</label><input type="text" class="form-control" name="numero" id="numeroCF"></div>
+                <div class="col-md-8 mb-3"><label class="form-label">Bairro</label><input type="text" class="form-control" name="bairro" id="bairroCF"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-8 mb-3"><label class="form-label">Cidade</label><input type="text" class="form-control" name="cidade" id="cidadeCF"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">UF</label><input type="text" class="form-control" name="uf" id="ufCF" maxlength="2"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label required-field">Tipo de Atividade</label>
+                <select class="form-select" name="tipo_atividade" id="tipoAtividadeCF" required>
+                    <option value="">Selecione Tipo de Cadastro Primeiro</option>
+                </select>
+            </div>
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarCadastro">CADASTRAR</button>
+                <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoCadastro" style="display:none;" onclick="cancelarEdicaoCadastro()">CANCELAR EDIÇÃO</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="associadoForm" class="form-container">
+        <h2><i class="fas fa-id-card"></i> Ficha de Associado</h2>
+        <form method="POST" action="/cadastrar_associado" id="cadastroAssociadoForm" enctype="multipart/form-data">
+            <input type="hidden" name="id_associado" id="idAssociadoHidden">
+            <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrSelectAssociado" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
+                <div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao" id="associacaoInputAssociado" readonly></div>
+            </div>
+            <div class="mb-3"><label class="form-label required-field">Nome Completo</label><input type="text" class="form-control" name="nome" id="nomeAssociado" required></div>
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarAssociado">SALVAR ASSOCIADO</button>
+                <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoAssociado" style="display:none;" onclick="cancelarEdicaoAssociado()">CANCELAR EDIÇÃO</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="contaCorrenteForm" class="form-container">
+        <h2><i class="fas fa-landmark"></i> Cadastro de Contas Correntes</h2>
+        <form method="POST" action="/cadastrar_conta_corrente" id="cadastroContaCorrenteForm">
+            <input type="hidden" name="id_conta" id="idContaHidden">
+            <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_conta" id="uvrSelectConta" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_conta" id="associacaoInputConta" readonly></div></div>
+            <div class="mb-3"><label class="form-label required-field">Banco</label><select class="form-select" name="banco_conta" id="bancoContaSelect" required><option value="">Carregando bancos...</option></select></div>
+            <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Agência</label><input type="text" class="form-control" name="agencia_conta" id="agenciaContaInput" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">Conta</label><input type="text" class="form-control" name="conta_corrente_conta" id="contaCorrenteContaInput" required></div></div>
+            <div class="mb-3"><label class="form-label">Descrição</label><input type="text" class="form-control" name="descricao_apelido_conta" id="descricaoApelidoContaInput"></div>
+            <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg" id="btnSalvarConta">CADASTRAR CONTA</button><button type="button" class="btn btn-secondary" id="btnCancelarEdicaoConta" style="display:none;" onclick="cancelarEdicaoConta()">CANCELAR EDIÇÃO</button></div>
+        </form>
+    </div>
+
+    <div id="receitaDespesaForm" class="form-container">
+    <h2><i class="fas fa-file-invoice-dollar"></i> Registro de Transação (NF/Recibo)</h2>
+    <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm">
+        
+        <input type="hidden" id="dataHoraCadastroTransacao" name="data_hora_cadastro_transacao">
+        
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label required-field">UVR</label>
+                <select class="form-select" name="uvr_transacao" id="uvrSelectTransacao" required>
+                    <option value="">Selecione...</option>
+                    <option value="UVR 01">UVR 01</option>
+                    <option value="UVR 02">UVR 02</option>
+                </select>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Associação</label>
+                <input type="text" class="form-control" name="associacao_transacao" id="associacaoInputTransacao" readonly>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label class="form-label required-field">Tipo</label>
+                <select class="form-select" name="tipo_transacao" id="tipoTransacaoSelect" required>
+                    <option value="">Selecione...</option>
+                    <option value="Despesa">Despesa</option>
+                    <option value="Receita">Receita</option>
+                </select>
+            </div>
+            <div class="col-md-8 mb-3">
+                <label class="form-label required-field">Atividade</label>
+                <select class="form-select" name="tipo_atividade_transacao" id="tipoAtividadeTransacaoSelect" required>
+                    <option value="">Selecione Tipo Primeiro</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="mb-3 p-3 bg-light rounded border">
+            <label class="form-label required-field" id="labelFornecedorPrestadorCliente">Fornecedor / Cliente</label>
+            <select class="form-select" name="fornecedor_prestador_transacao" id="fornecedorPrestadorTransacaoSelect" required>
+                <option value="">Selecione...</option>
+            </select>
+            <input type="hidden" name="nome_fornecedor_prestador_transacao" id="nomeFornecedorPrestadorTransacaoInput">
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Nº Documento</label>
+                <input type="text" class="form-control" name="numero_documento_transacao">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label required-field">Data</label>
+                <input type="date" class="form-control" name="data_documento_transacao" id="dataDocumentoTransacao" required>
+            </div>
+        </div>
+        
+        <hr>
+        <h4>Itens</h4>
+        <div id="itensDocumentoContainer"></div>
+        <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="btnAdicionarItem"><i class="fas fa-plus"></i> Adicionar Item</button>
+        
+        <div class="row mt-3">
+            <div class="col-md-6 offset-md-6">
+                <label class="form-label fw-bold">TOTAL (R$)</label>
+                <input type="text" class="form-control form-control-lg text-end fw-bold text-primary" name="valor_total_documento" id="valorTotalDocumentoCalculado" readonly>
+            </div>
+        </div>
+        
+        <input type="hidden" name="id_transacao" id="idTransacaoHidden">
+        
+        <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success btn-lg" id="btnSalvarTransacao">REGISTRAR TRANSAÇÃO</button>
+            <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoTransacao" style="display:none;" onclick="cancelarEdicaoTransacao()">CANCELAR EDIÇÃO</button>
+        </div>
+    </form>
+</div>
+
+    <div id="gestaoCadastrosContainer" class="form-container">
+        <h2><i class="fas fa-search"></i> Pesquisar Clientes/Fornecedores</h2>
+        <div class="card p-3 mb-4 bg-light">
+            <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">Nome ou CNPJ</label><input type="text" id="inputBuscaCadastro" class="form-control" placeholder="Digite..."></div>
+                <div class="col-md-3"><label class="form-label">Tipo</label><select class="form-select" id="filtroTipoCadastro"><option value="">Todos</option><option value="Fornecedor/Prestador">Fornecedor</option><option value="Cliente">Cliente</option></select></div>
+                <div class="col-md-3 text-end align-self-end"><button class="btn btn-primary" onclick="buscarCadastros()"><i class="fas fa-search"></i> Pesquisar</button></div>
+            </div>
+        </div>
+        <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Razão Social</th><th>CNPJ</th><th>Tipo</th><th>Cidade</th><th>UVR</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaCadastrosBody"></tbody></table></div>
+    </div>
+
+    <div id="gestaoAssociadosContainer" class="form-container">
+        <h2><i class="fas fa-users"></i> Gerenciar Associados</h2>
+        <div class="card p-3 mb-4 bg-light">
+            <div class="row g-3">
+                <div class="col-md-5"><label class="form-label">Nome ou CPF</label><input type="text" id="inputBuscaAssociado" class="form-control" placeholder="Digite..."></div>
+                <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" id="filtroStatusAssociado"><option value="">Todos</option><option value="Ativo">Ativo</option><option value="Inativo">Inativo</option></select></div>
+                <div class="col-md-2 text-end align-self-end"><button class="btn btn-primary w-100" onclick="buscarAssociados()"><i class="fas fa-search"></i> Buscar</button></div>
+            </div>
+        </div>
+        <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Nome</th><th>CPF</th><th>Status</th><th>UVR</th><th>Admissão</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaAssociadosBody"></tbody></table></div>
+    </div>
+
+    <div id="gestaoContasContainer" class="form-container">
+        <h2><i class="fas fa-search-dollar"></i> Gerenciar Contas Correntes</h2>
+        <div class="card p-3 mb-4 bg-light">
+            <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">Nome/Descrição</label><input type="text" id="inputBuscaConta" class="form-control" placeholder="Digite..."></div>
+                <div class="col-md-5 text-end align-self-end"><button class="btn btn-primary" onclick="buscarContasCorrentes()"><i class="fas fa-search"></i> Pesquisar</button></div>
+            </div>
+        </div>
+        <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Banco</th><th>Agência / Conta</th><th>Descrição</th><th>UVR</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaContasBody"></tbody></table></div>
+    </div>
+
+    <div id="gestaoTransacoesContainer" class="form-container">
+        <h2><i class="fas fa-search-dollar"></i> Gerenciar Transações</h2>
+        <div class="card p-3 mb-4 bg-light">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <label class="form-label">UVR</label>
+                    <select class="form-select" id="filtroUvrTransacao" {% if usuario.role != 'admin' %}disabled{% endif %}>
+                        {% if usuario.role == 'admin' %}
+                            <option value="">Todas</option>
+                        {% endif %}
+                        <option value="UVR 01" {% if usuario.uvr_acesso == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+                        <option value="UVR 02" {% if usuario.uvr_acesso == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                        <option value="UVR 03" {% if usuario.uvr_acesso == 'UVR 03' %}selected{% endif %}>UVR 03</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3"><label class="form-label">Data Inicial</label><input type="date" id="filtroDataIniTransacao" class="form-control"></div>
+                <div class="col-md-3"><label class="form-label">Data Final</label><input type="date" id="filtroDataFimTransacao" class="form-control"></div>
+                <div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select" id="filtroTipoTransacao"><option value="">Todos</option><option value="Receita">Receita</option><option value="Despesa">Despesa</option></select></div>
+                <div class="col-md-2 text-end align-self-end"><button class="btn btn-primary w-100" onclick="buscarTransacoesGestao()"><i class="fas fa-search"></i> Pesquisar</button></div>
+            </div>
+        </div>
+        <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Data</th><th>UVR</th><th>Tipo</th><th>Origem/Destino</th><th>Nº Doc.</th><th>Valor Total</th><th>Status Pag.</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaTransacoesBody"></tbody></table></div>
+    </div>
+
+    <div id="relatoriosFormContainer" class="form-container">
+        <h2><i class="fas fa-chart-line"></i> Relatórios Financeiros</h2>
+        
+        <div class="card p-3 mb-3 bg-light">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <label class="form-label">UVR</label>
+                    <select class="form-select" id="relUvr" {% if usuario.role != 'admin' %}disabled{% endif %}>
+                        {% if usuario.role == 'admin' %}<option value="">Todas</option>{% endif %}
+                        <option value="UVR 01" {% if usuario.uvr_acesso == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+                        <option value="UVR 02" {% if usuario.uvr_acesso == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                        <option value="UVR 03" {% if usuario.uvr_acesso == 'UVR 03' %}selected{% endif %}>UVR 03</option>
+                    </select>
+                </div>
+                <div class="col-md-3"><label class="form-label">Inicio</label><input type="date" class="form-control" id="relDataInicial"></div>
+                <div class="col-md-3"><label class="form-label">Fim</label><input type="date" class="form-control" id="relDataFinal"></div>
+                <div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select" id="relTipoTransacao"><option value="">Todas</option><option value="Receita">Receita</option><option value="Despesa">Despesa</option></select></div>
+                <div class="col-md-2 d-flex align-items-end justify-content-end gap-2"><button class="btn btn-warning w-100" id="btnGerarRelatorio">Gerar</button></div>
+            </div>
+        </div>
+
+        <div class="tabela-container" style="max-height: 500px;">
+            <table class="table table-striped table-bordered table-sm" id="tabelaRelatorio">
+                <thead class="table-dark" style="position: sticky; top: 0;"></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2 mt-3" id="botoesExportacaoRelatorio" style="display: none;">
+            <button class="btn btn-success" onclick="baixarRelatorio('csv')"><i class="fas fa-file-csv"></i> Baixar CSV</button>
+            <button class="btn btn-danger" onclick="baixarRelatorio('pdf')"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+        </div>
+    </div>
+
+    <div id="aprovacoesContainer" class="form-container">
+        <h2><i class="fas fa-check-double"></i> Aprovações Pendentes</h2>
+        <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Data</th><th>Solicitante</th><th>Registro</th><th>Alteração</th><th class="text-center">Ação</th></tr></thead><tbody id="tabelaAprovacoesBody"></tbody></table><div id="msgSemAprovacoes" class="alert alert-info text-center" style="display:none;">Nenhuma solicitação pendente.</div></div>
+    </div>
+
+    <div id="fluxoCaixaForm" class="form-container">
+        <h2><i class="fas fa-exchange-alt"></i> Fluxo de Caixa</h2>
+        <div class="card p-3 mb-3 bg-light">
+            <div class="row g-3">
+                <div class="col-md-3"><label class="form-label required-field">UVR</label><select class="form-select" id="uvrFluxoCaixa"><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
+                <div class="col-md-3"><label class="form-label">Data Inicial</label><input type="date" class="form-control" id="fluxoDataInicialFiltro"></div>
+                <div class="col-md-3"><label class="form-label">Data Final</label><input type="date" class="form-control" id="fluxoDataFinalFiltro"></div>
+            </div>
+        </div>
+        <div id="painelFluxoResumo" style="display:none;" class="mb-4">
+            <div class="row text-center">
+                <div class="col-md-4"><div class="card text-white bg-success mb-3"><div class="card-header">Receitas</div><div class="card-body"><h4 class="card-title">R$ <span id="resumoReceitas">0,00</span></h4></div></div></div>
+                <div class="col-md-4"><div class="card text-white bg-danger mb-3"><div class="card-header">Despesas</div><div class="card-body"><h4 class="card-title">R$ <span id="resumoDespesas">0,00</span></h4></div></div></div>
+                <div class="col-md-4"><div class="card text-white bg-primary mb-3"><div class="card-header">Saldo</div><div class="card-body"><h4 class="card-title">R$ <span id="resumoSaldo">0,00</span></h4></div></div></div>
+            </div>
+        </div>
+        <hr><h4>Registrar Movimentação</h4>
+        
+        <form id="formRegistrarFluxoCaixa" class="needs-validation" novalidate>
+                <input type="hidden" id="dataHoraRegistroFluxo" name="data_hora_registro_fluxo">
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label class="form-label text-muted small">Data/Hora do Registro</label>
+                        <input type="text" class="form-control bg-light" id="dataHoraFluxoVisual" readonly style="font-weight: bold; color: #555;">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Tipo</label>
+                        <select class="form-select" id="tipoMovimentacao" name="tipo_movimentacao" required>
                             <option value="">Selecione...</option>
-                            <option value="UVR 01">UVR 01</option>
-                            <option value="UVR 02">UVR 02</option>
+                            <option value="Pagamento">Pagamento</option>
+                            <option value="Recebimento">Recebimento</option>
                         </select>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Associação</label>
-                        <input type="text" class="form-control" name="associacao" id="associacaoInput" readonly>
+                    <div class="col-md-8">
+                        <label class="form-label required-field">Entidade</label>
+                        <select class="form-select" id="cadastroCFSelect" name="id_cadastro_cf_str" required>
+                            <option value="">Carregando...</option>
+                        </select>
                     </div>
                 </div>
+
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white">Documentos em Aberto</div>
+                    <div class="card-body" id="nfsEmAbertoContainer" style="max-height: 200px; overflow-y: auto;">
+                        </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label required-field">Conta</label>
+                        <select class="form-select" id="contaCorrenteSelect" name="id_conta_corrente" required>
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Nº Doc.</label>
+                        <input type="text" class="form-control" id="numeroDocumentoBancario" name="numero_documento_bancario">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Data Efetiva</label>
+                        <input type="date" class="form-control" id="dataEfetivaFluxo" name="data_efetiva" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Valor (R$)</label>
+                        <input type="text" class="form-control valor-monetario" id="valorEfetivo" name="valor_efetivo" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Saldo Op.</label>
+                        <input type="text" class="form-control" id="saldoOperacaoDisplay" readonly>
+                    </div>
+                </div>
+                
                 <div class="mb-3">
-                    <label class="form-label required-field">Tipo de Cadastro</label>
-                    <select class="form-select" name="tipo_cadastro" id="tipoCadastroCF" required>
-                        <option value="">Selecione...</option>
-                        <option value="Fornecedor/Prestador">Fornecedor / Prestador de Serviço</option>
-                        <option value="Cliente">Cliente (Comprador de Material)</option>
-                    </select>
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-control" id="observacoesFluxo" name="observacoes" rows="2"></textarea>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label required-field">Data/Hora Cadastro</label>
-                    <input type="text" class="form-control" name="data_hora_cadastro" id="dataHoraCadastroCF" readonly>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label required-field">Razão Social / Nome Completo</label>
-                    <input type="text" class="form-control" name="razao_social" id="razaoSocialCF" required>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label required-field">CNPJ / CPF</label>
-                        <input type="text" class="form-control" name="cnpj" id="cnpj" required>
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label required-field">Telefone / Contato</label>
-                        <input type="text" class="form-control" name="telefone" id="telefoneCF" required>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label required-field">CEP</label>
-                        <input type="text" class="form-control" name="cep" id="cepCF" required>
-                    </div>
-                    <div class="col-md-8 mb-3">
-                        <label class="form-label">Logradouro</label>
-                        <input type="text" class="form-control" name="logradouro" id="logradouroCF">
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">Número</label>
-                        <input type="text" class="form-control" name="numero" id="numeroCF">
-                    </div>
-                    <div class="col-md-8 mb-3">
-                        <label class="form-label">Bairro</label>
-                        <input type="text" class="form-control" name="bairro" id="bairroCF">
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-8 mb-3">
-                        <label class="form-label">Cidade</label>
-                        <input type="text" class="form-control" name="cidade" id="cidadeCF">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">UF</label>
-                        <input type="text" class="form-control" name="uf" id="ufCF" maxlength="2">
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label required-field">Tipo de Atividade</label>
-                    <select class="form-select" name="tipo_atividade" id="tipoAtividadeCF" required>
-                        <option value="">Selecione Tipo de Cadastro Primeiro</option>
-                    </select>
-                </div>
-                <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarCadastro">CADASTRAR</button>
-                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoCadastro" style="display:none;" onclick="cancelarEdicaoCadastro()">CANCELAR EDIÇÃO</button>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-danger btn-lg" id="btnConfirmarFluxo">CONFIRMAR MOVIMENTAÇÃO</button>
                 </div>
             </form>
-        </div>
+    </div>
 
-        <div id="associadoForm" class="form-container">
-            <h2><i class="fas fa-id-card"></i> Ficha de Associado</h2>
-            <form method="POST" action="/cadastrar_associado" id="cadastroAssociadoForm" enctype="multipart/form-data">
-                <input type="hidden" name="id_associado" id="idAssociadoHidden">
-                <div class="row">
-                    <div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrSelectAssociado" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
-                    <div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao" id="associacaoInputAssociado" readonly></div>
-                </div>
-                <div class="mb-3"><label class="form-label required-field">Nome Completo</label><input type="text" class="form-control" name="nome" id="nomeAssociado" required></div>
-                <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg" id="btnSalvarAssociado">SALVAR ASSOCIADO</button>
-                    <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoAssociado" style="display:none;" onclick="cancelarEdicaoAssociado()">CANCELAR EDIÇÃO</button>
-                </div>
-            </form>
-        </div>
+    <div id="relatoriosFormContainer" class="form-container">
+        <h2><i class="fas fa-chart-line"></i> Relatórios Financeiros</h2>
+        <div class="card p-3 mb-3 bg-light"><div class="row g-3"><div class="col-md-3"><label class="form-label">Inicio</label><input type="date" class="form-control" id="relDataInicial"></div><div class="col-md-3"><label class="form-label">Fim</label><input type="date" class="form-control" id="relDataFinal"></div><div class="col-md-3"><label class="form-label">Tipo</label><select class="form-select" id="relTipoTransacao"><option value="">Todas</option><option value="Receita">Receita</option><option value="Despesa">Despesa</option></select></div><div class="col-md-6 d-flex align-items-end justify-content-end gap-2"><button class="btn btn-warning" id="btnGerarRelatorio">Gerar</button></div></div></div>
+        <div class="tabela-container" style="max-height: 500px;"><table class="table table-striped table-bordered table-sm" id="tabelaRelatorio"><thead class="table-dark" style="position: sticky; top: 0;"></thead><tbody></tbody></table></div>
+    </div>
 
-        <div id="contaCorrenteForm" class="form-container">
-            <h2><i class="fas fa-landmark"></i> Cadastro de Contas Correntes</h2>
-            <form method="POST" action="/cadastrar_conta_corrente" id="cadastroContaCorrenteForm">
-                <input type="hidden" name="id_conta" id="idContaHidden">
-                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_conta" id="uvrSelectConta" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_conta" id="associacaoInputConta" readonly></div></div>
-                <div class="mb-3"><label class="form-label required-field">Banco</label><select class="form-select" name="banco_conta" id="bancoContaSelect" required><option value="">Carregando bancos...</option></select></div>
-                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Agência</label><input type="text" class="form-control" name="agencia_conta" id="agenciaContaInput" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">Conta</label><input type="text" class="form-control" name="conta_corrente_conta" id="contaCorrenteContaInput" required></div></div>
-                <div class="mb-3"><label class="form-label">Descrição</label><input type="text" class="form-control" name="descricao_apelido_conta" id="descricaoApelidoContaInput"></div>
-                <div class="d-grid gap-2"><button type="submit" class="btn btn-primary btn-lg" id="btnSalvarConta">CADASTRAR CONTA</button><button type="button" class="btn btn-secondary" id="btnCancelarEdicaoConta" style="display:none;" onclick="cancelarEdicaoConta()">CANCELAR EDIÇÃO</button></div>
-            </form>
+    <div id="extratoBancarioContainer" class="form-container">
+        <h2><i class="fas fa-file-invoice-dollar"></i> Extrato Bancário</h2>
+        <div class="card p-3 mb-3 bg-light">
+            <div class="row g-3"><div class="col-md-3"><label class="form-label">UVR</label><select class="form-select" id="extratoUvr"><option value="">Selecione...</option></select></div><div class="col-md-5"><label class="form-label required-field">Conta</label><select class="form-select" id="extratoContaCorrente" disabled><option value="">Selecione...</option></select></div><div class="col-md-2"><label class="form-label">Inicio</label><input type="date" class="form-control" id="extratoDataInicial"></div><div class="col-md-2"><label class="form-label">Fim</label><input type="date" class="form-control" id="extratoDataFinal"></div></div>
+            <div class="row mt-3"><div class="col-12 text-end"><button class="btn btn-primary" id="btnGerarExtrato">Visualizar</button></div></div>
         </div>
+        <div id="infoContaExtrato" class="alert alert-secondary mb-3" style="display:none;"><h5 class="alert-heading" id="extratoNomeConta"></h5><p class="mb-0">Período: <span id="extratoPeriodo"></span></p></div>
+        <div id="saldoInicialExtrato" class="alert alert-info text-end" style="display:none; font-size: 1.1em;"></div>
+        <div class="tabela-container"><table class="table table-hover table-striped" id="tabelaExtrato"><thead class="table-dark"></thead><tbody></tbody></table></div>
+        <div id="saldoFinalExtrato" class="alert alert-primary text-end mt-3" style="display:none; font-size: 1.2em;"></div>
+        <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-success" id="btnBaixarCsvExtrato" style="display:none;">CSV</button><button class="btn btn-danger" id="btnBaixarPdfExtrato" style="display:none;">PDF</button></div>
+    </div>
 
-        <div id="receitaDespesaForm" class="form-container">
-            <h2><i class="fas fa-file-invoice-dollar"></i> Registro de Transação (NF/Recibo)</h2>
-            <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm">
-                <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_transacao" id="uvrSelectTransacao" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_transacao" id="associacaoInputTransacao" readonly></div></div>
-                <div class="row"><div class="col-md-4 mb-3"><label class="form-label required-field">Tipo</label><select class="form-select" name="tipo_transacao" id="tipoTransacaoSelect" required><option value="">Selecione...</option><option value="Despesa">Despesa</option><option value="Receita">Receita</option></select></div><div class="col-md-8 mb-3"><label class="form-label required-field">Atividade</label><select class="form-select" name="tipo_atividade_transacao" id="tipoAtividadeTransacaoSelect" required><option value="">Selecione Tipo Primeiro</option></select></div></div>
-                <div class="mb-3 p-3 bg-light rounded border"><label class="form-label required-field" id="labelFornecedorPrestadorCliente">Fornecedor / Cliente</label><select class="form-select" name="fornecedor_prestador_transacao" id="fornecedorPrestadorTransacaoSelect" required><option value="">Selecione...</option></select><input type="hidden" name="nome_fornecedor_prestador_transacao" id="nomeFornecedorPrestadorTransacaoInput"></div>
-                <div class="row"><div class="col-md-6 mb-3"><label class="form-label">Nº Documento</label><input type="text" class="form-control" name="numero_documento_transacao"></div><div class="col-md-6 mb-3"><label class="form-label required-field">Data</label><input type="date" class="form-control" name="data_documento_transacao" id="dataDocumentoTransacao" required></div></div>
-                <hr><h4>Itens</h4><div id="itensDocumentoContainer"></div><button type="button" class="btn btn-outline-primary btn-sm mb-3" id="btnAdicionarItem"><i class="fas fa-plus"></i> Adicionar Item</button>
-                <div class="row mt-3"><div class="col-md-6 offset-md-6"><label class="form-label fw-bold">TOTAL (R$)</label><input type="text" class="form-control form-control-lg text-end fw-bold text-primary" name="valor_total_documento" id="valorTotalDocumentoCalculado" readonly></div></div>
-                <input type="hidden" name="id_transacao" id="idTransacaoHidden">
-                <div class="d-grid gap-2"><button type="submit" class="btn btn-success btn-lg" id="btnSalvarTransacao">REGISTRAR TRANSAÇÃO</button><button type="button" class="btn btn-secondary" id="btnCancelarEdicaoTransacao" style="display:none;" onclick="cancelarEdicaoTransacao()">CANCELAR EDIÇÃO</button></div>
-            </form>
-        </div>
-
-        <div id="gestaoCadastrosContainer" class="form-container">
-            <h2><i class="fas fa-search"></i> Pesquisar Clientes/Fornecedores</h2>
-            <div class="card p-3 mb-4 bg-light">
-                <div class="row g-3">
-                    <div class="col-md-4"><label class="form-label">Nome ou CNPJ</label><input type="text" id="inputBuscaCadastro" class="form-control" placeholder="Digite..."></div>
-                    <div class="col-md-3"><label class="form-label">Tipo</label><select class="form-select" id="filtroTipoCadastro"><option value="">Todos</option><option value="Fornecedor/Prestador">Fornecedor</option><option value="Cliente">Cliente</option></select></div>
-                    <div class="col-md-3 text-end align-self-end"><button class="btn btn-primary" onclick="buscarCadastros()"><i class="fas fa-search"></i> Pesquisar</button></div>
-                </div>
+    <div id="gestaoProdutosServicosContainer" class="form-container">
+        <h2><i class="fas fa-box-open"></i> Gestão de Produtos e Serviços</h2>
+        <div class="card p-3 mb-3 bg-light">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2"><label class="form-label fw-bold">1. Tipo</label><select class="form-select form-select-sm" id="filtroTipoGestao"><option value="">Todos</option><option value="Receita">Receitas</option><option value="Despesa">Despesas</option></select></div>
+                <div class="col-md-4"><label class="form-label fw-bold">2. Grupo</label><select class="form-select form-select-sm" id="filtroGrupoGestao"><option value="">Selecione...</option></select></div>
+                <div class="col-md-3"><label class="form-label fw-bold">3. Subgrupo</label><select class="form-select form-select-sm" id="filtroSubgrupoGestao" disabled><option value="">Selecione...</option></select></div>
+                <div class="col-md-3 text-end"><div class="btn-group w-100"><button class="btn btn-info text-white btn-sm" onclick="abrirModalSubgrupos()">Subgrupos</button><button class="btn btn-primary btn-sm" onclick="abrirModalProduto()">Produto</button></div></div>
             </div>
-            <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Razão Social</th><th>CNPJ</th><th>Tipo</th><th>Cidade</th><th>UVR</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaCadastrosBody"></tbody></table></div>
         </div>
+        <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Item</th><th>Tipo</th><th>Subgrupo</th><th>Grupo</th><th class="text-center" style="width: 100px;">Ações</th></tr></thead><tbody id="tabelaProdutosBody"><tr><td colspan="4" class="text-center">Selecione um filtro...</td></tr></tbody></table></div>
+    </div>
 
-        <div id="gestaoAssociadosContainer" class="form-container">
-            <h2><i class="fas fa-users"></i> Gerenciar Associados</h2>
-            <div class="card p-3 mb-4 bg-light">
-                <div class="row g-3">
-                    <div class="col-md-5"><label class="form-label">Nome ou CPF</label><input type="text" id="inputBuscaAssociado" class="form-control" placeholder="Digite..."></div>
-                    <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" id="filtroStatusAssociado"><option value="">Todos</option><option value="Ativo">Ativo</option><option value="Inativo">Inativo</option></select></div>
-                    <div class="col-md-2 text-end align-self-end"><button class="btn btn-primary w-100" onclick="buscarAssociados()"><i class="fas fa-search"></i> Buscar</button></div>
-                </div>
+    <div id="gestaoPatrimonioContainer" class="form-container">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-truck-pickup"></i> Gestão de Patrimônio e Frota</h5>
+                <button class="btn btn-light btn-sm" onclick="mostrarFormulario('menuPrincipal')">Voltar</button>
             </div>
-            <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Nome</th><th>CPF</th><th>Status</th><th>UVR</th><th>Admissão</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaAssociadosBody"></tbody></table></div>
-        </div>
+            <div class="card-body p-0 pt-3">
+                
+                <ul class="nav nav-tabs mb-3 px-3" id="tabPatrimonio" role="tablist">
+                    <li class="nav-item"><button class="nav-link active" id="tab-lista-patrimonio" data-bs-toggle="tab" data-bs-target="#content-lista-patrimonio" type="button">Lista de Bens</button></li>
+                    <li class="nav-item"><button class="nav-link" id="tab-novo-patrimonio" data-bs-toggle="tab" data-bs-target="#content-novo-patrimonio" type="button">Novo Cadastro</button></li>
+                </ul>
 
-        <div id="gestaoContasContainer" class="form-container">
-            <h2><i class="fas fa-search-dollar"></i> Gerenciar Contas Correntes</h2>
-            <div class="card p-3 mb-4 bg-light">
-                <div class="row g-3">
-                    <div class="col-md-4"><label class="form-label">Nome/Descrição</label><input type="text" id="inputBuscaConta" class="form-control" placeholder="Digite..."></div>
-                    <div class="col-md-5 text-end align-self-end"><button class="btn btn-primary" onclick="buscarContasCorrentes()"><i class="fas fa-search"></i> Pesquisar</button></div>
-                </div>
-            </div>
-            <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Banco</th><th>Agência / Conta</th><th>Descrição</th><th>UVR</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaContasBody"></tbody></table></div>
-        </div>
-
-        <div id="gestaoTransacoesContainer" class="form-container">
-            <h2><i class="fas fa-search-dollar"></i> Gerenciar Transações</h2>
-            <div class="card p-3 mb-4 bg-light">
-                <div class="row g-3">
-                    <div class="col-md-3"><label class="form-label">Data Inicial</label><input type="date" id="filtroDataIniTransacao" class="form-control"></div>
-                    <div class="col-md-3"><label class="form-label">Data Final</label><input type="date" id="filtroDataFimTransacao" class="form-control"></div>
-                    <div class="col-md-3"><label class="form-label">Tipo</label><select class="form-select" id="filtroTipoTransacao"><option value="">Todos</option><option value="Receita">Receita</option><option value="Despesa">Despesa</option></select></div>
-                    <div class="col-md-4 text-end"><button class="btn btn-primary w-100" onclick="buscarTransacoesGestao()"><i class="fas fa-search"></i> Pesquisar</button></div>
-                </div>
-            </div>
-            <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Data</th><th>Tipo</th><th>Origem/Destino</th><th>Nº Doc.</th><th>Valor Total</th><th>Status Pag.</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaTransacoesBody"></tbody></table></div>
-        </div>
-
-        <div id="aprovacoesContainer" class="form-container">
-            <h2><i class="fas fa-check-double"></i> Aprovações Pendentes</h2>
-            <div class="tabela-container"><table class="table table-hover table-bordered"><thead class="table-light"><tr><th>Data</th><th>Solicitante</th><th>Registro</th><th>Alteração</th><th class="text-center">Ação</th></tr></thead><tbody id="tabelaAprovacoesBody"></tbody></table><div id="msgSemAprovacoes" class="alert alert-info text-center" style="display:none;">Nenhuma solicitação pendente.</div></div>
-        </div>
-
-        <div id="fluxoCaixaForm" class="form-container">
-            <h2><i class="fas fa-exchange-alt"></i> Fluxo de Caixa</h2>
-            <div class="card p-3 mb-3 bg-light">
-                <div class="row g-3">
-                    <div class="col-md-3"><label class="form-label required-field">UVR</label><select class="form-select" id="uvrFluxoCaixa"><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
-                    <div class="col-md-3"><label class="form-label">Data Inicial</label><input type="date" class="form-control" id="fluxoDataInicialFiltro"></div>
-                    <div class="col-md-3"><label class="form-label">Data Final</label><input type="date" class="form-control" id="fluxoDataFinalFiltro"></div>
-                </div>
-            </div>
-            <div id="painelFluxoResumo" style="display:none;" class="mb-4">
-                <div class="row text-center">
-                    <div class="col-md-4"><div class="card text-white bg-success mb-3"><div class="card-header">Receitas</div><div class="card-body"><h4 class="card-title">R$ <span id="resumoReceitas">0,00</span></h4></div></div></div>
-                    <div class="col-md-4"><div class="card text-white bg-danger mb-3"><div class="card-header">Despesas</div><div class="card-body"><h4 class="card-title">R$ <span id="resumoDespesas">0,00</span></h4></div></div></div>
-                    <div class="col-md-4"><div class="card text-white bg-primary mb-3"><div class="card-header">Saldo</div><div class="card-body"><h4 class="card-title">R$ <span id="resumoSaldo">0,00</span></h4></div></div></div>
-                </div>
-            </div>
-            <hr><h4>Registrar Movimentação</h4>
-            <form id="formRegistrarFluxoCaixa">
-                <div class="row mb-3"><div class="col-md-4"><label class="form-label required-field">Tipo</label><select class="form-select" id="tipoMovimentacao" required><option value="">Selecione...</option><option value="Pagamento">Pagamento</option><option value="Recebimento">Recebimento</option></select></div><div class="col-md-8"><label class="form-label required-field">Entidade</label><select class="form-select" id="cadastroCFSelect" required><option value="">Selecione...</option></select></div></div>
-                <div class="card mb-3"><div class="card-header bg-secondary text-white">Documentos em Aberto</div><div class="card-body" id="nfsEmAbertoContainer" style="max-height: 200px; overflow-y: auto;"></div></div>
-                <div class="row mb-3"><div class="col-md-6"><label class="form-label required-field">Conta</label><select class="form-select" id="contaCorrenteSelect" required><option value="">Selecione...</option></select></div><div class="col-md-6"><label class="form-label">Nº Doc.</label><input type="text" class="form-control" name="numero_documento_bancario"></div></div>
-                <div class="row mb-3"><div class="col-md-4"><label class="form-label required-field">Data Efetiva</label><input type="date" class="form-control" id="dataEfetivaFluxo" required></div><div class="col-md-4"><label class="form-label required-field">Valor (R$)</label><input type="text" class="form-control valor-monetario" id="valorEfetivo" required></div><div class="col-md-4"><label class="form-label">Saldo Op.</label><input type="text" class="form-control" id="saldoOperacaoDisplay" readonly></div></div>
-                <div class="d-grid"><button type="submit" class="btn btn-danger btn-lg" id="btnConfirmarFluxo">CONFIRMAR MOVIMENTAÇÃO</button></div>
-            </form>
-        </div>
-
-        <div id="relatoriosFormContainer" class="form-container">
-            <h2><i class="fas fa-chart-line"></i> Relatórios Financeiros</h2>
-            <div class="card p-3 mb-3 bg-light"><div class="row g-3"><div class="col-md-3"><label class="form-label">Inicio</label><input type="date" class="form-control" id="relDataInicial"></div><div class="col-md-3"><label class="form-label">Fim</label><input type="date" class="form-control" id="relDataFinal"></div><div class="col-md-3"><label class="form-label">Tipo</label><select class="form-select" id="relTipoTransacao"><option value="">Todas</option><option value="Receita">Receita</option><option value="Despesa">Despesa</option></select></div><div class="col-md-6 d-flex align-items-end justify-content-end gap-2"><button class="btn btn-warning" id="btnGerarRelatorio">Gerar</button></div></div></div>
-            <div class="tabela-container" style="max-height: 500px;"><table class="table table-striped table-bordered table-sm" id="tabelaRelatorio"><thead class="table-dark" style="position: sticky; top: 0;"></thead><tbody></tbody></table></div>
-        </div>
-
-        <div id="extratoBancarioContainer" class="form-container">
-            <h2><i class="fas fa-file-invoice-dollar"></i> Extrato Bancário</h2>
-            <div class="card p-3 mb-3 bg-light">
-                <div class="row g-3"><div class="col-md-3"><label class="form-label">UVR</label><select class="form-select" id="extratoUvr"><option value="">Selecione...</option></select></div><div class="col-md-5"><label class="form-label required-field">Conta</label><select class="form-select" id="extratoContaCorrente" disabled><option value="">Selecione...</option></select></div><div class="col-md-2"><label class="form-label">Inicio</label><input type="date" class="form-control" id="extratoDataInicial"></div><div class="col-md-2"><label class="form-label">Fim</label><input type="date" class="form-control" id="extratoDataFinal"></div></div>
-                <div class="row mt-3"><div class="col-12 text-end"><button class="btn btn-primary" id="btnGerarExtrato">Visualizar</button></div></div>
-            </div>
-            <div id="infoContaExtrato" class="alert alert-secondary mb-3" style="display:none;"><h5 class="alert-heading" id="extratoNomeConta"></h5><p class="mb-0">Período: <span id="extratoPeriodo"></span></p></div>
-            <div id="saldoInicialExtrato" class="alert alert-info text-end" style="display:none; font-size: 1.1em;"></div>
-            <div class="tabela-container"><table class="table table-hover table-striped" id="tabelaExtrato"><thead class="table-dark"></thead><tbody></tbody></table></div>
-            <div id="saldoFinalExtrato" class="alert alert-primary text-end mt-3" style="display:none; font-size: 1.2em;"></div>
-            <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-success" id="btnBaixarCsvExtrato" style="display:none;">CSV</button><button class="btn btn-danger" id="btnBaixarPdfExtrato" style="display:none;">PDF</button></div>
-        </div>
-
-        <div id="gestaoProdutosServicosContainer" class="form-container">
-            <h2><i class="fas fa-box-open"></i> Gestão de Produtos e Serviços</h2>
-            <div class="card p-3 mb-3 bg-light">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-2"><label class="form-label fw-bold">1. Tipo</label><select class="form-select form-select-sm" id="filtroTipoGestao"><option value="">Todos</option><option value="Receita">Receitas</option><option value="Despesa">Despesas</option></select></div>
-                    <div class="col-md-4"><label class="form-label fw-bold">2. Grupo</label><select class="form-select form-select-sm" id="filtroGrupoGestao"><option value="">Selecione...</option></select></div>
-                    <div class="col-md-3"><label class="form-label fw-bold">3. Subgrupo</label><select class="form-select form-select-sm" id="filtroSubgrupoGestao" disabled><option value="">Selecione...</option></select></div>
-                    <div class="col-md-3 text-end"><div class="btn-group w-100"><button class="btn btn-info text-white btn-sm" onclick="abrirModalSubgrupos()">Subgrupos</button><button class="btn btn-primary btn-sm" onclick="abrirModalProduto()">Produto</button></div></div>
-                </div>
-            </div>
-            <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Item</th><th>Tipo</th><th>Subgrupo</th><th>Grupo</th><th class="text-center" style="width: 100px;">Ações</th></tr></thead><tbody id="tabelaProdutosBody"><tr><td colspan="4" class="text-center">Selecione um filtro...</td></tr></tbody></table></div>
-        </div>
-
-        <div id="gestaoPatrimonioContainer" class="form-container">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-truck-pickup"></i> Gestão de Patrimônio e Frota</h5>
-                    <button class="btn btn-light btn-sm" onclick="mostrarFormulario('menuPrincipal')">Voltar</button>
-                </div>
-                <div class="card-body p-0 pt-3">
+                <div class="tab-content px-3 pb-3">
                     
-                    <ul class="nav nav-tabs mb-3 px-3" id="tabPatrimonio" role="tablist">
-                        <li class="nav-item"><button class="nav-link active" id="tab-lista-patrimonio" data-bs-toggle="tab" data-bs-target="#content-lista-patrimonio" type="button">Lista de Bens</button></li>
-                        <li class="nav-item"><button class="nav-link" id="tab-novo-patrimonio" data-bs-toggle="tab" data-bs-target="#content-novo-patrimonio" type="button">Novo Cadastro</button></li>
-                    </ul>
+                    <div class="tab-pane fade show active" id="content-lista-patrimonio">
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <select class="form-select" id="filtroCategoriaPatrimonio">
+                                    <option value="Todos">Todas Categorias</option>
+                                    <option value="Frota">Frota (Veículos)</option>
+                                    <option value="Equipamento">Equipamentos/Máquinas</option>
+                                    <option value="Mobiliario">Mobiliário/TI</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6"><input type="text" class="form-control" id="buscaPatrimonioInput" placeholder="Buscar por nome, placa ou código..."></div>
+                            <div class="col-md-3"><button class="btn btn-primary w-100" onclick="buscarPatrimonio()">Buscar</button></div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover table-bordered" id="tabelaPatrimonio">
+                                <thead class="table-light"><tr><th>Descrição</th><th>Tipo/Categoria</th><th>Placa/Ref.</th><th>Medidor Atual</th><th>Responsável</th><th>Status</th><th>Ações</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
 
-                    <div class="tab-content px-3 pb-3">
-                        
-                        <div class="tab-pane fade show active" id="content-lista-patrimonio">
+                    <div class="tab-pane fade" id="content-novo-patrimonio">
+                        <form id="formPatrimonio" action="/cadastrar_patrimonio" method="POST" enctype="multipart/form-data">
+                            
+                            <h6 class="text-primary border-bottom pb-2 mb-3">1. Localização e Identificação</h6>
                             <div class="row mb-3">
                                 <div class="col-md-3">
-                                    <select class="form-select" id="filtroCategoriaPatrimonio">
-                                        <option value="Todos">Todas Categorias</option>
-                                        <option value="Frota">Frota (Veículos)</option>
-                                        <option value="Equipamento">Equipamentos/Máquinas</option>
-                                        <option value="Mobiliario">Mobiliário/TI</option>
+                                    <label class="form-label required-field">UVR</label>
+                                    <select class="form-select" name="uvr_patrimonio" id="uvrPatrimonioSelect" required>
+                                        <option value="">Selecione...</option>
+                                        <option value="UVR 01">UVR 01</option>
+                                        <option value="UVR 02">UVR 02</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6"><input type="text" class="form-control" id="buscaPatrimonioInput" placeholder="Buscar por nome, placa ou código..."></div>
-                                <div class="col-md-3"><button class="btn btn-primary w-100" onclick="buscarPatrimonio()">Buscar</button></div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Associação</label>
+                                    <input type="text" class="form-control" name="associacao_patrimonio" id="associacaoPatrimonioInput" readonly>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label required-field">Descrição / Nome do Bem</label>
+                                    <input type="text" class="form-control" name="descricao_bem" placeholder="Ex: Caminhão Volvo 270 ou Prensa Vertical" required>
+                                </div>
                             </div>
-                            <div class="table-responsive">
-                                <table class="table table-hover table-bordered" id="tabelaPatrimonio">
-                                    <thead class="table-light"><tr><th>Descrição</th><th>Tipo/Categoria</th><th>Placa/Ref.</th><th>Medidor Atual</th><th>Responsável</th><th>Status</th><th>Ações</th></tr></thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
-                        </div>
 
-                        <div class="tab-pane fade" id="content-novo-patrimonio">
-                            <form id="formPatrimonio" action="/cadastrar_patrimonio" method="POST" enctype="multipart/form-data">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label required-field">Categoria</label>
+                                    <select class="form-select" name="categoria_bem" id="categoriaBem" required onchange="ajustarCamposPatrimonio()">
+                                        <option value="Frota">Frota (Veículos)</option>
+                                        <option value="Equipamento">Equipamento/Máquina</option>
+                                        <option value="Mobiliario">Mobiliário/Informática</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label required-field">Tipo de Bem</label>
+                                    <select class="form-select" name="tipo_bem" required>
+                                        <optgroup label="Frota">
+                                            <option value="Caminhão">Caminhão</option>
+                                            <option value="Carro">Carro/Utilitário</option>
+                                            <option value="Moto">Moto</option>
+                                            <option value="Trator">Trator</option>
+                                            <option value="Empilhadeira">Empilhadeira</option>
+                                        </optgroup>
+                                        <optgroup label="Equipamentos">
+                                            <option value="Prensa">Prensa Hidráulica</option>
+                                            <option value="Esteira">Esteira</option>
+                                            <option value="Balança">Balança</option>
+                                            <option value="Triturador">Triturador</option>
+                                            <option value="Outros">Outros</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Marca</label>
+                                    <input type="text" class="form-control" name="marca_bem">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Modelo</label>
+                                    <input type="text" class="form-control" name="modelo_bem">
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-2">
+                                    <label class="form-label">Ano Fab.</label>
+                                    <input type="number" class="form-control" name="ano_fabricacao" placeholder="AAAA">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Nº Série / Chassi</label>
+                                    <input type="text" class="form-control" name="serie_chassi">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Cód. Patrimônio / Interno</label>
+                                    <input type="text" class="form-control" name="codigo_patrimonio">
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check mt-4">
+                                        <input class="form-check-input" type="checkbox" name="eh_bem_publico" id="checkBemPublico">
+                                        <label class="form-check-label" for="checkBemPublico">É um Bem Público?</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="uso_compartilhado">
+                                        <label class="form-check-label">Uso Compartilhado</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">2. Situação de Propriedade</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Situação</label>
+                                    <select class="form-select" name="situacao_propriedade" id="situacaoPropriedade" onchange="ajustarCamposPropriedade()">
+                                        <option value="Proprio">Próprio</option>
+                                        <option value="Comodato">Comodato / Cedido</option>
+                                        <option value="Alugado">Alugado</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Entidade Proprietária</label>
+                                    <select class="form-select" name="entidade_proprietaria">
+                                        <option value="Associacao">A Própria Associação</option>
+                                        <option value="Prefeitura">Prefeitura Municipal</option>
+                                        <option value="Estado">Governo do Estado</option>
+                                        <option value="Itaipu">Itaipu Binacional</option>
+                                        <option value="Privado">Empresa Privada/Outro</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-5 div-comodato" style="display:none;">
+                                    <label class="form-label">Órgão Cedente</label>
+                                    <input type="text" class="form-control" name="orgao_cedente">
+                                </div>
+                            </div>
+                            <div class="row mb-3 div-comodato" style="display:none;">
+                                <div class="col-md-4">
+                                    <label class="form-label">Nº Termo Comodato</label>
+                                    <input type="text" class="form-control" name="num_termo">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Data Início</label>
+                                    <input type="date" class="form-control" name="data_inicio_comodato">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Data Fim (Vencimento)</label>
+                                    <input type="date" class="form-control" name="data_fim_comodato">
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">3. Dados Operacionais</h6>
+                            <div id="divDadosVeiculo">
+                                <div class="row mb-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label">Placa</label>
+                                        <input type="text" class="form-control" name="placa" placeholder="ABC-1234">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Renavam</label>
+                                        <input type="text" class="form-control" name="renavam">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Combustível</label>
+                                        <select class="form-select" name="combustivel">
+                                            <option value="Diesel">Diesel</option>
+                                            <option value="Gasolina">Gasolina</option>
+                                            <option value="Etanol">Etanol</option>
+                                            <option value="Flex">Flex</option>
+                                            <option value="Eletrico">Elétrico</option>
+                                            <option value="NaoAplica">N/A</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Capacidade Carga</label>
+                                        <input type="text" class="form-control" name="capacidade_carga" placeholder="Ex: 5 ton">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label required-field">Controle de Uso Por</label>
+                                    <select class="form-select" name="controle_por">
+                                        <option value="km">Quilometragem (Km)</option>
+                                        <option value="horas">Horímetro (Horas)</option>
+                                        <option value="nenhum">Não Controlado</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Medidor Inicial</label>
+                                    <input type="number" step="0.01" class="form-control" name="medidor_inicial" placeholder="0">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Local Instalação</label>
+                                    <select class="form-select" name="local_instalacao">
+                                        <option value="Galpao">Galpão Principal</option>
+                                        <option value="Patio">Pátio Externo</option>
+                                        <option value="Administrativo">Escritório/Adm</option>
+                                        <option value="EmTransito">Em Trânsito</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Setor</label>
+                                    <select class="form-select" name="setor_uso">
+                                        <option value="Triagem">Linha de Triagem</option>
+                                        <option value="Prensagem">Prensagem</option>
+                                        <option value="Logistica">Coleta/Logística</option>
+                                        <option value="Geral">Geral</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">4. Responsáveis (Associados da UVR)</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Responsável pelo Bem (Coordenação)</label>
+                                    <select class="form-select select-associado-uvr" name="nome_responsavel">
+                                        <option value="">Selecione a UVR acima primeiro...</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Operador/Motorista Principal</label>
+                                    <select class="form-select select-associado-uvr" name="nome_operador">
+                                        <option value="">Selecione a UVR acima primeiro...</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">5. Status e Integração Financeira</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Status Atual</label>
+                                    <select class="form-select" name="status_bem">
+                                        <option value="Ativo" selected>Ativo / Em Uso</option>
+                                        <option value="Manutencao">Em Manutenção</option>
+                                        <option value="Inativo">Inativo / Parado</option>
+                                        <option value="Baixado">Baixado / Vendido</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Estado Conservação</label>
+                                    <select class="form-select" name="estado_conservacao">
+                                        <option value="Otimo">Ótimo</option>
+                                        <option value="Bom" selected>Bom</option>
+                                        <option value="Regular">Regular</option>
+                                        <option value="Ruim">Ruim</option>
+                                        <option value="Sucata">Sucata</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Alerta Manutenção</label>
+                                    <input type="number" class="form-control" name="alerta_preventiva" placeholder="Ex: 10000">
+                                </div>
+                                <div class="col-md-3 pt-4">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" name="permite_abastecimento" checked>
+                                        <label class="form-check-label">Abastecer</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" name="permite_manutencao" checked>
+                                        <label class="form-check-label">Manutenção</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">6. Observações e Foto</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label">Observações Gerais</label>
+                                    <textarea class="form-control" name="observacoes_gerais" rows="5"></textarea>
+                                </div>
                                 
-                                <h6 class="text-primary border-bottom pb-2 mb-3">1. Localização e Identificação</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-3">
-                                        <label class="form-label required-field">UVR</label>
-                                        <select class="form-select" name="uvr_patrimonio" id="uvrPatrimonioSelect" required>
-                                            <option value="">Selecione...</option>
-                                            <option value="UVR 01">UVR 01</option>
-                                            <option value="UVR 02">UVR 02</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Associação</label>
-                                        <input type="text" class="form-control" name="associacao_patrimonio" id="associacaoPatrimonioInput" readonly>
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label required-field">Descrição / Nome do Bem</label>
-                                        <input type="text" class="form-control" name="descricao_bem" placeholder="Ex: Caminhão Volvo 270 ou Prensa Vertical" required>
-                                    </div>
-                                </div>
-
-                                <div class="row mb-3">
-                                    <div class="col-md-3">
-                                        <label class="form-label required-field">Categoria</label>
-                                        <select class="form-select" name="categoria_bem" id="categoriaBem" required onchange="ajustarCamposPatrimonio()">
-                                            <option value="Frota">Frota (Veículos)</option>
-                                            <option value="Equipamento">Equipamento/Máquina</option>
-                                            <option value="Mobiliario">Mobiliário/Informática</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label required-field">Tipo de Bem</label>
-                                        <select class="form-select" name="tipo_bem" required>
-                                            <optgroup label="Frota">
-                                                <option value="Caminhão">Caminhão</option>
-                                                <option value="Carro">Carro/Utilitário</option>
-                                                <option value="Moto">Moto</option>
-                                                <option value="Trator">Trator</option>
-                                                <option value="Empilhadeira">Empilhadeira</option>
-                                            </optgroup>
-                                            <optgroup label="Equipamentos">
-                                                <option value="Prensa">Prensa Hidráulica</option>
-                                                <option value="Esteira">Esteira</option>
-                                                <option value="Balança">Balança</option>
-                                                <option value="Triturador">Triturador</option>
-                                                <option value="Outros">Outros</option>
-                                            </optgroup>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Marca</label>
-                                        <input type="text" class="form-control" name="marca_bem">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Modelo</label>
-                                        <input type="text" class="form-control" name="modelo_bem">
-                                    </div>
-                                </div>
-
-                                <div class="row mb-3">
-                                    <div class="col-md-2">
-                                        <label class="form-label">Ano Fab.</label>
-                                        <input type="number" class="form-control" name="ano_fabricacao" placeholder="AAAA">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Nº Série / Chassi</label>
-                                        <input type="text" class="form-control" name="serie_chassi">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Cód. Patrimônio / Interno</label>
-                                        <input type="text" class="form-control" name="codigo_patrimonio">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="form-check mt-4">
-                                            <input class="form-check-input" type="checkbox" name="eh_bem_publico" id="checkBemPublico">
-                                            <label class="form-check-label" for="checkBemPublico">É um Bem Público?</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="uso_compartilhado">
-                                            <label class="form-check-label">Uso Compartilhado</label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">2. Situação de Propriedade</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-3">
-                                        <label class="form-label">Situação</label>
-                                        <select class="form-select" name="situacao_propriedade" id="situacaoPropriedade" onchange="ajustarCamposPropriedade()">
-                                            <option value="Proprio">Próprio</option>
-                                            <option value="Comodato">Comodato / Cedido</option>
-                                            <option value="Alugado">Alugado</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Entidade Proprietária</label>
-                                        <select class="form-select" name="entidade_proprietaria">
-                                            <option value="Associacao">A Própria Associação</option>
-                                            <option value="Prefeitura">Prefeitura Municipal</option>
-                                            <option value="Estado">Governo do Estado</option>
-                                            <option value="Itaipu">Itaipu Binacional</option>
-                                            <option value="Privado">Empresa Privada/Outro</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-5 div-comodato" style="display:none;">
-                                        <label class="form-label">Órgão Cedente</label>
-                                        <input type="text" class="form-control" name="orgao_cedente">
-                                    </div>
-                                </div>
-                                <div class="row mb-3 div-comodato" style="display:none;">
-                                    <div class="col-md-4">
-                                        <label class="form-label">Nº Termo Comodato</label>
-                                        <input type="text" class="form-control" name="num_termo">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Data Início</label>
-                                        <input type="date" class="form-control" name="data_inicio_comodato">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Data Fim (Vencimento)</label>
-                                        <input type="date" class="form-control" name="data_fim_comodato">
-                                    </div>
-                                </div>
-
-                                <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">3. Dados Operacionais</h6>
-                                <div id="divDadosVeiculo">
-                                    <div class="row mb-3">
-                                        <div class="col-md-3">
-                                            <label class="form-label">Placa</label>
-                                            <input type="text" class="form-control" name="placa" placeholder="ABC-1234">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label">Renavam</label>
-                                            <input type="text" class="form-control" name="renavam">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label">Combustível</label>
-                                            <select class="form-select" name="combustivel">
-                                                <option value="Diesel">Diesel</option>
-                                                <option value="Gasolina">Gasolina</option>
-                                                <option value="Etanol">Etanol</option>
-                                                <option value="Flex">Flex</option>
-                                                <option value="Eletrico">Elétrico</option>
-                                                <option value="NaoAplica">N/A</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label">Capacidade Carga</label>
-                                            <input type="text" class="form-control" name="capacidade_carga" placeholder="Ex: 5 ton">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="row mb-3">
-                                    <div class="col-md-3">
-                                        <label class="form-label required-field">Controle de Uso Por</label>
-                                        <select class="form-select" name="controle_por">
-                                            <option value="km">Quilometragem (Km)</option>
-                                            <option value="horas">Horímetro (Horas)</option>
-                                            <option value="nenhum">Não Controlado</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Medidor Inicial</label>
-                                        <input type="number" step="0.01" class="form-control" name="medidor_inicial" placeholder="0">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Local Instalação</label>
-                                        <select class="form-select" name="local_instalacao">
-                                            <option value="Galpao">Galpão Principal</option>
-                                            <option value="Patio">Pátio Externo</option>
-                                            <option value="Administrativo">Escritório/Adm</option>
-                                            <option value="EmTransito">Em Trânsito</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Setor</label>
-                                        <select class="form-select" name="setor_uso">
-                                            <option value="Triagem">Linha de Triagem</option>
-                                            <option value="Prensagem">Prensagem</option>
-                                            <option value="Logistica">Coleta/Logística</option>
-                                            <option value="Geral">Geral</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">4. Responsáveis (Associados da UVR)</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label">Responsável pelo Bem (Coordenação)</label>
-                                        <select class="form-select select-associado-uvr" name="nome_responsavel">
-                                            <option value="">Selecione a UVR acima primeiro...</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Operador/Motorista Principal</label>
-                                        <select class="form-select select-associado-uvr" name="nome_operador">
-                                            <option value="">Selecione a UVR acima primeiro...</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">5. Status e Integração Financeira</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-3">
-                                        <label class="form-label">Status Atual</label>
-                                        <select class="form-select" name="status_bem">
-                                            <option value="Ativo" selected>Ativo / Em Uso</option>
-                                            <option value="Manutencao">Em Manutenção</option>
-                                            <option value="Inativo">Inativo / Parado</option>
-                                            <option value="Baixado">Baixado / Vendido</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Estado Conservação</label>
-                                        <select class="form-select" name="estado_conservacao">
-                                            <option value="Otimo">Ótimo</option>
-                                            <option value="Bom" selected>Bom</option>
-                                            <option value="Regular">Regular</option>
-                                            <option value="Ruim">Ruim</option>
-                                            <option value="Sucata">Sucata</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Alerta Manutenção</label>
-                                        <input type="number" class="form-control" name="alerta_preventiva" placeholder="Ex: 10000">
-                                    </div>
-                                    <div class="col-md-3 pt-4">
-                                        <div class="form-check form-check-inline">
-                                            <input class="form-check-input" type="checkbox" name="permite_abastecimento" checked>
-                                            <label class="form-check-label">Abastecer</label>
-                                        </div>
-                                        <div class="form-check form-check-inline">
-                                            <input class="form-check-input" type="checkbox" name="permite_manutencao" checked>
-                                            <label class="form-check-label">Manutenção</label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">6. Observações e Foto</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-8">
-                                        <label class="form-label">Observações Gerais</label>
-                                        <textarea class="form-control" name="observacoes_gerais" rows="5"></textarea>
-                                    </div>
+                                <div class="col-md-4 text-center">
+                                    <label class="form-label d-block">Foto do Bem / Equipamento</label>
                                     
-                                    <div class="col-md-4 text-center">
-                                        <label class="form-label d-block">Foto do Bem / Equipamento</label>
-                                        
-                                        <div class="foto-patrimonio-container mb-2" style="height: 150px; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; overflow: hidden; background-color: #f8f9fa; border-radius: 8px;">
-                                            <img id="previewFotoPatrimonio" src="" alt="Preview" class="img-fluid" style="display: none; max-height: 100%;">
-                                            <span id="textoSemFotoPatrimonio" class="text-muted text-center">
-                                                <i class="fas fa-truck-moving fa-3x mb-2"></i><br>Sem foto
-                                            </span>
-                                        </div>
+                                    <div class="foto-patrimonio-container mb-2" style="height: 150px; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; overflow: hidden; background-color: #f8f9fa; border-radius: 8px;">
+                                        <img id="previewFotoPatrimonio" src="" alt="Preview" class="img-fluid" style="display: none; max-height: 100%;">
+                                        <span id="textoSemFotoPatrimonio" class="text-muted text-center">
+                                            <i class="fas fa-truck-moving fa-3x mb-2"></i><br>Sem foto
+                                        </span>
+                                    </div>
 
-                                        <input type="hidden" id="fotoPatrimonioWebcamBase64" name="foto_bem_base64_webcam">
-                                        <input type="file" id="inputFotoPatrimonioArquivo" name="foto_bem_upload" accept="image/*" style="display: none;" onchange="previewImagemPatrimonio(this)">
+                                    <input type="hidden" id="fotoPatrimonioWebcamBase64" name="foto_bem_base64_webcam">
+                                    <input type="file" id="inputFotoPatrimonioArquivo" name="foto_bem_upload" accept="image/*" style="display: none;" onchange="previewImagemPatrimonio(this)">
 
-                                        <div class="d-grid gap-2">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="$('#inputFotoPatrimonioArquivo').click()" title="Buscar foto no computador">
-                                                <i class="fas fa-upload"></i> Carregar Arquivo
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-dark" onclick="abrirModalWebcam('patrimonio')" title="Tirar foto agora">
-                                                <i class="fas fa-camera"></i> Usar Webcam
-                                            </button>
-                                        </div>
+                                    <div class="d-grid gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="$('#inputFotoPatrimonioArquivo').click()" title="Buscar foto no computador">
+                                            <i class="fas fa-upload"></i> Carregar Arquivo
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-dark" onclick="abrirModalWebcam('patrimonio')" title="Tirar foto agora">
+                                            <i class="fas fa-camera"></i> Usar Webcam
+                                        </button>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div class="d-flex justify-content-end mt-4">
-                                    <button type="submit" class="btn btn-success btn-lg"><i class="fas fa-save"></i> Salvar Cadastro</button>
-                                </div>
-                            </form>
-                        </div>
+                            <div class="d-flex justify-content-end mt-4">
+                                <button type="submit" class="btn btn-success btn-lg"><i class="fas fa-save"></i> Salvar Cadastro</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
     <!-- Modais -->
 
@@ -2046,38 +2197,53 @@
         $('#nfsEmAbertoContainer').on('change', '.nf-checkbox', calcularSaldoOperacaoFluxo);
 
 
-        $('#formRegistrarFluxoCaixa').on('submit', function(e) {
+$('#formRegistrarFluxoCaixa').off('submit').on('submit', function(e) {
             e.preventDefault();
+            
+            // 1. Gera Data/Hora no formato exato que o Python exige (dd/mm/aaaa HH:MM:SS)
+            // Isso evita o erro "does not match format"
+            const d = new Date();
+            const strAgora = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+            
+            if($('#dataHoraRegistroFluxo').length) $('#dataHoraRegistroFluxo').val(strAgora);
+
+            // Coleta valores diretos dos campos para garantir
             const uvr = $('#uvrFluxoCaixa').val();
             const tipoMov = $('#tipoMovimentacao').val();
-            const idCadastroCfStr = $('#idCadastroCfStrHidden').val(); 
+            // Pega o ID da Entidade direto do SELECT
+            const idCadastroCfStr = $('#cadastroCFSelect').val(); 
             const idConta = $('#contaCorrenteSelect').val();
             const dataEfetiva = $('#dataEfetivaFluxo').val();
             const valorEfetivo = $('#valorEfetivo').val(); 
             
-            if (!uvr || !tipoMov || !idCadastroCfStr || !idConta || !dataEfetiva || !valorEfetivo) {
-                alert("Preencha todos os campos obrigatórios do Fluxo de Caixa.");
-                return;
-            }
+            // Validação Explícita
+            if (!uvr) return alert("Erro: UVR não selecionada.");
+            if (!tipoMov) return alert("Erro: Tipo de Movimentação não selecionado.");
+            if (!idCadastroCfStr) return alert("Erro: Entidade (Cliente/Fornecedor) não selecionada.");
+            if (!idConta) return alert("Erro: Conta Bancária não selecionada.");
+            if (!dataEfetiva) return alert("Erro: Data Efetiva não preenchida.");
+            if (!valorEfetivo) return alert("Erro: Valor não preenchido.");
             
+            // Validação de Notas Selecionadas
             const nfsSelecionadas = $('.nf-checkbox:checked');
             if (nfsSelecionadas.length === 0) {
-                alert("Selecione pelo menos uma NF (transação) para registrar a movimentação.");
+                alert("Atenção: Selecione pelo menos uma nota/fatura na lista para dar baixa.");
                 return;
             }
             
+            // Monta o objeto JSON
             const formData = {
                 uvr: uvr,
-                associacao: $('#associacaoFluxoCaixa').val(),
+                associacao: $('#associacaoFluxoCaixa').val() || "", // Opcional
                 tipo_movimentacao: tipoMov,
                 id_cadastro_cf_str: idCadastroCfStr,
-                is_associado_rateio: ($('#isAssociadoRateioHidden').val() === 'true'), 
-                nome_cadastro_cf_display: $('#nomeCadastroCfDisplayHidden').val(),
+                is_associado_rateio: $('#cadastroCFSelect').find(':selected').data('is-associado-rateio') || false, 
+                nome_cadastro_cf_display: $('#cadastroCFSelect').find(':selected').text().trim(),
                 id_conta_corrente: idConta,
                 numero_documento_bancario: $('input[name="numero_documento_bancario"]').val(),
                 data_efetiva: dataEfetiva,
-                valor_efetivo: valorEfetivo.replace(/\./g, '').replace(',', '.'), 
-                data_hora_registro_fluxo: $('#dataHoraRegistroFluxo').val(), 
+                valor_efetivo: valorEfetivo.replace(/\./g, '').replace(',', '.'), // Formata moeda
+                data_hora_registro_fluxo: strAgora, // Envia a data formatada manualmente
                 observacoes: $('textarea[name="observacoes"]').val(),
                 ids_nfs_selecionadas: nfsSelecionadas.map(function() { return this.value; }).get()
             };
@@ -2090,33 +2256,34 @@
                 success: function(response) {
                     if (response.status === 'sucesso') {
                         alert("Movimentação de Fluxo de Caixa registrada com sucesso!");
+                        
+                        // Limpa tudo
                         $('#formRegistrarFluxoCaixa')[0].reset(); 
                         $('#nfsEmAbertoContainer').empty().html('<small class="text-muted">Selecione para listar documentos.</small>');
                         $('#saldoOperacaoDisplay').val('');
-                        preencherDataAtual('#dataEfetivaFluxo'); 
-                        atualizarDataHora('#dataHoraRegistroFluxo'); 
+                        
+                        // Atualiza data/hora para o próximo registro
+                        if(typeof atualizarRelogio === 'function') atualizarRelogio();
+                        
+                        // Atualiza as listas se possível
                         if (uvr) {
-                            carregarResumoFinanceiroFluxo(); // Recarrega resumo
+                            carregarResumoFinanceiroFluxo();
                             atualizarCadastrosComNotasFluxo(); 
                         }
                     } else {
-                        alert("Erro ao registrar Fluxo de Caixa: " + (response.error || "Erro desconhecido. Verifique o console."));
-                        console.error("Erro do backend:", response);
+                        alert("Erro ao registrar: " + (response.error || "Erro desconhecido."));
                     }
                 },
                 error: function(xhr) {
                     let errorMsg = "Erro ao registrar Fluxo de Caixa.";
                     if (xhr.responseJSON && xhr.responseJSON.error) {
                         errorMsg += " Detalhes: " + xhr.responseJSON.error;
-                    } else if (xhr.statusText) {
-                        errorMsg += " Status: " + xhr.statusText;
                     }
                     alert(errorMsg);
                     console.error("Erro AJAX:", xhr);
                 }
             });
         });
-
 
         // --- LÓGICA PARA RELATÓRIOS FINANCEIROS ---
         function loadRelatorioUVRs() { 
@@ -2249,93 +2416,125 @@
         });
 
         let currentReportFilters = {}; 
-        $('#btnGerarRelatorio').click(function() {
-            const nomeEntidadeSelecionada = $('#relNomeEntidade option:selected').data('nome-entidade');
+    
+    $('#btnGerarRelatorio').click(function() {
+        const nomeEntidadeSelecionada = $('#relNomeEntidade option:selected').data('nome-entidade');
 
-            currentReportFilters = {
-                data_inicial: $('#relDataInicial').val(), data_final: $('#relDataFinal').val(),
-                uvr: $('#relUvr').val(), 
-                tipo_transacao_rel: $('#relTipoTransacao').val(), // Movido para antes
-                tipo_entidade: $('#relTipoEntidade').val(), 
-                id_entidade: $('#relNomeEntidade').val(),  
-                nome_entidade_display: nomeEntidadeSelecionada || $('#relNomeEntidade option:selected').text().split(" (")[0], // Para PDF
-                tipo_atividade_transacao_rel: $('#relTipoAtividadeTransacao').val(), 
-                grupo_rel: $('#relGrupo').val(), subgrupo_rel: $('#relSubgrupo').val(), 
-                item_rel: $('#relItem').val(), status_pagamento_rel: $('#relStatusPagamento').val(),
-                listar_por: $('#relListarPor').val() 
-            };
-            
-            if (!currentReportFilters.data_inicial || !currentReportFilters.data_final) {
-                alert("Por favor, selecione Data Inicial e Data Final."); return;
-            }
-            if (new Date(currentReportFilters.data_inicial) > new Date(currentReportFilters.data_final)) {
-                alert("A Data Inicial não pode ser maior que a Data Final."); return;
-            }
+        // Captura todos os valores dos filtros
+        currentReportFilters = {
+            data_inicial: $('#relDataInicial').val(), 
+            data_final: $('#relDataFinal').val(),
+            uvr: $('#relUvr').val(), 
+            tipo_transacao_rel: $('#relTipoTransacao').val(), 
+            tipo_entidade: $('#relTipoEntidade').val(), 
+            id_entidade: $('#relNomeEntidade').val(),  
+            nome_entidade_display: nomeEntidadeSelecionada || $('#relNomeEntidade option:selected').text().split(" (")[0], // Para uso no PDF/CSV
+            tipo_atividade_transacao_rel: $('#relTipoAtividadeTransacao').val(), 
+            grupo_rel: $('#relGrupo').val(), 
+            subgrupo_rel: $('#relSubgrupo').val(), 
+            item_rel: $('#relItem').val(), 
+            status_pagamento_rel: $('#relStatusPagamento').val(),
+            listar_por: $('#relListarPor').val() 
+        };
+        
+        // Validações básicas
+        if (!currentReportFilters.data_inicial || !currentReportFilters.data_final) {
+            alert("Por favor, selecione Data Inicial e Data Final."); return;
+        }
+        if (new Date(currentReportFilters.data_inicial) > new Date(currentReportFilters.data_final)) {
+            alert("A Data Inicial não pode ser maior que a Data Final."); return;
+        }
 
-            $('#relatorioStatus').text('Gerando relatório...').show();
-            $('#tabelaRelatorio thead').empty(); $('#tabelaRelatorio tbody').empty();
-            $('#btnBaixarCsv').hide(); $('#btnBaixarPdfRelatorioFinanceiro').hide();
+        // Prepara UI para carregamento
+        $('#relatorioStatus').text('Gerando relatório...').show();
+        $('#tabelaRelatorio thead').empty(); 
+        $('#tabelaRelatorio tbody').empty();
+        $('#btnBaixarCsv').hide(); 
+        $('#btnBaixarPdfRelatorioFinanceiro').hide();
 
-            $.ajax({
-                url: '/gerar_relatorio', type: 'POST', contentType: 'application/json',
-                data: JSON.stringify(currentReportFilters),
-                success: function(data) {
-                    $('#relatorioStatus').hide();
-                    if (data.error) { alert(`Erro ao gerar relatório: ${data.error}`); return; }
-                    if (data.length === 0) { $('#relatorioStatus').text('Nenhum dado encontrado para os filtros selecionados.').show(); return; }
+        // Chamada AJAX para o Backend
+        $.ajax({
+            url: '/gerar_relatorio', 
+            type: 'POST', 
+            contentType: 'application/json',
+            data: JSON.stringify(currentReportFilters),
+            success: function(data) {
+                $('#relatorioStatus').hide();
+                
+                if (data.error) { 
+                    alert(`Erro ao gerar relatório: ${data.error}`); 
+                    return; 
+                }
+                if (data.length === 0) { 
+                    $('#relatorioStatus').text('Nenhum dado encontrado para os filtros selecionados.').show(); 
+                    return; 
+                }
 
-                    const headers = [
-                        "UVR", "Associação", "Fornecedor/Cliente/Associado", "Nº Doc.", 
-                        "Data Doc.", "Data Efetiva Pag./Rec.", 
-                        "Tipo Trans.", "Tipo Ativ. Trans.", "Item Descrição", 
-                        "Tipo Item (Cat.)", "Tipo Ativ. (Cat.)", "Grupo (Cat.)", "Subgrupo (Cat.)", 
-                        "UN", "Qtd.", "Vl. Unit. (R$)", "Vl. Total Item (R$)", 
-                        "Status Pag. NF", "Valor Pago/Rec. Item (R$)" 
-                    ];
-                    const headerKeys = [
-                        "uvr", "associacao", "nome_cadastro_origem", "numero_documento", 
-                        "data_documento", "data_efetiva_pag_rec", 
-                        "tipo_transacao", "tipo_atividade_transacao", "item_descricao", 
-                        "item_tipo_catalogo", "item_tipo_atividade_catalogo", "item_grupo_catalogo", "item_subgrupo_catalogo",
-                        "unidade", "quantidade", "valor_unitario", "valor_total_item", 
-                        "status_pagamento", "valor_pago_neste_item" 
-                    ];
-                    
-                    let headerHtml = '<tr>'; headers.forEach(h => headerHtml += `<th>${h}</th>`); headerHtml += '</tr>';
-                    $('#tabelaRelatorio thead').html(headerHtml);
-                    let tbodyHtml = '';
-                    data.forEach(row => {
-                        tbodyHtml += '<tr>';
-                        headerKeys.forEach(key => {
-                            let value = row[key] !== null && row[key] !== undefined ? row[key] : '';
-                            if (key === 'data_documento' && value) { 
-                                if (String(value).includes('-')) { 
-                                     try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
-                                }
-                            } else if (key === 'data_efetiva_pag_rec' && value) { 
-                                if (String(value).includes('-')) {
-                                     try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
-                                }
-                            } else if (key === 'data_hora_registro' && value) { 
-                                if (String(value).includes('T')) {
-                                     try { value = new Date(value).toLocaleString('pt-BR'); } catch(e) { /* mantem original */ }
-                                }
-                            } else if (['valor_unitario', 'valor_total_item', 'valor_pago_neste_item'].includes(key) && value) { 
-                                try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch(e) { /* mantem original */ }
-                            } else if (key === 'quantidade' && value) {
-                                try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } catch(e) { /* mantem original */ }
+                // Definição das Colunas
+                const headers = [
+                    "UVR", "Associação", "Fornecedor/Cliente/Associado", "Nº Doc.", 
+                    "Data Doc.", "Data Efetiva Pag./Rec.", 
+                    "Tipo Trans.", "Tipo Ativ. Trans.", "Item Descrição", 
+                    "Tipo Item (Cat.)", "Tipo Ativ. (Cat.)", "Grupo (Cat.)", "Subgrupo (Cat.)", 
+                    "UN", "Qtd.", "Vl. Unit. (R$)", "Vl. Total Item (R$)", 
+                    "Status Pag. NF", "Valor Pago/Rec. Item (R$)" 
+                ];
+                const headerKeys = [
+                    "uvr", "associacao", "nome_cadastro_origem", "numero_documento", 
+                    "data_documento", "data_efetiva_pag_rec", 
+                    "tipo_transacao", "tipo_atividade_transacao", "item_descricao", 
+                    "item_tipo_catalogo", "item_tipo_atividade_catalogo", "item_grupo_catalogo", "item_subgrupo_catalogo",
+                    "unidade", "quantidade", "valor_unitario", "valor_total_item", 
+                    "status_pagamento", "valor_pago_neste_item" 
+                ];
+                
+                // Monta Cabeçalho
+                let headerHtml = '<tr>'; 
+                headers.forEach(h => headerHtml += `<th>${h}</th>`); 
+                headerHtml += '</tr>';
+                $('#tabelaRelatorio thead').html(headerHtml);
+
+                // Monta Corpo da Tabela
+                let tbodyHtml = '';
+                data.forEach(row => {
+                    tbodyHtml += '<tr>';
+                    headerKeys.forEach(key => {
+                        let value = row[key] !== null && row[key] !== undefined ? row[key] : '';
+                        
+                        // Formatação Condicional
+                        if (key === 'data_documento' && value) { 
+                            if (String(value).includes('-')) { 
+                                 try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
                             }
-                            tbodyHtml += `<td>${value}</td>`;
-                        });
-                        tbodyHtml += '</tr>';
+                        } else if (key === 'data_efetiva_pag_rec' && value) { 
+                            if (String(value).includes('-')) {
+                                 try { value = new Date(value + 'T00:00:00').toLocaleDateString('pt-BR'); } catch(e) { /* mantem original */ }
+                            }
+                        } else if (key === 'data_hora_registro' && value) { 
+                            if (String(value).includes('T')) {
+                                 try { value = new Date(value).toLocaleString('pt-BR'); } catch(e) { /* mantem original */ }
+                            }
+                        } else if (['valor_unitario', 'valor_total_item', 'valor_pago_neste_item'].includes(key) && value) { 
+                            try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch(e) { /* mantem original */ }
+                        } else if (key === 'quantidade' && value) {
+                            try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } catch(e) { /* mantem original */ }
+                        }
+                        
+                        tbodyHtml += `<td>${value}</td>`;
                     });
-                    $('#tabelaRelatorio tbody').html(tbodyHtml);
-                    $('#btnBaixarCsv').show();
-                    $('#btnBaixarPdfRelatorioFinanceiro').show();
-                },
-                error: function(xhr) { $('#relatorioStatus').hide(); alert(`Erro ao gerar relatório: ${xhr.responseText || 'Erro desconhecido'}`); }
-            });
+                    tbodyHtml += '</tr>';
+                });
+                
+                $('#tabelaRelatorio tbody').html(tbodyHtml);
+                $('#btnBaixarCsv').show();
+                $('#btnBaixarPdfRelatorioFinanceiro').show();
+            },
+            error: function(xhr) { 
+                $('#relatorioStatus').hide(); 
+                alert(`Erro ao gerar relatório: ${xhr.responseText || 'Erro desconhecido'}`); 
+            }
         });
+    });
 
         function baixarArquivo(url, filters, defaultFilename) {
             fetch(url, {
@@ -3049,72 +3248,84 @@ function solicitarExclusaoAssociado(id, nome) {
     }
 
 // --- LÓGICA DE GESTÃO DE TRANSAÇÕES (ATUALIZADA) ---
-    function buscarTransacoesGestao() {
-        const dataIni = $('#filtroDataIniTransacao').val();
-        const dataFim = $('#filtroDataFimTransacao').val();
-        const tipo = $('#filtroTipoTransacao').val();
-        const uvr = $('#filtroUvrTransacao').val();
-        const q = $('#filtroTextoTransacao').val();
+function buscarTransacoesGestao() {
+    const dataIni = $('#filtroDataIniTransacao').val();
+    const dataFim = $('#filtroDataFimTransacao').val();
+    const tipo = $('#filtroTipoTransacao').val();
+    const uvr = $('#filtroUvrTransacao').val(); // Filtro de UVR
+    // Se tiver um campo de busca por texto no HTML, descomente abaixo:
+    // const q = $('#inputBuscaTransacao').val(); 
 
-        const tbody = $('#tabelaTransacoesBody');
-        tbody.html('<tr><td colspan="7" class="text-center">Buscando...</td></tr>');
+    const tbody = $('#tabelaTransacoesBody');
+    tbody.html('<tr><td colspan="8" class="text-center">Buscando...</td></tr>');
 
-        const params = new URLSearchParams({
-            data_inicial: dataIni,
-            data_final: dataFim,
-            tipo: tipo,
-            uvr: uvr,
-            q: q
-        });
+    const params = new URLSearchParams({
+        data_inicial: dataIni,
+        data_final: dataFim,
+        tipo: tipo,
+        uvr: uvr
+        // q: q 
+    });
 
-        $.getJSON(`/buscar_transacoes_gestao?${params.toString()}`, function(data) {
-            tbody.empty();
-            if (data.length === 0) {
-                tbody.html('<tr><td colspan="7" class="text-center">Nenhuma transação encontrada.</td></tr>');
-                return;
+    $.getJSON(`/buscar_transacoes_gestao?${params.toString()}`, function(data) {
+        tbody.empty();
+        
+        if (data.length === 0) {
+            tbody.html('<tr><td colspan="8" class="text-center">Nenhuma transação encontrada.</td></tr>');
+            return;
+        }
+
+        data.forEach(t => {
+            // 1. Definição de Cores e Badges
+            let badgeClass = 'bg-warning text-dark'; // Padrão Aberto
+            let statusTexto = t.status_pagamento || 'Aberto';
+
+            if (statusTexto === 'Pago' || statusTexto === 'Recebido') {
+                badgeClass = 'bg-success';
+            } else if (statusTexto === 'Cancelado') {
+                badgeClass = 'bg-secondary';
             }
 
-            data.forEach(t => {
-                let badgeClass = 'bg-secondary';
-                if (t.status === 'Liquidado') badgeClass = 'bg-success';
-                else if (t.status === 'Aberto') badgeClass = 'bg-danger';
-                else if (t.status.includes('Parcial')) badgeClass = 'bg-warning text-dark';
+            const corValor = t.tipo_transacao === 'Receita' ? 'text-success' : 'text-danger';
+            
+            // 2. Formatação de Valores
+            const valorFormatado = parseFloat(t.valor_total_documento).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
 
-                const corValor = t.tipo === 'Receita' ? 'text-success' : 'text-danger';
+            // 3. Tratamento de Strings para evitar erros no JS (aspas)
+            const origemNome = t.nome_cadastro_origem || '-';
+            const numDoc = t.numero_documento || '-';
+            const origemSegura = origemNome.replace(/'/g, "\\'");
+            const docSeguro = numDoc.replace(/'/g, "\\'");
 
-                // Escapa aspas simples no nome da origem para não quebrar o HTML do botão excluir
-                const origemSegura = t.origem ? t.origem.replace(/'/g, "\\'") : "";
-                const docSeguro = t.doc ? t.doc.replace(/'/g, "\\'") : "";
-
-                tbody.append(`
-                    <tr>
-                        <td>${t.data}</td>
-                        <td>${t.tipo}</td>
-                        <td>
-                            ${t.origem} <br>
-                            <small class="text-muted">${t.uvr}</small>
-                        </td>
-                        <td>${t.doc}</td>
-                        <td class="text-end fw-bold ${corValor}">${t.valor}</td>
-                        <td class="text-center"><span class="badge ${badgeClass}">${t.status}</span></td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesTransacao(${t.id})" title="Ver Itens">
+            // 4. Construção da Linha HTML
+            tbody.append(`
+                <tr>
+                    <td>${t.data_documento}</td>
+                    <td><span class="badge bg-light text-dark border">${t.uvr}</span></td>
+                    <td class="${t.tipo_transacao === 'Receita' ? 'text-primary' : 'text-danger'} fw-bold">${t.tipo_transacao}</td>
+                    <td>
+                        ${origemNome}
+                    </td>
+                    <td>${numDoc}</td>
+                    <td class="text-end fw-bold ${corValor}">${valorFormatado}</td>
+                    <td class="text-center"><span class="badge ${badgeClass}">${statusTexto}</span></td>
+                    <td class="text-center">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-sm btn-info text-white" onclick="verDetalhesTransacao(${t.id})" title="Ver Itens">
                                 <i class="fas fa-list"></i>
                             </button>
-                            <button class="btn btn-sm btn-warning text-white me-1" onclick="iniciarEdicaoTransacao(${t.id})" title="Editar">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoTransacao(${t.id}, '${docSeguro} - ${origemSegura}')" title="Excluir">
+                            <button class="btn btn-sm btn-danger" onclick="excluirTransacao(${t.id}, '${docSeguro} - ${origemSegura}')" title="Excluir">
                                 <i class="fas fa-trash"></i>
                             </button>
-                        </td>
-                    </tr>
-                `);
-            });
-        }).fail(function() {
-            tbody.html('<tr><td colspan="7" class="text-center text-danger">Erro ao buscar dados.</td></tr>');
+                        </div>
+                    </td>
+                </tr>
+            `);
         });
-    }
+    }).fail(function() {
+        tbody.html('<tr><td colspan="8" class="text-center text-danger">Erro ao buscar dados no servidor.</td></tr>');
+    });
+}
 
     // --- FUNÇÃO DE DETALHES (Agora sim, no lugar certo!) ---
 // --- FUNÇÃO DE DETALHES ---
@@ -3922,6 +4133,28 @@ function visualizarMovimentacao(id) {
             });
         }
     }
+
+// --- FUNÇÃO DE EXCLUSÃO DE TRANSAÇÃO ---
+    function excluirTransacao(id, descricao) {
+        if (confirm(`Tem certeza que deseja EXCLUIR permanentemente a transação:\n${descricao}?\n\nEssa ação não pode ser desfeita.`)) {
+            
+            $.post(`/excluir_transacao/${id}`, function(response) {
+                if (response.message) {
+                    alert(response.message);
+                    buscarTransacoesGestao(); // Atualiza a tabela na hora
+                } else {
+                    alert("Erro desconhecido ao excluir.");
+                }
+            })
+            .fail(function(xhr) {
+                let msg = "Erro de comunicação.";
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    msg = xhr.responseJSON.error;
+                }
+                alert("Falha ao excluir: " + msg);
+            });
+        }
+    }
 // ==========================================
     // LÓGICA DE PATRIMÔNIO E FROTA (CRUD COMPLETO)
     // ==========================================
@@ -4221,7 +4454,91 @@ function visualizarMovimentacao(id) {
     $('#tab-novo-patrimonio').on('shown.bs.tab', function () {
         ajustarCamposPatrimonio(); ajustarCamposPropriedade();
     });
+// --- FUNÇÃO RELÓGIO (Atualiza campos de data/hora - CORRIGIDA) ---
+    function atualizarRelogio() {
+        const d = new Date();
+        // Monta a string manualmente para garantir formato dd/mm/aaaa HH:MM:SS
+        const dia = String(d.getDate()).padStart(2, '0');
+        const mes = String(d.getMonth() + 1).padStart(2, '0');
+        const ano = d.getFullYear();
+        const hora = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const seg = String(d.getSeconds()).padStart(2, '0');
+        
+        const strDataHora = `${dia}/${mes}/${ano} ${hora}:${min}:${seg}`;
+        
+        // Atualiza campos do Cadastro de Cliente
+        if($('#dataHoraCadastroCF').length) $('#dataHoraCadastroCF').val(strDataHora);
+        
+        // Atualiza campos do Fluxo de Caixa (Visual e Oculto)
+        if($('#dataHoraFluxoVisual').length) $('#dataHoraFluxoVisual').val(strDataHora);
+        if($('#dataHoraRegistroFluxo').length) $('#dataHoraRegistroFluxo').val(strDataHora);
 
+        // Atualiza campos de Transação
+        if($('#dataHoraCadastroTransacao').length) $('#dataHoraCadastroTransacao').val(strDataHora);
+    }
+
+    // Inicia o relógio a cada 1 segundo
+    setInterval(atualizarRelogio, 1000);
+    // Roda uma vez imediatamente ao carregar
+    $(document).ready(function() {
+        atualizarRelogio();
+    });
+// --- FUNÇÃO PARA BAIXAR RELATÓRIOS ---
+    function baixarRelatorio(formato) {
+        const uvr = $('#relUvr').val();
+        const dataIni = $('#relDataInicial').val();
+        const dataFim = $('#relDataFinal').val();
+        const tipo = $('#relTipoTransacao').val();
+
+        if (!dataIni || !dataFim) {
+            alert("Gere o relatório na tela primeiro para validar as datas.");
+            return;
+        }
+
+        // Redireciona o navegador para a rota de download
+        const url = `/baixar_relatorio_financeiro?formato=${formato}&uvr=${uvr}&data_inicial=${dataIni}&data_final=${dataFim}&tipo=${tipo}`;
+        window.location.href = url;
+    }
+
+    // Atualiza o botão Gerar para mostrar os botões de exportação após o sucesso
+    $('#btnGerarRelatorio').click(function() {
+        const dtIni = $('#relDataInicial').val();
+        const dtFim = $('#relDataFinal').val();
+        const tipo = $('#relTipoTransacao').val();
+        const uvr = $('#relUvr').val(); 
+
+        $('#botoesExportacaoRelatorio').hide(); // Esconde antes de carregar
+
+        $.get(`/api/relatorio_financeiro_detalhado?data_inicial=${dtIni}&data_final=${dtFim}&tipo=${tipo}&uvr=${uvr}`, function(data) {
+            
+            let thead = $('#tabelaRelatorio thead');
+            let tbody = $('#tabelaRelatorio tbody');
+            thead.empty();
+            tbody.empty();
+
+            if(!data || data.length === 0) {
+                tbody.html('<tr><td colspan="5" class="text-center">Nenhum dado encontrado.</td></tr>');
+                return;
+            }
+
+            // Mostra os botões de exportação se houver dados
+            $('#botoesExportacaoRelatorio').show();
+
+            // ... (O restante do código de preencher a tabela continua igual ao anterior) ...
+            let headers = `<tr><th>Data</th><th>UVR</th><th>Categoria</th><th>Descrição</th><th class="text-end">Valor (R$)</th></tr>`;
+            thead.html(headers);
+            let totalGeral = 0;
+            data.forEach(item => {
+                let valor = parseFloat(item.valor);
+                totalGeral += valor;
+                let cor = item.tipo === 'Receita' ? 'text-success' : 'text-danger';
+                let row = `<tr><td>${item.data}</td><td>${item.uvr}</td><td><small class="fw-bold">${item.grupo}</small><br><small>${item.subgrupo}</small></td><td>${item.descricao}</td><td class="text-end ${cor} fw-bold">${valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`;
+                tbody.append(row);
+            });
+            tbody.append(`<tr class="table-dark"><td colspan="4" class="text-end fw-bold">SALDO:</td><td class="text-end fw-bold">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`);
+        });
+    });
 </script>
 </body>
 </html>
