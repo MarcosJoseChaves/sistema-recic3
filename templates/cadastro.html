@@ -1451,14 +1451,66 @@
     }
 
     
-    // --- INÍCIO DO DOCUMENT READY (CARREGAMENTO DA PÁGINA) ---
+// --- INÍCIO DO DOCUMENT READY (CARREGAMENTO DA PÁGINA) ---
     $(document).ready(function() {
+        // --- 1. MÁSCARAS DE INPUT ---
         $('.valor-monetario').mask('#.##0,00', {reverse: true});
         $('#cnpj').mask('00.000.000/0000-00', {reverse: true});
         $('#cepCF, #cepAssociado').mask('00000-000');
         $('#telefoneCF, #telAssociado').mask('(00) 00000-0000');
         $('#cpfAssociado').mask('000.000.000-00');
 
+        // --- 2. ATUALIZAR LISTA DE ENTIDADES (Apenas com saldo pendente) ---
+        // Monitora mudanças nas datas ou na UVR do relatório
+        $('#data_inicio_relatorio, #data_fim_relatorio, #filtro_uvr_relatorio').on('change', function() {
+            atualizarListaEntidades();
+        });
+
+        function atualizarListaEntidades() {
+            let dtIni = $('#data_inicio_relatorio').val();
+            let dtFim = $('#data_fim_relatorio').val();
+            let uvr = $('#filtro_uvr_relatorio').val();
+            
+            // ID CORRETO DO SELECT NO RELATÓRIO
+            let selectEntidade = $('#filtro_entidade_relatorio'); 
+
+            // Se não tiver datas preenchidas, não faz nada
+            if (!dtIni || !dtFim) return;
+
+            // Mostra "Carregando..."
+            selectEntidade.html('<option value="">Carregando...</option>');
+
+            $.ajax({
+                url: '/api/entidades_com_saldo',
+                method: 'GET',
+                data: { 
+                    data_inicio: dtIni, 
+                    data_fim: dtFim,
+                    uvr: uvr 
+                },
+                success: function(nomes) {
+                    selectEntidade.empty(); // Limpa a lista antiga
+                    
+                    // Adiciona a opção padrão "Todas"
+                    selectEntidade.append('<option value="">Todas</option>');
+
+                    if (nomes.length === 0) {
+                        selectEntidade.append('<option value="" disabled>Nenhuma pendência no período</option>');
+                    } else {
+                        // Preenche apenas com quem tem saldo
+                        nomes.forEach(function(nome) {
+                            selectEntidade.append(`<option value="${nome}">${nome}</option>`);
+                        });
+                    }
+                },
+                error: function() {
+                    selectEntidade.html('<option value="">Erro ao carregar</option>');
+                    console.log("Erro ao buscar entidades com saldo.");
+                }
+            });
+        }
+
+        // --- 3. FUNÇÕES AUXILIARES DE DATA ---
         function preencherDataAtual(selector) {
             const now = new Date();
             const day = ("0" + now.getDate()).slice(-2);
@@ -1466,6 +1518,7 @@
             const today = now.getFullYear() + "-" + (month) + "-" + (day);
             $(selector).val(today);
         }
+
         function preencherDatasPadraoFluxo() {
             const now = new Date();
             const day = ("0" + now.getDate()).slice(-2);
@@ -1481,12 +1534,17 @@
             $('#fluxoDataFinalFiltro').val(today);
         }
 
-        // --- PREENCHIMENTO AUTOMÁTICO DE ASSOCIAÇÃO ---
+        // --- 4. PREENCHIMENTO AUTOMÁTICO DE ASSOCIAÇÃO ---
         const mapUvrAssociacao = { "UVR 01": "ASCAMAR", "UVR 02": "ACAN" };
+        
         function preencherAssociacao(selectId, inputId) {
             const uvr = $('#' + selectId).val();
             $('#' + inputId).val(mapUvrAssociacao[uvr] || "");
-            if(selectId === 'uvrFluxoCaixa') $('#associacaoFluxoCaixa').val(mapUvrAssociacao[uvr] || "");
+            
+            // Caso específico do Fluxo de Caixa (se necessário manter a lógica original)
+            if(selectId === 'uvrFluxoCaixa') {
+                $('#associacaoFluxoCaixa').val(mapUvrAssociacao[uvr] || "");
+            }    
         }
 
 // --- FUNÇÃO mostrarFormulario (ATUALIZADA) ---
@@ -2047,7 +2105,7 @@
             }
         });
         
-        // --- LÓGICA PARA FLUXO DE CAIXA ---
+// --- LÓGICA PARA FLUXO DE CAIXA ---
         function carregarResumoFinanceiroFluxo() {
             const uvr = $('#uvrFluxoCaixa').val();
             const dataIni = $('#fluxoDataInicialFiltro').val();
@@ -2091,9 +2149,13 @@
             });
         }
 
+        // --- FUNÇÃO ATUALIZADA: LISTA CLIENTES/FORNECEDORES FILTRADA POR DATA ---
         function atualizarCadastrosComNotasFluxo() {
             const uvr = $('#uvrFluxoCaixa').val();
             const tipoMov = $('#tipoMovimentacao').val();
+            const dataIni = $('#fluxoDataInicialFiltro').val(); // PEGA DATA INICIAL
+            const dataFim = $('#fluxoDataFinalFiltro').val();   // PEGA DATA FINAL
+            
             const select = $('#cadastroCFSelect');
             select.empty().append('<option value="">Carregando...</option>');
             $('#nfsEmAbertoContainer').html('<small class="text-muted">Selecione para listar documentos.</small>');
@@ -2101,14 +2163,22 @@
             $('#isAssociadoRateioHidden').val('');
             $('#nomeCadastroCfDisplayHidden').val('');
 
-            if (!uvr || !tipoMov) {
-                select.empty().append('<option value="">Selecione UVR e Tipo Mov...</option>');
+            if (!uvr || !tipoMov || !dataIni || !dataFim) {
+                select.empty().append('<option value="">Preencha UVR, Tipo e Datas...</option>');
                 return;
             }
             
             $('#labelClienteFornecedorFluxo').text(tipoMov === 'Recebimento' ? 'Cliente com Pendências' : 'Fornecedor/Associado com Pendências');
             
-            $.get(`/get_clientes_fornecedores_com_pendencias?uvr=${uvr}&tipo_movimentacao=${tipoMov}`, function(data) {
+            // Agora enviamos as datas na requisição
+            const params = new URLSearchParams({
+                uvr: uvr,
+                tipo_movimentacao: tipoMov,
+                data_inicial: dataIni,
+                data_final: dataFim
+            });
+
+            $.get(`/get_clientes_fornecedores_com_pendencias?${params.toString()}`, function(data) {
                 select.empty().append(`<option value="">Selecione ${tipoMov === 'Recebimento' ? 'Cliente' : 'Fornecedor/Associado'}...</option>`);
                 
                 if (data && data.length > 0) {
@@ -2121,10 +2191,16 @@
                         </option>`);
                     });
                 } else {
-                    select.append(`<option value="">Nenhum com pendências encontrado</option>`);
+                    select.append(`<option value="">Nenhuma pendência neste período</option>`);
                 }
             }).fail(function() { select.empty().append('<option value="">Erro ao carregar</option>'); });
         }
+
+        // --- LISTENER PARA RECARREGAR QUANDO MUDA A DATA ---
+        $('#fluxoDataInicialFiltro, #fluxoDataFinalFiltro').change(function() {
+            atualizarCadastrosComNotasFluxo();
+            carregarResumoFinanceiroFluxo(); // Atualiza o painel de resumo também
+        });
 
         $('#tipoMovimentacao').change(function() { atualizarCadastrosComNotasFluxo(); });
 
@@ -2206,11 +2282,10 @@
         $('#nfsEmAbertoContainer').on('change', '.nf-checkbox', calcularSaldoOperacaoFluxo);
 
 
-$('#formRegistrarFluxoCaixa').off('submit').on('submit', function(e) {
+        $('#formRegistrarFluxoCaixa').off('submit').on('submit', function(e) {
             e.preventDefault();
             
             // 1. Gera Data/Hora no formato exato que o Python exige (dd/mm/aaaa HH:MM:SS)
-            // Isso evita o erro "does not match format"
             const d = new Date();
             const strAgora = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
             
@@ -2219,7 +2294,6 @@ $('#formRegistrarFluxoCaixa').off('submit').on('submit', function(e) {
             // Coleta valores diretos dos campos para garantir
             const uvr = $('#uvrFluxoCaixa').val();
             const tipoMov = $('#tipoMovimentacao').val();
-            // Pega o ID da Entidade direto do SELECT
             const idCadastroCfStr = $('#cadastroCFSelect').val(); 
             const idConta = $('#contaCorrenteSelect').val();
             const dataEfetiva = $('#dataEfetivaFluxo').val();
@@ -2243,7 +2317,7 @@ $('#formRegistrarFluxoCaixa').off('submit').on('submit', function(e) {
             // Monta o objeto JSON
             const formData = {
                 uvr: uvr,
-                associacao: $('#associacaoFluxoCaixa').val() || "", // Opcional
+                associacao: $('#associacaoFluxoCaixa').val() || "", 
                 tipo_movimentacao: tipoMov,
                 id_cadastro_cf_str: idCadastroCfStr,
                 is_associado_rateio: $('#cadastroCFSelect').find(':selected').data('is-associado-rateio') || false, 
@@ -2251,8 +2325,8 @@ $('#formRegistrarFluxoCaixa').off('submit').on('submit', function(e) {
                 id_conta_corrente: idConta,
                 numero_documento_bancario: $('input[name="numero_documento_bancario"]').val(),
                 data_efetiva: dataEfetiva,
-                valor_efetivo: valorEfetivo.replace(/\./g, '').replace(',', '.'), // Formata moeda
-                data_hora_registro_fluxo: strAgora, // Envia a data formatada manualmente
+                valor_efetivo: valorEfetivo.replace(/\./g, '').replace(',', '.'), 
+                data_hora_registro_fluxo: strAgora, 
                 observacoes: $('textarea[name="observacoes"]').val(),
                 ids_nfs_selecionadas: nfsSelecionadas.map(function() { return this.value; }).get()
             };

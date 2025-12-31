@@ -1468,157 +1468,155 @@ def editar_transacao():
         if conn: conn.close()
 
 @app.route("/get_clientes_fornecedores_com_pendencias", methods=["GET"])
+@login_required
 def get_clientes_fornecedores_com_pendencias():
     uvr = request.args.get("uvr")
     tipo_movimentacao = request.args.get("tipo_movimentacao")
-    app.logger.info(f"FluxoCaixa: Buscando pendências para UVR: {uvr}, Movimentação: {tipo_movimentacao}")
+    data_inicial = request.args.get("data_inicial")
+    data_final = request.args.get("data_final")
+    
+    if not uvr or not data_inicial or not data_final:
+        return jsonify({"error": "UVR e Datas são obrigatórias"}), 400
 
-    if not uvr or not tipo_movimentacao:
-        return jsonify({"error": "Parâmetros UVR e Tipo de Movimentação são obrigatórios"}), 400
+    tipo_transacao_alvo = 'Receita' if tipo_movimentacao == 'Recebimento' else 'Despesa'
 
-    conn = None
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    lista_final = {} # Usaremos Dicionário para evitar duplicatas e guardar ID+Nome
+
     try:
-        conn = conectar_banco()
-        cur = conn.cursor()
+        # 1️⃣ BUSCA FINANCEIRA
+        # Agora buscamos o ID também (MAX(c.id))
+        query = """
+            SELECT 
+                TRIM(COALESCE(c.razao_social, tf.nome_cadastro_origem)) as nome,
+                MAX(c.id) as id_real
+            FROM transacoes_financeiras tf
+            LEFT JOIN cadastros c ON tf.id_cadastro_origem = c.id
+            WHERE tf.uvr = %s
+              AND tf.tipo_transacao = %s
+              AND tf.status_pagamento <> 'Liquidado'
+              AND tf.data_documento BETWEEN %s AND %s
+            GROUP BY 1
+            HAVING SUM(tf.valor_total_documento - tf.valor_pago_recebido) > 0.00
+        """
+        cur.execute(query, (uvr, tipo_transacao_alvo, data_inicial, data_final))
+        
+        for row in cur.fetchall():
+            if row['nome']:
+                # Usa o ID real se tiver, senão usa o nome como ID provisório
+                id_uso = row['id_real'] if row['id_real'] else row['nome']
+                lista_final[row['nome']] = id_uso
+
+        # 2️⃣ BUSCA DOCUMENTOS PENDENTES
+        try:
+            cur.execute("SELECT DISTINCT TRIM(categoria) as nome_doc FROM documentos WHERE uvr = %s AND status = 'Pendente'", (uvr,))
+            for row in cur.fetchall():
+                nome = row['nome_doc']
+                if nome and nome not in lista_final:
+                    # Tenta achar o ID desse nome na tabela de cadastros para ajudar
+                    cur.execute("SELECT id FROM cadastros WHERE razao_social = %s LIMIT 1", (nome,))
+                    res_id = cur.fetchone()
+                    id_uso = res_id['id'] if res_id else nome
+                    lista_final[nome] = id_uso
+        except: pass
+
+        # Monta resultado
         results = []
-        
-        if tipo_movimentacao == "Recebimento":
-            query_clientes = """
-                SELECT DISTINCT c.id::TEXT, c.razao_social, c.tipo_cadastro, FALSE as is_associado_rateio
-                FROM cadastros c
-                JOIN transacoes_financeiras tf ON c.id = tf.id_cadastro_origem
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Receita' AND c.tipo_cadastro = 'Cliente' AND tf.status_pagamento <> 'Liquidado'
-                ORDER BY c.razao_social
-            """
-            cur.execute(query_clientes, (uvr,))
-            for row in cur.fetchall():
-                results.append({"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
-            app.logger.info(f"FluxoCaixa: {len(results)} clientes encontrados para recebimento.")
+        for nome in sorted(lista_final.keys()):
+            results.append({
+                "id": lista_final[nome], # Aqui vai o ID numérico OU o Nome (se não tiver cadastro)
+                "razao_social": nome, 
+                "tipo_cadastro": "Automático", 
+                "is_associado_rateio": False
+            })
 
-        elif tipo_movimentacao == "Pagamento":
-            query_fornecedores = """
-                SELECT DISTINCT c.id::TEXT, c.razao_social, c.tipo_cadastro, FALSE as is_associado_rateio
-                FROM cadastros c
-                JOIN transacoes_financeiras tf ON c.id = tf.id_cadastro_origem
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Despesa' AND c.tipo_cadastro = 'Fornecedor/Prestador' AND tf.status_pagamento <> 'Liquidado'
-            """
-            cur.execute(query_fornecedores, (uvr,))
-            fornecedores_count = 0
-            for row in cur.fetchall():
-                results.append({"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
-                fornecedores_count +=1
-            app.logger.info(f"FluxoCaixa: {fornecedores_count} fornecedores encontrados para pagamento.")
-
-            query_associados_rateio = """
-                SELECT DISTINCT tf.nome_cadastro_origem AS id, tf.nome_cadastro_origem AS razao_social,
-                       'Associado (Rateio)' AS tipo_cadastro, TRUE as is_associado_rateio
-                FROM transacoes_financeiras tf
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Despesa' AND tf.tipo_atividade = 'Rateio dos Associados'
-                  AND tf.id_cadastro_origem IS NULL AND tf.nome_cadastro_origem IS NOT NULL AND tf.nome_cadastro_origem <> '' 
-            """
-            cur.execute(query_associados_rateio, (uvr,))
-            associados_count = 0
-            nomes_rateio_adicionados = set()
-            for row in cur.fetchall():
-                nome_rateio = row[1]
-                if nome_rateio not in nomes_rateio_adicionados:
-                    results.append({"id": row[0], "razao_social": nome_rateio, "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
-                    nomes_rateio_adicionados.add(nome_rateio)
-                    associados_count +=1
-            results.sort(key=lambda x: x['razao_social'])
-            app.logger.info(f"FluxoCaixa: {associados_count} associados de rateio encontrados para pagamento.")
-        else:
-            return jsonify({"error": "Tipo de Movimentação inválido"}), 400
-        
-        app.logger.info(f"FluxoCaixa: Total de {len(results)} entidades retornadas para o dropdown.")
         return jsonify(results)
-        
     except Exception as e:
-        app.logger.error(f"Erro em /get_clientes_fornecedores_com_pendencias: {e}", exc_info=True)
+        app.logger.error(f"Erro pendencias: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        if conn: conn.close()
+        conn.close()
 
 @app.route("/get_notas_em_aberto")
 def get_notas_em_aberto():
     uvr = request.args.get("uvr")
-    id_cf_str = request.args.get("id_cadastro_cf") 
+    identificador = request.args.get("id_cadastro_cf") # Pode ser ID (int) ou NOME (str)
     tipo_movimentacao = request.args.get("tipo_movimentacao") 
-    is_associado_rateio_str = request.args.get("is_associado_rateio", "false")
-    is_associado_rateio = is_associado_rateio_str.lower() == "true"
-    
-    # Novos parâmetros de data
     data_inicial = request.args.get("data_inicial")
     data_final = request.args.get("data_final")
 
-    app.logger.info(f"FluxoCaixa: Buscando notas UVR: {uvr}, ID: {id_cf_str}, Datas: {data_inicial} a {data_final}")
-
-    if not all([uvr, id_cf_str, tipo_movimentacao, data_inicial, data_final]):
-        return jsonify({"error": "Parâmetros UVR, ID, Movimentação e Datas são obrigatórios"}), 400
+    if not all([uvr, identificador, tipo_movimentacao]):
+        return jsonify({"error": "Parâmetros obrigatórios faltando"}), 400
 
     tipo_transacao_filtro = "Receita" if tipo_movimentacao == "Recebimento" else "Despesa"
     
-    conn = None
+    conn = conectar_banco()
+    cur = conn.cursor()
+
     try:
-        conn = conectar_banco()
-        cur = conn.cursor()
-        
-        # Filtro de data adicionado à query base
-        params = [uvr, tipo_transacao_filtro, data_inicial, data_final]
-        
-        query_select_from = """
-            SELECT tf.id, tf.numero_documento, tf.data_documento, tf.valor_total_documento, tf.valor_pago_recebido,
+        # Base da Query
+        sql = """
+            SELECT tf.id, tf.numero_documento, tf.data_documento, 
+                   tf.valor_total_documento, tf.valor_pago_recebido,
                    (tf.valor_total_documento - tf.valor_pago_recebido) as valor_pendente
             FROM transacoes_financeiras tf
-        """
-        # Adicionado filtro de data na cláusula WHERE
-        query_where_base = """
+            LEFT JOIN cadastros c ON tf.id_cadastro_origem = c.id
             WHERE tf.uvr = %s 
-            AND tf.tipo_transacao = %s 
-            AND tf.data_documento >= %s AND tf.data_documento <= %s
-            AND tf.status_pagamento <> 'Liquidado'
+              AND tf.tipo_transacao = %s 
+              AND tf.status_pagamento <> 'Liquidado'
         """
-        
-        specific_condition = ""
-        if is_associado_rateio:
-            specific_condition = "AND tf.nome_cadastro_origem = %s AND tf.tipo_atividade = 'Rateio dos Associados' AND tf.id_cadastro_origem IS NULL"
-            params.append(id_cf_str)
+        params = [uvr, tipo_transacao_filtro]
+
+        # --- CORREÇÃO PRINCIPAL AQUI ---
+        # Verifica se o 'identificador' é um número (ID) ou texto (Nome)
+        if identificador.isdigit():
+            # É ID: Busca pela coluna de ID
+            sql += " AND tf.id_cadastro_origem = %s"
+            params.append(int(identificador))
         else:
-            try:
-                id_cf_int = int(id_cf_str)
-                specific_condition = "AND tf.id_cadastro_origem = %s"
-                params.append(id_cf_int)
-            except ValueError:
-                return jsonify({"error": "ID do Cadastro inválido."}), 400
+            # É TEXTO: Busca pelo Nome (na transação ou no cadastro vinculado)
+            sql += " AND (tf.nome_cadastro_origem = %s OR c.razao_social = %s)"
+            params.append(identificador)
+            params.append(identificador)
         
-        query_order_by = "ORDER BY tf.data_documento, tf.numero_documento"
-        final_query = f"{query_select_from} {query_where_base} {specific_condition} {query_order_by}"
+        # Filtro de datas (se houver)
+        if data_inicial and data_final:
+            sql += " AND tf.data_documento BETWEEN %s AND %s"
+            params.append(data_inicial)
+            params.append(data_final)
         
-        cur.execute(final_query, tuple(params))
+        sql += " ORDER BY tf.data_documento, tf.numero_documento"
+        
+        cur.execute(sql, tuple(params))
         
         documentos = []
         for row in cur.fetchall():
             documentos.append({
-                "id": row[0], "numero_documento": row[1] or "N/D",
+                "id": row[0], 
+                "numero_documento": row[1] or "N/D",
                 "data_documento": row[2].isoformat(),
                 "valor_total_documento": float(row[3]),
                 "valor_pago_recebido": float(row[4]),
                 "valor_restante": float(row[5]) 
             })
+            
         return jsonify(documentos)
         
     except Exception as e:
-        app.logger.error(f"Erro em /get_notas_em_aberto: {e}", exc_info=True)
+        app.logger.error(f"Erro get_notas_em_aberto: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        if conn: conn.close()
+        conn.close()
 
 @app.route("/registrar_fluxo_caixa", methods=["POST"])
+@login_required
 def registrar_fluxo_caixa():
     conn = None
     try:
         dados = request.json
-        app.logger.info(f"Registrando Fluxo de Caixa com dados JSON: {dados}")
+        app.logger.info(f"Registrando Fluxo: {dados}")
         conn = conectar_banco()
         cur = conn.cursor()
 
@@ -1627,23 +1625,31 @@ def registrar_fluxo_caixa():
         tipo_mov = dados.get("tipo_movimentacao")
         
         id_cadastro_cf_str_from_js = dados.get("id_cadastro_cf_str") 
-        is_associado_rateio_from_js = dados.get("is_associado_rateio", False)
-        nome_cf_display_from_js = dados.get("nome_cadastro_cf_display")
+        is_associado_rateio = dados.get("is_associado_rateio", False)
+        nome_cf_display = dados.get("nome_cadastro_cf_display")
 
         id_cadastro_cf_db = None
-        nome_cadastro_cf_db = nome_cf_display_from_js 
+        nome_cadastro_cf_db = nome_cf_display 
 
-        if is_associado_rateio_from_js:
-            pass 
-        else:
-            if id_cadastro_cf_str_from_js:
-                try:
-                    id_cadastro_cf_db = int(id_cadastro_cf_str_from_js)
-                except ValueError:
-                    app.logger.error(f"FluxoCaixa: ID '{id_cadastro_cf_str_from_js}' não numérico para não-rateio no registro.")
-                    return jsonify({"error": "ID do Cliente/Fornecedor inválido para registro."}), 400
-            else: 
-                 return jsonify({"error": "ID do Cliente/Fornecedor ausente para não-rateio."}), 400
+        # --- CORREÇÃO PRINCIPAL: TRATAMENTO DO ID ---
+        if is_associado_rateio:
+            pass # Rateio geralmente não tem ID de cadastro vinculado, usa nome
+        elif id_cadastro_cf_str_from_js:
+            # Se for numérico, converte para INT
+            if str(id_cadastro_cf_str_from_js).isdigit():
+                id_cadastro_cf_db = int(id_cadastro_cf_str_from_js)
+            else:
+                # Se for Texto (Nome), tentamos achar o ID no banco pelo nome
+                app.logger.info(f"FluxoCaixa: Recebido nome '{id_cadastro_cf_str_from_js}' em vez de ID. Buscando ID...")
+                cur.execute("SELECT id FROM cadastros WHERE razao_social = %s LIMIT 1", (str(id_cadastro_cf_str_from_js),))
+                row_busca = cur.fetchone()
+                if row_busca:
+                    id_cadastro_cf_db = row_busca[0] # Achamos o ID!
+                else:
+                    id_cadastro_cf_db = None # Não achamos, salva sem ID (apenas com o nome)
+        else: 
+             return jsonify({"error": "Identificação do Cliente/Fornecedor ausente."}), 400
+        # --------------------------------------------
         
         id_conta = int(dados.get("id_conta_corrente"))
         numero_doc_bancario = dados.get("numero_documento_bancario")
@@ -1651,19 +1657,25 @@ def registrar_fluxo_caixa():
         try:
             data_efetiva = datetime.strptime(dados.get("data_efetiva"), '%Y-%m-%d').date()
             valor_efetivo = Decimal(str(dados.get("valor_efetivo")).replace(",", "."))
-            data_registro = datetime.strptime(dados.get("data_hora_registro_fluxo"), '%d/%m/%Y %H:%M:%S')
+            # Tratamento flexível da data/hora
+            data_hora_str = dados.get("data_hora_registro_fluxo")
+            try:
+                data_registro = datetime.strptime(data_hora_str, '%d/%m/%Y %H:%M:%S')
+            except:
+                data_registro = datetime.now() # Fallback se formato vier errado
+                
         except (ValueError, TypeError, InvalidOperation) as e:
-            app.logger.error(f"Erro de conversão de data/valor no fluxo de caixa: {e}")
             return jsonify({"error": f"Formato de data ou valor inválido: {e}"}), 400
         
         total_nfs_selecionadas_valor = Decimal('0.00')
         notas_ids_selecionadas = dados.get("ids_nfs_selecionadas", [])
         
         if not notas_ids_selecionadas:
-             return jsonify({"error": "Nenhuma nota fiscal (transação) foi selecionada para este lançamento."}), 400
+             return jsonify({"error": "Nenhuma nota fiscal foi selecionada."}), 400
 
+        # Calcula totais
         for id_nf_str in notas_ids_selecionadas:
-            cur.execute("SELECT (valor_total_documento - valor_pago_recebido) as valor_pendente FROM transacoes_financeiras WHERE id = %s", (int(id_nf_str),))
+            cur.execute("SELECT (valor_total_documento - valor_pago_recebido) FROM transacoes_financeiras WHERE id = %s", (int(id_nf_str),))
             nf_pendente_row = cur.fetchone()
             if nf_pendente_row and nf_pendente_row[0] is not None:
                  total_nfs_selecionadas_valor += Decimal(nf_pendente_row[0])
@@ -1671,6 +1683,7 @@ def registrar_fluxo_caixa():
         saldo_operacao_calculado = total_nfs_selecionadas_valor - valor_efetivo
         observacoes = dados.get("observacoes")
 
+        # Insere no Fluxo
         cur.execute("""
             INSERT INTO fluxo_caixa
             (uvr, associacao, tipo_movimentacao, id_cadastro_cf, nome_cadastro_cf,
@@ -1684,50 +1697,34 @@ def registrar_fluxo_caixa():
         ))
         id_fluxo = cur.fetchone()[0]
 
-        valor_efetivo_restante_para_aplicar = valor_efetivo
+        # Baixa nas NFs
+        valor_restante = valor_efetivo
         for id_nf_str in notas_ids_selecionadas:
             id_transacao = int(id_nf_str)
-            if valor_efetivo_restante_para_aplicar <= Decimal('0'):
-                break 
+            if valor_restante <= Decimal('0'): break 
 
-            cur.execute("SELECT valor_pago_recebido, valor_total_documento, (valor_total_documento - valor_pago_recebido) as valor_pendente FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+            cur.execute("SELECT valor_pago_recebido, valor_total_documento, (valor_total_documento - valor_pago_recebido) FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
             nf_data = cur.fetchone()
             if not nf_data: continue
 
-            atual_pago_na_nf, total_doc_da_nf, pendente_na_nf = Decimal(nf_data[0]), Decimal(nf_data[1]), Decimal(nf_data[2])
-            valor_a_aplicar_nesta_nf = min(valor_efetivo_restante_para_aplicar, pendente_na_nf)
+            pago_atual, total_doc, pendente = Decimal(nf_data[0]), Decimal(nf_data[1]), Decimal(nf_data[2])
+            aplicar = min(valor_restante, pendente)
             
-            if valor_a_aplicar_nesta_nf > Decimal('0'):
-                cur.execute("""
-                    INSERT INTO fluxo_caixa_transacoes_link
-                    (id_fluxo_caixa, id_transacao_financeira, valor_aplicado_nesta_nf)
-                    VALUES (%s, %s, %s)
-                """, (id_fluxo, id_transacao, valor_a_aplicar_nesta_nf))
+            if aplicar > Decimal('0'):
+                cur.execute("INSERT INTO fluxo_caixa_transacoes_link (id_fluxo_caixa, id_transacao_financeira, valor_aplicado_nesta_nf) VALUES (%s, %s, %s)", (id_fluxo, id_transacao, aplicar))
 
-                novo_valor_pago_total_na_nf = atual_pago_na_nf + valor_a_aplicar_nesta_nf
+                novo_pago = pago_atual + aplicar
+                status_final = 'Liquidado' if novo_pago >= total_doc else 'Parcialmente Pago/Recebido'
                 
-                if novo_valor_pago_total_na_nf.quantize(Decimal('0.01')) >= total_doc_da_nf.quantize(Decimal('0.01')):
-                    status_final_nf = 'Liquidado'
-                else:
-                    status_final_nf = 'Parcialmente Pago/Recebido'
-                
-                cur.execute("""
-                    UPDATE transacoes_financeiras
-                    SET valor_pago_recebido = %s, status_pagamento = %s
-                    WHERE id = %s
-                """, (novo_valor_pago_total_na_nf, status_final_nf, id_transacao))
-                
-                valor_efetivo_restante_para_aplicar -= valor_a_aplicar_nesta_nf
+                cur.execute("UPDATE transacoes_financeiras SET valor_pago_recebido = %s, status_pagamento = %s WHERE id = %s", (novo_pago, status_final, id_transacao))
+                valor_restante -= aplicar
 
         conn.commit()
-        return jsonify({"status": "sucesso", "message": "Fluxo de caixa registrado e transações atualizadas."})
-    except psycopg2.Error as db_err:
-        if conn: conn.rollback()
-        app.logger.error(f"Erro de banco de dados em /registrar_fluxo_caixa: {db_err}", exc_info=True)
-        return jsonify({"error": f"Erro no banco de dados: {db_err}"}), 500
+        return jsonify({"status": "sucesso", "message": "Registrado com sucesso!"})
+        
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro em /registrar_fluxo_caixa: {e}", exc_info=True)
+        app.logger.error(f"Erro fluxo: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
@@ -4882,6 +4879,75 @@ def excluir_documento(id):
         conn.close()
 
     return redirect(url_for('documentos'))
+
+# --- NOVA ROTA API: Filtra Entidades com Saldo (Diferente de Zero) ---
+@app.route('/api/entidades_com_saldo')
+@login_required
+def api_entidades_com_saldo():
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+    uvr = request.args.get('uvr')
+
+    if not data_inicio or not data_fim:
+        return jsonify([])
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    try:
+        # 1. Primeiro, vamos ver QUAIS TIPOS existem no banco nesse período
+        # Isso ajuda a saber se tem algo diferente de 'Receita' e 'Despesa'
+        cur.execute("SELECT DISTINCT tipo FROM transacoes WHERE data BETWEEN %s AND %s", (data_inicio, data_fim))
+        tipos_encontrados = [t['tipo'] for t in cur.fetchall()]
+        print(f"\n--- DIAGNÓSTICO DE SALDO ({data_inicio} a {data_fim}) ---")
+        print(f"Tipos de transação encontrados: {tipos_encontrados}")
+
+        # 2. Agora a Query que soma e mostra quem sobrou
+        query = """
+            SELECT 
+                TRIM(entidade) as nome_entidade,
+                SUM(CASE WHEN LOWER(TRIM(tipo)) = 'receita' THEN valor ELSE 0 END) as total_receita,
+                SUM(CASE WHEN LOWER(TRIM(tipo)) != 'receita' THEN valor ELSE 0 END) as total_despesa,
+                SUM(CASE WHEN LOWER(TRIM(tipo)) = 'receita' THEN valor ELSE -valor END) as saldo_final
+            FROM transacoes 
+            WHERE data BETWEEN %s AND %s
+        """
+        params = [data_inicio, data_fim]
+
+        if uvr and uvr != 'Todas':
+            query += " AND uvr = %s"
+            params.append(uvr)
+
+        query += """
+            GROUP BY TRIM(entidade)
+            HAVING ABS(SUM(CASE WHEN LOWER(TRIM(tipo)) = 'receita' THEN valor ELSE -valor END)) >= 0.01
+            ORDER BY nome_entidade ASC
+        """
+
+        cur.execute(query, tuple(params))
+        resultados = cur.fetchall()
+
+        lista_nomes = []
+        if not resultados:
+            print(">> Nenhum saldo pendente encontrado. Lista vazia.")
+        
+        for row in resultados:
+            nome = row['nome_entidade']
+            saldo = row['saldo_final']
+            # O Print abaixo vai aparecer no seu terminal e mostrar o "culpado"
+            print(f">> ENTIDADE: {nome:<30} | REC: {row['total_receita']:>10} | DESP: {row['total_despesa']:>10} | SALDO: {saldo}")
+            lista_nomes.append(nome)
+        
+        print("----------------------------------------------------------\n")
+
+        return jsonify(lista_nomes)
+
+    except Exception as e:
+        print(f"ERRO CRÍTICO NO DEBUG: {e}")
+        return jsonify({"erro": str(e)}), 500
+    finally:
+        conn.close()
+
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
     return f"""<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>{titulo}</title>
