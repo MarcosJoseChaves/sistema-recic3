@@ -113,6 +113,14 @@
                             <i class="fas fa-truck-moving"></i> Frota & Equipamentos
                         </button>
 
+                        <!-- NOVO BOTÃO DE DOCUMENTOS AQUI -->
+                        <hr>
+                        <small class="text-muted d-block mb-2">REGULARIDADE & ARQUIVOS</small>
+                        <a href="/documentos" class="btn btn-info w-100 btn-dashboard text-white mb-2">
+                            <i class="fas fa-folder-open"></i> Documentos & Certidões
+                        </a>
+                        <!-- FIM DO NOVO BOTÃO -->
+
                         {% if usuario and usuario.role == 'admin' %}
                         <hr>
                         <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
@@ -171,6 +179,7 @@
     </div>
 </div>
 
+<!-- Mantive o restante do código original (formulários ocultos) igual ao que você mandou -->
 <div class="container d-flex justify-content-center flex-column align-items-center">
 
     <div id="clienteFornecedorForm" class="form-container">
@@ -4539,6 +4548,16 @@ function visualizarMovimentacao(id) {
             tbody.append(`<tr class="table-dark"><td colspan="4" class="text-end fw-bold">SALDO:</td><td class="text-end fw-bold">R$ ${totalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td></tr>`);
         });
     });
+    function mostrarFormulario(idContainer) {
+        $('.form-container').hide();
+        $('#menuPrincipal').hide();
+        if(idContainer === 'menuPrincipal') {
+            $('#menuPrincipal').fadeIn();
+        } else {
+            $('#' + idContainer).fadeIn();
+        }
+    }
+
 </script>
 </body>
 </html>

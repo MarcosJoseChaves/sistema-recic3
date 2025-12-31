@@ -9,18 +9,18 @@ import psycopg2
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
+
 # Import do Cursor para o Banco de Dados
 from psycopg2.extras import RealDictCursor
 
-# Import do Flask (incluindo send_file e make_response para downloads)
-from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file, make_response
+# --- FLASK IMPORTS ---
+# Adicionei 'flash' na lista abaixo para as mensagens de sucesso/erro
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file, make_response, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# --- REPORTLAB IMPORTS (CORRIGIDO) ---
-# Esta é a linha que faltava e causava o erro "NameError: name 'canvas' is not defined":
+# --- REPORTLAB IMPORTS ---
 from reportlab.pdfgen import canvas 
-
 from reportlab.lib.pagesizes import letter, A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image as ReportLabImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -4657,6 +4657,231 @@ def criar_tabela_produtos_fix():
         return f"<h1>Erro na Migração:</h1><p>{str(e)}</p>"
     finally:
         conn.close()
+
+# Configuração dos Tipos de Documentos e suas regras
+# Formato: 'Nome': {'categoria': 'X', 'pede_validade': T/F, 'pede_valor': T/F, 'pede_competencia': T/F}
+
+TIPOS_DOCUMENTOS = {
+    # --- FINANCEIROS ---
+    'Nota Fiscal de Serviço': {'cat': 'Financeiro', 'validade': False, 'valor': True, 'comp': True, 'num': True},
+    'Medição Mensal':         {'cat': 'Financeiro', 'validade': False, 'valor': False, 'comp': True, 'num': True},
+    
+    # --- RH / ASSOCIADOS ---
+    'Relatório de Associados':{'cat': 'RH', 'validade': False, 'valor': False, 'comp': True, 'num': False},
+    'GPS - INSS':             {'cat': 'RH', 'validade': False, 'valor': True, 'comp': True, 'num': False},
+    'Recibo de Rateio':       {'cat': 'RH', 'validade': False, 'valor': True, 'comp': True, 'num': False},
+    
+    # --- BANCÁRIOS ---
+    'Extrato Bancário':       {'cat': 'Bancário', 'validade': False, 'valor': False, 'comp': True, 'num': False},
+    
+    # --- AMBIENTAL ---
+    'MTR - Manifesto':        {'cat': 'Ambiental', 'validade': False, 'valor': False, 'comp': True, 'num': True},
+    'CDF - Certificado':      {'cat': 'Ambiental', 'validade': False, 'valor': False, 'comp': True, 'num': True},
+    
+    # --- CERTIDÕES (GERAL) ---
+    'Certidão Municipal':     {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'Certidão Estadual':      {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'Certidão Federal':       {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'CNDT (Trabalhista)':     {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'FGTS':                   {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True}
+}
+
+@app.route('/documentos', methods=['GET', 'POST'])
+@login_required
+def documentos():
+    conn = conectar_banco()
+    # Usando RealDictCursor para facilitar o uso no HTML
+    cur = conn.cursor(cursor_factory=RealDictCursor) 
+    
+    if request.method == 'POST':
+        try:
+            uvr = request.form['uvr']
+            tipo_doc = request.form['tipo_documento']
+            arquivo = request.files['arquivo']
+            
+            # Pega as regras para saber o que salvar
+            regras = TIPOS_DOCUMENTOS.get(tipo_doc, {})
+            
+            # Tratamento de campos vazios (transforma string vazia em None)
+            competencia = request.form.get('competencia') or None
+            validade = request.form.get('validade') or None
+            numero = request.form.get('numero') or None
+            valor = request.form.get('valor')
+            if valor:
+                valor = valor.replace(',', '.') # Corrige formato brasileiro
+            else:
+                valor = 0
+
+            # Salvar Arquivo
+            if arquivo:
+                # CORREÇÃO CRÍTICA PARA CRIAR PASTA
+                # Define o caminho absoluto para a pasta de uploads garantindo compatibilidade OS
+                pasta_upload = os.path.join(app.root_path, 'static', 'uploads')
+                
+                # Cria a pasta recursivamente se não existir. exist_ok=True evita erro se já existir.
+                os.makedirs(pasta_upload, exist_ok=True)
+                
+                # Gera nome único e LIMPO: UVR_TIPO_TIMESTAMP.pdf
+                timestamp = str(datetime.now().timestamp()).replace('.', '')
+                extensao = arquivo.filename.split('.')[-1]
+                
+                # Limpa caracteres especiais dos nomes para evitar erro de caminho no Windows
+                tipo_limpo = re.sub(r'[^a-zA-Z0-9]', '_', tipo_doc)
+                uvr_limpa = re.sub(r'[^a-zA-Z0-9]', '_', uvr)
+                
+                nome_arquivo = f"{uvr_limpa}_{tipo_limpo}_{timestamp}.{extensao}"
+                caminho_completo = os.path.join(pasta_upload, nome_arquivo)
+                
+                # Salva o arquivo
+                arquivo.save(caminho_completo)
+
+                # Grava no Banco (salva apenas o nome do arquivo relativo)
+                cur.execute("""
+                    INSERT INTO documentos 
+                    (uvr, categoria, tipo_documento, competencia, data_validade, valor, numero_ref, caminho_arquivo)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (uvr, regras['cat'], tipo_doc, competencia, validade, valor, numero, nome_arquivo))
+                
+                conn.commit()
+                flash("Documento enviado com sucesso!", "success")
+            
+        except Exception as e:
+            conn.rollback()
+            flash(f"Erro ao salvar documento: {str(e)}", "danger")
+            print(f"ERRO ARQUIVO: {str(e)}") # Print no terminal para ajudar a debugar
+        finally:
+            conn.close()
+        
+        return redirect(url_for('documentos'))
+
+    # SE FOR GET (Abrir a página): Busca histórico
+    try:
+        cur.execute("SELECT * FROM documentos ORDER BY created_at DESC")
+        docs_enviados = cur.fetchall()
+    except Exception as e:
+        docs_enviados = []
+        print(f"Erro ao buscar documentos: {e}")
+    finally:
+        conn.close()
+    
+    # Passamos "now" para o template para comparar datas de validade
+    return render_template('documentos.html', tipos=TIPOS_DOCUMENTOS, docs=docs_enviados, now=date.today())
+
+@app.route('/editar_documento', methods=['POST'])
+@login_required
+def editar_documento():
+    # REMOVIDO O BLOQUEIO: Agora usuários comuns podem acessar, mas com comportamento diferente
+    
+    conn = conectar_banco()
+    cur = conn.cursor()
+    try:
+        doc_id = request.form['id_documento']
+        
+        # --- LÓGICA DE PERMISSÃO ---
+        # Se for admin, pega o status do formulário. 
+        # Se for usuário, FORÇA o status para 'Pendente' (para o admin revisar depois).
+        if current_user.role == 'admin':
+            novo_status = request.form['status']
+        else:
+            novo_status = 'Pendente' 
+
+        # Dados do formulário
+        nova_validade = request.form.get('validade') or None
+        nova_competencia = request.form.get('competencia') or None
+        novo_valor = request.form.get('valor')
+        novo_numero = request.form.get('numero') or None
+        observacoes = request.form.get('observacoes')
+
+        # Tratamento do valor
+        if novo_valor:
+            novo_valor = novo_valor.replace(',', '.')
+        else:
+            novo_valor = 0
+
+        # Adiciona uma nota nas observações se for usuário comum editando
+        if current_user.role != 'admin':
+            observacoes = f"[Editado por {current_user.id}] {observacoes or ''}"
+
+        cur.execute("""
+            UPDATE documentos
+            SET status = %s,
+                data_validade = %s,
+                competencia = %s,
+                valor = %s,
+                numero_ref = %s,
+                observacoes = %s
+            WHERE id = %s
+        """, (novo_status, nova_validade, nova_competencia, novo_valor, novo_numero, observacoes, doc_id))
+        
+        conn.commit()
+        
+        if current_user.role == 'admin':
+            flash("Documento atualizado/aprovado com sucesso!", "success")
+        else:
+            flash("Solicitação de alteração enviada! Aguarde aprovação do administrador.", "info")
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro ao atualizar: {str(e)}", "danger")
+    finally:
+        conn.close()
+        
+    return redirect(url_for('documentos'))
+
+# --- ROTA: EXCLUIR OU SOLICITAR EXCLUSÃO ---
+@app.route('/excluir_documento/<int:id>', methods=['GET'])
+@login_required
+def excluir_documento(id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        # 1. Verifica se o usuário é ADMIN
+        if current_user.role == 'admin':
+            # --- FLUXO ADMIN (DELEÇÃO REAL) ---
+            
+            # Busca o nome do arquivo para deletar da pasta
+            cur.execute("SELECT caminho_arquivo FROM documentos WHERE id = %s", (id,))
+            doc = cur.fetchone()
+            
+            if doc:
+                # Deleta do Banco de Dados
+                cur.execute("DELETE FROM documentos WHERE id = %s", (id,))
+                conn.commit()
+                
+                # Tenta deletar o arquivo físico
+                try:
+                    caminho_arquivo = os.path.join(app.root_path, 'static', 'uploads', doc['caminho_arquivo'])
+                    if os.path.exists(caminho_arquivo):
+                        os.remove(caminho_arquivo)
+                except Exception as e_arquivo:
+                    print(f"Aviso: Arquivo físico não encontrado ou erro ao deletar: {e_arquivo}")
+
+                flash("Documento excluído permanentemente.", "success")
+            else:
+                flash("Documento não encontrado.", "warning")
+
+        else:
+            # --- FLUXO USUÁRIO (SOLICITAÇÃO) ---
+            # Não deleta, apenas muda o status para avisar o Admin
+            
+            cur.execute("""
+                UPDATE documentos 
+                SET status = 'Solicitar_Exclusao', 
+                    observacoes = CONCAT(observacoes, ' [Solicitação de Exclusão pelo usuário]')
+                WHERE id = %s
+            """, (id,))
+            conn.commit()
+            
+            flash("Solicitação de exclusão enviada ao administrador.", "info")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro ao processar: {str(e)}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(url_for('documentos'))
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
     return f"""<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>{titulo}</title>

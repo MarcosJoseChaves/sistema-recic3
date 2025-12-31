@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestão de Documentos - Sistema Recic3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; margin-bottom: 20px; }
+        .status-badge { font-size: 0.9em; padding: 5px 10px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="fas fa-folder-open"></i> Central de Documentos</h3>
+        <a href="/" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Voltar ao Dashboard</a>
+    </div>
+
+    <div class="card p-4 mb-4 shadow-sm bg-white">
+        <h5 class="mb-3 text-primary"><i class="fas fa-cloud-upload-alt"></i> Novo Upload</h5>
+        <form method="POST" enctype="multipart/form-data">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">UVR / Associação</label>
+                    <select name="uvr" class="form-select" required>
+                        <option value="UVR 01">UVR 01</option>
+                        <option value="UVR 02">UVR 02</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Tipo de Documento</label>
+                    <select id="tipo_documento" name="tipo_documento" class="form-select" onchange="atualizarCampos()" required>
+                        <option value="">Selecione...</option>
+                        {% for nome, regras in tipos.items() %}
+                            <option value="{{ nome }}" 
+                                    data-validade="{{ regras['validade'] }}"
+                                    data-valor="{{ regras['valor'] }}"
+                                    data-comp="{{ regras['comp'] }}"
+                                    data-num="{{ regras['num'] }}">
+                                {{ nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4 campo-dinamico" id="div-competencia" style="display:none;">
+                    <label class="form-label">Competência (Mês/Ano)</label>
+                    <input type="month" name="competencia" class="form-control">
+                </div>
+
+                <div class="col-md-4 campo-dinamico" id="div-validade" style="display:none;">
+                    <label class="form-label">Data de Validade</label>
+                    <input type="date" name="validade" class="form-control">
+                </div>
+
+                <div class="col-md-4 campo-dinamico" id="div-valor" style="display:none;">
+                    <label class="form-label">Valor (R$)</label>
+                    <input type="number" step="0.01" name="valor" class="form-control" placeholder="0,00">
+                </div>
+
+                <div class="col-md-4 campo-dinamico" id="div-numero" style="display:none;">
+                    <label class="form-label">Nº do Documento</label>
+                    <input type="text" name="numero" class="form-control">
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Arquivo (PDF ou Imagem)</label>
+                    <input type="file" name="arquivo" class="form-control" required>
+                </div>
+
+                <div class="col-12 mt-4">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Enviar Documento</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <h3>Histórico de Envios</h3>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover bg-white rounded shadow-sm align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Data</th>
+                    <th>UVR</th>
+                    <th>Documento</th>
+                    <th>Detalhes</th>
+                    <th>Status</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in docs %}
+                <tr>
+                    <td>{{ doc.created_at.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ doc.uvr }}</td>
+                    <td>
+                        <strong class="text-primary">{{ doc.tipo_documento }}</strong><br>
+                        <small class="text-muted">{{ doc.categoria }}</small>
+                        {% if doc.observacoes %}
+                        <br><small class="text-info"><i class="fas fa-info-circle"></i> {{ doc.observacoes }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if doc.competencia %} <div><small>Ref:</small> <strong>{{ doc.competencia }}</strong></div> {% endif %}
+                        {% if doc.data_validade %} 
+                            {% if doc.data_validade < now %}
+                                <span class="badge bg-danger">Vencido: {{ doc.data_validade }}</span>
+                            {% else %}
+                                <span class="badge bg-success">Vence: {{ doc.data_validade }}</span>
+                            {% endif %}
+                        {% endif %}
+                        {% if doc.valor > 0 %} <div class="text-success fw-bold">R$ {{ doc.valor }}</div> {% endif %}
+                        {% if doc.numero_ref %} <div><small>Nº:</small> {{ doc.numero_ref }}</div> {% endif %}
+                    </td>
+                    <td>
+                        {% if doc.status == 'Pendente' %} 
+                            <span class="badge bg-warning text-dark status-badge"><i class="fas fa-clock"></i> Pendente</span>
+                        {% elif doc.status == 'Solicitar_Exclusao' %}
+                            <span class="badge bg-dark status-badge"><i class="fas fa-trash"></i> Solicitada Exclusão</span>
+                        {% elif doc.status == 'Aprovado' %} 
+                            <span class="badge bg-success status-badge"><i class="fas fa-check-circle"></i> Aprovado</span>
+                        {% elif doc.status == 'Reprovado' %} 
+                            <span class="badge bg-danger status-badge"><i class="fas fa-times-circle"></i> Reprovado</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ doc.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a href="{{ url_for('static', filename='uploads/' + doc.caminho_arquivo) }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visualizar">
+                            <i class="fas fa-eye"></i>
+                        </a>
+
+                        <button class="btn btn-sm btn-outline-warning" title="{% if current_user.role == 'admin' %}Gerenciar{% else %}Solicitar Correção{% endif %}" 
+                                onclick='abrirModalEditar({{ doc|tojson }}, "{{ current_user.role }}")'>
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        
+                        <a href="/excluir_documento/{{ doc.id }}" class="btn btn-sm btn-outline-danger" title="Excluir" 
+                           onclick="return confirm('{% if current_user.role == 'admin' %}ATENÇÃO: Deseja EXCLUIR PERMANENTEMENTE este documento?{% else %}Deseja solicitar a EXCLUSÃO deste documento ao administrador?{% endif %}');">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title fw-bold" id="modalTitulo">Editar Documento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/editar_documento" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="id_documento" id="edit_id">
+                    
+                    <div class="mb-3" id="divStatusAdmin">
+                        <label class="form-label fw-bold">Status (Ação do Admin)</label>
+                        <select name="status" id="edit_status" class="form-select">
+                            <option value="Pendente">⏳ Pendente</option>
+                            <option value="Aprovado">✅ Aprovado</option>
+                            <option value="Reprovado">❌ Reprovado</option>
+                            <option value="Solicitar_Exclusao">🗑️ Solicitado Exclusão</option>
+                        </select>
+                    </div>
+
+                    <div class="alert alert-info" id="msgUsuarioComum" style="display:none;">
+                        <i class="fas fa-info-circle"></i> Suas alterações serão enviadas para aprovação do administrador. O status do documento ficará "Pendente".
+                    </div>
+
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Competência</label>
+                            <input type="month" name="competencia" id="edit_competencia" class="form-control">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Validade</label>
+                            <input type="date" name="validade" id="edit_validade" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Valor (R$)</label>
+                            <input type="text" name="valor" id="edit_valor" class="form-control">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Nº Documento</label>
+                            <input type="text" name="numero" id="edit_numero" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Observações</label>
+                        <textarea name="observacoes" id="edit_observacoes" class="form-control" rows="2" placeholder="Detalhes da alteração..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnSalvarModal">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Função para mostrar/ocultar campos no upload (igual a anterior)
+    function atualizarCampos() {
+        var select = document.getElementById("tipo_documento");
+        var option = select.options[select.selectedIndex];
+
+        var pedeValidade = option.getAttribute("data-validade") == "True";
+        var pedeValor = option.getAttribute("data-valor") == "True";
+        var pedeComp = option.getAttribute("data-comp") == "True";
+        var pedeNum = option.getAttribute("data-num") == "True";
+
+        document.getElementById("div-validade").style.display = pedeValidade ? "block" : "none";
+        document.getElementById("div-valor").style.display = pedeValor ? "block" : "none";
+        document.getElementById("div-competencia").style.display = pedeComp ? "block" : "none";
+        document.getElementById("div-numero").style.display = pedeNum ? "block" : "none";
+    }
+
+    // Função para abrir o Modal de Edição (Adaptada para Roles)
+    function abrirModalEditar(doc, userRole) {
+        document.getElementById('edit_id').value = doc.id;
+        document.getElementById('edit_competencia').value = doc.competencia || '';
+        document.getElementById('edit_validade').value = doc.data_validade || '';
+        document.getElementById('edit_valor').value = doc.valor || '';
+        document.getElementById('edit_numero').value = doc.numero_ref || '';
+        document.getElementById('edit_observacoes').value = doc.observacoes || '';
+
+        // Lógica visual dependendo se é Admin ou Usuário
+        if (userRole === 'admin') {
+            document.getElementById('divStatusAdmin').style.display = 'block';
+            document.getElementById('msgUsuarioComum').style.display = 'none';
+            document.getElementById('edit_status').value = doc.status; // Admin pode mudar status
+            document.getElementById('modalTitulo').innerText = "Gerenciar Documento (Admin)";
+            document.getElementById('btnSalvarModal').innerText = "Salvar / Aprovar";
+            document.getElementById('btnSalvarModal').classList.remove('btn-warning');
+            document.getElementById('btnSalvarModal').classList.add('btn-success');
+        } else {
+            document.getElementById('divStatusAdmin').style.display = 'none';
+            document.getElementById('msgUsuarioComum').style.display = 'block';
+            document.getElementById('modalTitulo').innerText = "Solicitar Alteração";
+            document.getElementById('btnSalvarModal').innerText = "Enviar Solicitação";
+            document.getElementById('btnSalvarModal').classList.remove('btn-success');
+            document.getElementById('btnSalvarModal').classList.add('btn-warning');
+        }
+
+        var myModal = new bootstrap.Modal(document.getElementById('modalEditar'));
+        myModal.show();
+    }
+</script>
+</body>
+</html>
