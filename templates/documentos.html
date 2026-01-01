@@ -5,11 +5,15 @@
     <title>Gestão de Documentos - Sistema Recic3</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+    
     <style>
         body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h2 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; margin-bottom: 20px; }
         .status-badge { font-size: 0.9em; padding: 5px 10px; border-radius: 20px; }
+        .campo-dinamico { transition: all 0.3s ease; }
     </style>
 </head>
 <body>
@@ -33,70 +37,154 @@
 
     <div class="card p-4 mb-4 shadow-sm bg-white">
         <h5 class="mb-3 text-primary"><i class="fas fa-cloud-upload-alt"></i> Novo Upload</h5>
-        <form method="POST" enctype="multipart/form-data">
+        
+        <form action="/documentos" method="POST" enctype="multipart/form-data">
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">UVR / Associação</label>
+                
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">1. UVR / Associação</label>
                     <select name="uvr" class="form-select" required>
+                        <option value="">Selecione...</option>
                         <option value="UVR 01">UVR 01</option>
                         <option value="UVR 02">UVR 02</option>
                     </select>
                 </div>
 
-                <div class="col-md-4">
-                    <label class="form-label">Tipo de Documento</label>
-                    <select id="tipo_documento" name="tipo_documento" class="form-select" onchange="atualizarCampos()" required>
-                        <option value="">Selecione...</option>
-                        {% for nome, regras in tipos.items() %}
-                            <option value="{{ nome }}" 
-                                    data-validade="{{ regras['validade'] }}"
-                                    data-valor="{{ regras['valor'] }}"
-                                    data-comp="{{ regras['comp'] }}"
-                                    data-num="{{ regras['num'] }}">
-                                {{ nome }}
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted">2. Periodicidade</label>
+                    <select id="upload_filtro_periodo" class="form-select bg-light" onchange="filtrarOpcoesUpload()">
+                        <option value="">Todas</option>
+                        <option value="Mensal">📅 Mensal</option>
+                        <option value="Geral">📁 Geral</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted">3. Área</label>
+                    <select id="upload_filtro_area" class="form-select bg-light" onchange="filtrarOpcoesUpload()">
+                        <option value="">Todas</option>
+                        <option value="Financeiro">💰 Financeiro</option>
+                        <option value="Fiscal">⚖️ Fiscal</option>
+                        <option value="Trabalhista">👥 Trabalhista</option>
+                        <option value="Operacional">♻️ Operacional</option>
+                        <option value="Institucional">🏢 Institucional</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-primary">4. Documento Específico</label>
+                    <select id="tipo_documento" name="tipo_documento" class="form-select border-primary" onchange="atualizarCamposDinamicos()" required>
+                        <option value="">-- Selecione os filtros --</option>
+                        {% for tipo in tipos %}
+                            <option value="{{ tipo.id }}" 
+                                    data-categoria="{{ tipo.categoria }}"
+                                    data-validade="{{ 'True' if tipo.exige_validade else 'False' }}"
+                                    data-valor="{{ 'True' if tipo.exige_valor else 'False' }}"
+                                    data-comp="{{ 'True' if tipo.exige_competencia else 'False' }}">
+                                {{ tipo.nome }}
                             </option>
                         {% endfor %}
                     </select>
+                    <div class="form-text text-muted" id="msgContador"></div>
                 </div>
 
                 <div class="col-md-4 campo-dinamico" id="div-competencia" style="display:none;">
                     <label class="form-label">Competência (Mês/Ano)</label>
-                    <input type="month" name="competencia" class="form-control">
+                    <input type="date" name="competencia" class="form-control" title="Selecione o dia 1 do mês de referência">
                 </div>
 
                 <div class="col-md-4 campo-dinamico" id="div-validade" style="display:none;">
-                    <label class="form-label">Data de Validade</label>
-                    <input type="date" name="validade" class="form-control">
+                    <label class="form-label text-danger">Data de Validade</label>
+                    <input type="date" name="data_validade" class="form-control">
                 </div>
 
                 <div class="col-md-4 campo-dinamico" id="div-valor" style="display:none;">
                     <label class="form-label">Valor (R$)</label>
-                    <input type="number" step="0.01" name="valor" class="form-control" placeholder="0,00">
+                    <input type="text" name="valor" class="form-control money" placeholder="0,00">
                 </div>
 
-                <div class="col-md-4 campo-dinamico" id="div-numero" style="display:none;">
-                    <label class="form-label">Nº do Documento</label>
-                    <input type="text" name="numero" class="form-control">
+                <div class="col-md-8">
+                    <label class="form-label">Arquivo (PDF ou Imagem)</label>
+                    <input type="file" name="arquivo_upload" class="form-control" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Nº do Documento (Opcional)</label>
+                    <input type="text" name="numero_referencia" class="form-control" placeholder="Ex: NF 1234">
                 </div>
 
                 <div class="col-md-12">
-                    <label class="form-label">Arquivo (PDF ou Imagem)</label>
-                    <input type="file" name="arquivo" class="form-control" required>
+                     <label class="form-label">Observações</label>
+                     <textarea name="observacoes" class="form-control" rows="1"></textarea>
                 </div>
 
-                <div class="col-12 mt-4">
-                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Enviar Documento</button>
+                <div class="col-12 mt-3 text-end">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Enviar Documento</button>
                 </div>
             </div>
         </form>
     </div>
 
-    <h3>Histórico de Envios</h3>
+    <hr class="my-5">
+
+    <div class="d-flex justify-content-between align-items-end mb-3">
+        <h3><i class="fas fa-list"></i> Histórico de Documentos</h3>
+    </div>
+
+    <div class="card bg-light mb-4 shadow-sm">
+        <div class="card-body">
+            <form action="/documentos" method="GET" class="row g-3 align-items-end">
+                
+                <div class="col-md-2">
+                    <label class="form-label fw-bold text-muted" style="font-size:0.9em">Periodicidade</label>
+                    <select name="filtro_periodicidade" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <option value="Mensal" {% if ft_periodicidade == 'Mensal' %}selected{% endif %}>📅 Mensal</option>
+                        <option value="Geral" {% if ft_periodicidade == 'Geral' %}selected{% endif %}>📁 Geral</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted" style="font-size:0.9em">Área / Tipo</label>
+                    <select name="filtro_area" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <option value="Financeiro" {% if ft_area == 'Financeiro' %}selected{% endif %}>💰 Financeiro</option>
+                        <option value="Fiscal" {% if ft_area == 'Fiscal' %}selected{% endif %}>⚖️ Fiscal / Certidões</option>
+                        <option value="Trabalhista" {% if ft_area == 'Trabalhista' %}selected{% endif %}>👥 Trabalhista / RH</option>
+                        <option value="Operacional" {% if ft_area == 'Operacional' %}selected{% endif %}>♻️ Operacional / Ambiental</option>
+                        <option value="Institucional" {% if ft_area == 'Institucional' %}selected{% endif %}>🏢 Institucional</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted" style="font-size:0.9em">Competência</label>
+                    <input type="month" name="filtro_mes" class="form-control form-control-sm" value="{{ ft_mes }}">
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-bold text-muted" style="font-size:0.9em">UVR</label>
+                    <select name="filtro_uvr" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <option value="UVR 01" {% if ft_uvr == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+                        <option value="UVR 02" {% if ft_uvr == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filtrar</button>
+                    {% if ft_periodicidade or ft_area or ft_mes or ft_uvr %}
+                    <a href="/documentos" class="btn btn-link text-decoration-none btn-sm mt-1" style="font-size:0.8em">Limpar Filtros</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-striped table-hover bg-white rounded shadow-sm align-middle">
             <thead class="table-dark">
                 <tr>
-                    <th>Data</th>
+                    <th>Data Envio</th>
                     <th>UVR</th>
                     <th>Documento</th>
                     <th>Detalhes</th>
@@ -105,34 +193,46 @@
                 </tr>
             </thead>
             <tbody>
-                {% for doc in docs %}
+                {% for doc in documentos %}
                 <tr>
-                    <td>{{ doc.created_at.strftime('%d/%m/%Y') }}</td>
-                    <td>{{ doc.uvr }}</td>
                     <td>
-                        <strong class="text-primary">{{ doc.tipo_documento }}</strong><br>
-                        <small class="text-muted">{{ doc.categoria }}</small>
+                        {% if doc.data_envio %}
+                            {{ doc.data_envio.strftime('%d/%m/%Y') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-secondary">{{ doc.uvr }}</span></td>
+                    <td>
+                        <strong class="text-primary" style="font-size: 1.1em;">{{ doc.nome_tipo }}</strong>
+                        <div class="text-muted text-uppercase" style="font-size: 0.7em;">
+                            {{ doc.categoria }}
+                        </div>
                         {% if doc.observacoes %}
-                        <br><small class="text-info"><i class="fas fa-info-circle"></i> {{ doc.observacoes }}</small>
+                        <div class="mt-1"><small class="text-info"><i class="fas fa-info-circle"></i> {{ doc.observacoes }}</small></div>
                         {% endif %}
                     </td>
                     <td>
-                        {% if doc.competencia %} <div><small>Ref:</small> <strong>{{ doc.competencia }}</strong></div> {% endif %}
+                        {% if doc.competencia %} 
+                            <div class="mb-1"><span class="badge bg-light text-dark border">Ref: {{ doc.competencia.strftime('%m/%Y') }}</span></div> 
+                        {% endif %}
+                        
                         {% if doc.data_validade %} 
-                            {% if doc.data_validade < now %}
-                                <span class="badge bg-danger">Vencido: {{ doc.data_validade }}</span>
-                            {% else %}
-                                <span class="badge bg-success">Vence: {{ doc.data_validade }}</span>
-                            {% endif %}
+                            <div>
+                                {% if doc.data_validade < now %}
+                                    <span class="badge bg-danger">Vencido: {{ doc.data_validade.strftime('%d/%m/%Y') }}</span>
+                                {% else %}
+                                    <span class="badge bg-success">Vence: {{ doc.data_validade.strftime('%d/%m/%Y') }}</span>
+                                {% endif %}
+                            </div>
                         {% endif %}
-                        {% if doc.valor > 0 %} <div class="text-success fw-bold">R$ {{ doc.valor }}</div> {% endif %}
-                        {% if doc.numero_ref %} <div><small>Nº:</small> {{ doc.numero_ref }}</div> {% endif %}
+                        
+                        {% if doc.valor %} <div class="text-success fw-bold mt-1">R$ {{ doc.valor }}</div> {% endif %}
+                        {% if doc.numero_referencia %} <div class="text-muted"><small>Nº: {{ doc.numero_referencia }}</small></div> {% endif %}
                     </td>
                     <td>
-                        {% if doc.status == 'Pendente' %} 
+                        {% if doc.status == 'Pendente' or doc.status == 'Pend.' %} 
                             <span class="badge bg-warning text-dark status-badge"><i class="fas fa-clock"></i> Pendente</span>
-                        {% elif doc.status == 'Solicitar_Exclusao' %}
-                            <span class="badge bg-dark status-badge"><i class="fas fa-trash"></i> Solicitada Exclusão</span>
                         {% elif doc.status == 'Aprovado' %} 
                             <span class="badge bg-success status-badge"><i class="fas fa-check-circle"></i> Aprovado</span>
                         {% elif doc.status == 'Reprovado' %} 
@@ -142,21 +242,23 @@
                         {% endif %}
                     </td>
                     <td class="text-center">
-                        <a href="{{ url_for('static', filename='uploads/' + doc.caminho_arquivo) }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visualizar">
+                        {% if doc.caminho_arquivo %}
+                        <a href="/uploads/{{ doc.caminho_arquivo }}" target="_blank" class="btn btn-sm btn-outline-primary mb-1" title="Visualizar">
                             <i class="fas fa-eye"></i>
                         </a>
+                        {% endif %}
 
-                        <button class="btn btn-sm btn-outline-warning" title="{% if current_user.role == 'admin' %}Gerenciar{% else %}Solicitar Correção{% endif %}" 
+                        <button class="btn btn-sm btn-outline-warning mb-1" title="Gerenciar" 
                                 onclick='abrirModalEditar({{ doc|tojson }}, "{{ current_user.role }}")'>
                             <i class="fas fa-edit"></i>
                         </button>
-                        
-                        <a href="/excluir_documento/{{ doc.id }}" class="btn btn-sm btn-outline-danger" title="Excluir" 
-                           onclick="return confirm('{% if current_user.role == 'admin' %}ATENÇÃO: Deseja EXCLUIR PERMANENTEMENTE este documento?{% else %}Deseja solicitar a EXCLUSÃO deste documento ao administrador?{% endif %}');">
-                            <i class="fas fa-trash"></i>
-                        </a>
                     </td>
                 </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center p-4 text-muted">
+                    <i class="fas fa-search fa-2x mb-3"></i><br>
+                    Nenhum documento encontrado com esses filtros.
+                </td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -174,7 +276,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="id_documento" id="edit_id">
                     
-                    <div class="mb-3" id="divStatusAdmin">
+                    <div class="mb-3" id="divStatusAdmin" style="display:none;">
                         <label class="form-label fw-bold">Status (Ação do Admin)</label>
                         <select name="status" id="edit_status" class="form-select">
                             <option value="Pendente">⏳ Pendente</option>
@@ -185,34 +287,34 @@
                     </div>
 
                     <div class="alert alert-info" id="msgUsuarioComum" style="display:none;">
-                        <i class="fas fa-info-circle"></i> Suas alterações serão enviadas para aprovação do administrador. O status do documento ficará "Pendente".
+                        <i class="fas fa-info-circle"></i> Suas alterações serão enviadas para aprovação.
                     </div>
 
                     <div class="row">
                         <div class="col-6 mb-3">
                             <label class="form-label">Competência</label>
-                            <input type="month" name="competencia" id="edit_competencia" class="form-control">
+                            <input type="date" name="competencia" id="edit_competencia" class="form-control">
                         </div>
                         <div class="col-6 mb-3">
                             <label class="form-label">Validade</label>
-                            <input type="date" name="validade" id="edit_validade" class="form-control">
+                            <input type="date" name="data_validade" id="edit_validade" class="form-control">
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-6 mb-3">
                             <label class="form-label">Valor (R$)</label>
-                            <input type="text" name="valor" id="edit_valor" class="form-control">
+                            <input type="text" name="valor" id="edit_valor" class="form-control money">
                         </div>
                         <div class="col-6 mb-3">
                             <label class="form-label">Nº Documento</label>
-                            <input type="text" name="numero" id="edit_numero" class="form-control">
+                            <input type="text" name="numero_referencia" id="edit_numero" class="form-control">
                         </div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Observações</label>
-                        <textarea name="observacoes" id="edit_observacoes" class="form-control" rows="2" placeholder="Detalhes da alteração..."></textarea>
+                        <textarea name="observacoes" id="edit_observacoes" class="form-control" rows="2"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -226,36 +328,88 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Função para mostrar/ocultar campos no upload (igual a anterior)
-    function atualizarCampos() {
+    $(document).ready(function(){
+        $('.money').mask('#.##0,00', {reverse: true});
+        
+        // Salva todas as opções originais do select na memória ao carregar
+        var $select = $('#tipo_documento');
+        $select.data('options', $select.find('option').clone());
+        
+        // Executa a filtragem inicial (para limpar a lista)
+        filtrarOpcoesUpload();
+    });
+
+    // --- NOVA FUNÇÃO DE FILTRAGEM NO UPLOAD ---
+    function filtrarOpcoesUpload() {
+        var periodo = document.getElementById("upload_filtro_periodo").value;
+        var area = document.getElementById("upload_filtro_area").value;
+        var select = $('#tipo_documento');
+        
+        // Recupera todas as opções originais
+        var options = select.data('options');
+        
+        // Limpa o select atual
+        select.empty();
+        
+        // Adiciona a opção padrão
+        select.append('<option value="">Selecione o documento...</option>');
+        
+        var count = 0;
+        
+        // Filtra e readiciona
+        options.each(function() {
+            var cat = $(this).attr('data-categoria'); // Ex: "Mensal - Financeiro"
+            if (!cat) return; // Pula se não tiver categoria (ex: o placeholder antigo)
+
+            var matchPeriodo = !periodo || cat.includes(periodo);
+            var matchArea = !area || cat.includes(area);
+
+            if (matchPeriodo && matchArea) {
+                select.append($(this));
+                count++;
+            }
+        });
+
+        document.getElementById("msgContador").innerText = count + " documento(s) encontrado(s).";
+        
+        // Atualiza os campos dinâmicos (esconde tudo pois o usuário ainda tem que selecionar o doc)
+        atualizarCamposDinamicos();
+    }
+
+    // Função que mostra/esconde campos (Validade, Valor) baseado no documento escolhido
+    function atualizarCamposDinamicos() {
         var select = document.getElementById("tipo_documento");
         var option = select.options[select.selectedIndex];
+
+        if (!option || !option.value) {
+            document.getElementById("div-validade").style.display = "none";
+            document.getElementById("div-valor").style.display = "none";
+            document.getElementById("div-competencia").style.display = "none";
+            return;
+        }
 
         var pedeValidade = option.getAttribute("data-validade") == "True";
         var pedeValor = option.getAttribute("data-valor") == "True";
         var pedeComp = option.getAttribute("data-comp") == "True";
-        var pedeNum = option.getAttribute("data-num") == "True";
 
         document.getElementById("div-validade").style.display = pedeValidade ? "block" : "none";
         document.getElementById("div-valor").style.display = pedeValor ? "block" : "none";
         document.getElementById("div-competencia").style.display = pedeComp ? "block" : "none";
-        document.getElementById("div-numero").style.display = pedeNum ? "block" : "none";
     }
 
-    // Função para abrir o Modal de Edição (Adaptada para Roles)
+    // Modal de Edição Inteligente
     function abrirModalEditar(doc, userRole) {
         document.getElementById('edit_id').value = doc.id;
-        document.getElementById('edit_competencia').value = doc.competencia || '';
-        document.getElementById('edit_validade').value = doc.data_validade || '';
+        document.getElementById('edit_competencia').value = doc.competencia ? doc.competencia.substring(0, 10) : ''; 
+        document.getElementById('edit_validade').value = doc.data_validade ? doc.data_validade.substring(0, 10) : '';
         document.getElementById('edit_valor').value = doc.valor || '';
-        document.getElementById('edit_numero').value = doc.numero_ref || '';
+        document.getElementById('edit_numero').value = doc.numero_referencia || '';
         document.getElementById('edit_observacoes').value = doc.observacoes || '';
 
-        // Lógica visual dependendo se é Admin ou Usuário
         if (userRole === 'admin') {
             document.getElementById('divStatusAdmin').style.display = 'block';
             document.getElementById('msgUsuarioComum').style.display = 'none';
-            document.getElementById('edit_status').value = doc.status; // Admin pode mudar status
+            document.getElementById('edit_status').value = doc.status;
             document.getElementById('modalTitulo').innerText = "Gerenciar Documento (Admin)";
             document.getElementById('btnSalvarModal').innerText = "Salvar / Aprovar";
             document.getElementById('btnSalvarModal').classList.remove('btn-warning');
@@ -263,7 +417,7 @@
         } else {
             document.getElementById('divStatusAdmin').style.display = 'none';
             document.getElementById('msgUsuarioComum').style.display = 'block';
-            document.getElementById('modalTitulo').innerText = "Solicitar Alteração";
+            document.getElementById('modalTitulo').innerText = "Solicitar Correção";
             document.getElementById('btnSalvarModal').innerText = "Enviar Solicitação";
             document.getElementById('btnSalvarModal').classList.remove('btn-success');
             document.getElementById('btnSalvarModal').classList.add('btn-warning');

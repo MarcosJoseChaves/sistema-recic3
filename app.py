@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
 
 # --- FLASK IMPORTS ---
-# Adicionei 'flash' na lista abaixo para as mensagens de sucesso/erro
 from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file, make_response, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask import send_from_directory
 
 # --- REPORTLAB IMPORTS ---
 from reportlab.pdfgen import canvas 
@@ -32,7 +32,6 @@ from reportlab.lib.utils import ImageReader
 # --- FIM DOS IMPORTS ---
 
 # --- CONFIGURAÇÕES GLOBAIS ---
-# Estes grupos devem ser os mesmos que aparecem nas opções de "Atividade" do HTML
 GRUPOS_FIXOS_SISTEMA = [
     "Despesas de operação",
     "Despesas de manutenção",
@@ -44,14 +43,14 @@ GRUPOS_FIXOS_SISTEMA = [
     "Plástico",
     "Rateio dos Associados",
     "Repasses Governamentais",
-    "Vidro"    
+    "Vidro"     
 ]
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite aumentado para 64MB
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite de 64MB
 app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
 
 login_manager = LoginManager()
@@ -64,9 +63,10 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 def conectar_banco():
     """Estabelece conexão com o banco de dados."""
     if DATABASE_URL:
-        # Removido o sslmode='require' para funcionar localmente
+        # Se estiver no Neon ou Produção
         return psycopg2.connect(DATABASE_URL)
     else:
+        # Se estiver rodando localmente sem .env
         return psycopg2.connect(
             host="localhost",
             database="recic3",
@@ -99,14 +99,14 @@ def validar_cpf(cpf):
     digito2 = (11 - (soma % 11)) % 10 if (soma % 11) > 1 else 0
     return int(cpf[10]) == digito2
 
-# --- CRIAÇÃO DE TABELAS (ATUALIZADO COM TODAS AS MIGRAÇÕES) ---
+# --- CRIAÇÃO DE TABELAS (ATUALIZADO) ---
 def criar_tabelas_se_nao_existir():
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # 1. Tabelas Base
+        # 1. Tabelas Base (Cadastros)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS cadastros (
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50),
@@ -136,13 +136,14 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # Migração Associados (Foto)
+        # Migração Associados
         try:
             cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS foto_base64 TEXT;")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
 
+        # 2. Tabelas Financeiras e Transações
         cur.execute("""
             CREATE TABLE IF NOT EXISTS transacoes_financeiras (
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50) NOT NULL,
@@ -154,7 +155,6 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # Migração Transações
         try:
             cur.execute("ALTER TABLE transacoes_financeiras ADD COLUMN IF NOT EXISTS valor_pago_recebido DECIMAL(12, 2) DEFAULT 0.00;")
             cur.execute("ALTER TABLE transacoes_financeiras ADD COLUMN IF NOT EXISTS status_pagamento VARCHAR(30) DEFAULT 'Aberto';")
@@ -170,7 +170,7 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
-        # 2. Tabela de Subgrupos
+        # 3. Produtos e Subgrupos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS subgrupos (
                 id SERIAL PRIMARY KEY,
@@ -189,13 +189,13 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # Migração Produtos (Vincular ID Subgrupo)
         try:
             cur.execute("ALTER TABLE produtos_servicos ADD COLUMN IF NOT EXISTS id_subgrupo INTEGER REFERENCES subgrupos(id);")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
 
+        # 4. Bancos e Fluxo de Caixa
         cur.execute("""
             CREATE TABLE IF NOT EXISTS contas_correntes (
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50) NOT NULL,
@@ -205,13 +205,11 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
-        # --- FIX: MIGRAÇÃO CONTAS CORRENTES (O que faltava) ---
         try:
             cur.execute("ALTER TABLE contas_correntes ADD COLUMN IF NOT EXISTS associacao VARCHAR(50);")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
-        # ------------------------------------------------------
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS fluxo_caixa (
@@ -224,7 +222,6 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
-        # Migração Fluxo de Caixa
         try:
             cur.execute("ALTER TABLE fluxo_caixa ADD COLUMN IF NOT EXISTS observacoes TEXT;")
             cur.execute("ALTER TABLE fluxo_caixa ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);")
@@ -240,6 +237,7 @@ def criar_tabelas_se_nao_existir():
             )
         """)
         
+        # 5. Tabelas Diversas (Denúncias, Usuários, Solicitações)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS denuncias (
                 id SERIAL PRIMARY KEY, numero_denuncia VARCHAR(50) UNIQUE NOT NULL, data_registro TIMESTAMP NOT NULL,
@@ -259,6 +257,25 @@ def criar_tabelas_se_nao_existir():
                 id SERIAL PRIMARY KEY, tabela_alvo VARCHAR(50) NOT NULL, id_registro INTEGER NOT NULL,
                 tipo_solicitacao VARCHAR(20) NOT NULL, dados_novos JSONB, usuario_solicitante VARCHAR(50) NOT NULL,
                 data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP, status VARCHAR(20) DEFAULT 'PENDENTE', observacoes_admin TEXT
+            )
+        """)
+
+        # --- NOVAS TABELAS DE DOCUMENTOS (ADICIONADAS AGORA) ---
+        # Garante que as tabelas de documentos existam
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS tipos_documentos (
+                id SERIAL PRIMARY KEY, nome VARCHAR(100) NOT NULL, categoria VARCHAR(50) NOT NULL,
+                exige_competencia BOOLEAN DEFAULT FALSE, exige_validade BOOLEAN DEFAULT FALSE,
+                exige_valor BOOLEAN DEFAULT FALSE, multiplos_arquivos BOOLEAN DEFAULT FALSE, descricao_ajuda TEXT
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS documentos (
+                id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, id_tipo INTEGER REFERENCES tipos_documentos(id),
+                caminho_arquivo VARCHAR(255), nome_original VARCHAR(255), competencia DATE, data_validade DATE,
+                valor DECIMAL(12, 2), numero_referencia VARCHAR(100), observacoes TEXT, enviado_por VARCHAR(100),
+                data_envio TIMESTAMP DEFAULT NOW(), status VARCHAR(20) DEFAULT 'Pendente'
             )
         """)
 
@@ -4687,82 +4704,140 @@ TIPOS_DOCUMENTOS = {
 @login_required
 def documentos():
     conn = conectar_banco()
-    # Usando RealDictCursor para facilitar o uso no HTML
-    cur = conn.cursor(cursor_factory=RealDictCursor) 
-    
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    # 1. UPLOAD (POST) - Mantém a lógica de envio que já funciona
     if request.method == 'POST':
         try:
-            uvr = request.form['uvr']
-            tipo_doc = request.form['tipo_documento']
-            arquivo = request.files['arquivo']
-            
-            # Pega as regras para saber o que salvar
-            regras = TIPOS_DOCUMENTOS.get(tipo_doc, {})
-            
-            # Tratamento de campos vazios (transforma string vazia em None)
-            competencia = request.form.get('competencia') or None
-            validade = request.form.get('validade') or None
-            numero = request.form.get('numero') or None
+            uvr = request.form.get('uvr')
+            id_tipo = request.form.get('tipo_documento')
+            competencia = request.form.get('competencia')
+            data_validade = request.form.get('data_validade')
             valor = request.form.get('valor')
-            if valor:
-                valor = valor.replace(',', '.') # Corrige formato brasileiro
-            else:
-                valor = 0
-
-            # Salvar Arquivo
-            if arquivo:
-                # CORREÇÃO CRÍTICA PARA CRIAR PASTA
-                # Define o caminho absoluto para a pasta de uploads garantindo compatibilidade OS
-                pasta_upload = os.path.join(app.root_path, 'static', 'uploads')
+            numero_referencia = request.form.get('numero_referencia')
+            observacoes = request.form.get('observacoes')
+            
+            arquivo = request.files.get('arquivo_upload')
+            nome_arquivo_salvo = ""
+            nome_original = ""
+            
+            if arquivo and arquivo.filename != '':
+                nome_original = arquivo.filename
+                import time
+                timestamp = int(time.time())
+                extensao = os.path.splitext(nome_original)[1]
+                nome_arquivo_salvo = f"doc_{uvr}_{timestamp}{extensao}"
                 
-                # Cria a pasta recursivamente se não existir. exist_ok=True evita erro se já existir.
-                os.makedirs(pasta_upload, exist_ok=True)
-                
-                # Gera nome único e LIMPO: UVR_TIPO_TIMESTAMP.pdf
-                timestamp = str(datetime.now().timestamp()).replace('.', '')
-                extensao = arquivo.filename.split('.')[-1]
-                
-                # Limpa caracteres especiais dos nomes para evitar erro de caminho no Windows
-                tipo_limpo = re.sub(r'[^a-zA-Z0-9]', '_', tipo_doc)
-                uvr_limpa = re.sub(r'[^a-zA-Z0-9]', '_', uvr)
-                
-                nome_arquivo = f"{uvr_limpa}_{tipo_limpo}_{timestamp}.{extensao}"
-                caminho_completo = os.path.join(pasta_upload, nome_arquivo)
-                
-                # Salva o arquivo
+                caminho_pasta = os.path.join('uploads') 
+                if not os.path.exists(caminho_pasta):
+                    os.makedirs(caminho_pasta)
+                    
+                caminho_completo = os.path.join(caminho_pasta, nome_arquivo_salvo)
                 arquivo.save(caminho_completo)
+            
+            competencia = competencia if competencia else None
+            data_validade = data_validade if data_validade else None
+            
+            if valor:
+                valor = valor.replace('.', '').replace(',', '.')
+            else:
+                valor = None
 
-                # Grava no Banco (salva apenas o nome do arquivo relativo)
-                cur.execute("""
-                    INSERT INTO documentos 
-                    (uvr, categoria, tipo_documento, competencia, data_validade, valor, numero_ref, caminho_arquivo)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (uvr, regras['cat'], tipo_doc, competencia, validade, valor, numero, nome_arquivo))
-                
-                conn.commit()
-                flash("Documento enviado com sucesso!", "success")
+            cursor.execute("""
+                INSERT INTO documentos 
+                (uvr, id_tipo, caminho_arquivo, nome_original, competencia, data_validade, valor, numero_referencia, observacoes, enviado_por, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pendente')
+            """, (uvr, id_tipo, nome_arquivo_salvo, nome_original, competencia, data_validade, valor, numero_referencia, observacoes, current_user.username))
+            
+            conn.commit()
+            flash('Documento enviado com sucesso!', 'success')
             
         except Exception as e:
             conn.rollback()
-            flash(f"Erro ao salvar documento: {str(e)}", "danger")
-            print(f"ERRO ARQUIVO: {str(e)}") # Print no terminal para ajudar a debugar
+            flash(f'Erro ao salvar documento: {str(e)}', 'danger')
+            app.logger.error(f"ERRO DOCUMENTOS: {e}") 
+            
         finally:
+            cursor.close()
             conn.close()
-        
-        return redirect(url_for('documentos'))
+            return redirect(url_for('documentos'))
 
-    # SE FOR GET (Abrir a página): Busca histórico
+    # 2. VISUALIZAR E FILTRAR (GET)
     try:
-        cur.execute("SELECT * FROM documentos ORDER BY created_at DESC")
-        docs_enviados = cur.fetchall()
+        cursor.execute("SELECT * FROM tipos_documentos ORDER BY categoria, nome")
+        tipos_documentos = cursor.fetchall()
+
+        # --- NOVOS FILTROS ESPECÍFICOS ---
+        filtro_periodicidade = request.args.get('filtro_periodicidade') # Geral ou Mensal
+        filtro_area = request.args.get('filtro_area') # Financeiro, Fiscal, etc
+        filtro_mes = request.args.get('filtro_mes')
+        filtro_uvr = request.args.get('filtro_uvr')
+
+        sql_query = """
+            SELECT d.*, t.nome as nome_tipo, t.categoria 
+            FROM documentos d
+            JOIN tipos_documentos t ON d.id_tipo = t.id
+            WHERE 1=1 
+        """
+        params = []
+
+        # Filtro 1: Periodicidade (Busca no início da categoria: "Mensal..." ou "Geral...")
+        if filtro_periodicidade:
+            sql_query += " AND t.categoria ILIKE %s"
+            params.append(f"{filtro_periodicidade}%")
+
+        # Filtro 2: Área (Busca no meio da categoria: "...Financeiro")
+        if filtro_area:
+            sql_query += " AND t.categoria ILIKE %s"
+            params.append(f"%{filtro_area}%")
+
+        # Filtro 3: Mês (Tratando erro de texto/data)
+        if filtro_mes:
+            sql_query += " AND LEFT(CAST(d.competencia AS TEXT), 7) = %s"
+            params.append(filtro_mes)
+
+        # Filtro 4: UVR
+        if filtro_uvr:
+            sql_query += " AND d.uvr = %s"
+            params.append(filtro_uvr)
+
+        sql_query += " ORDER BY d.data_envio DESC LIMIT 100"
+
+        cursor.execute(sql_query, tuple(params))
+        lista_documentos = cursor.fetchall()
+        
+        # --- CORREÇÃO DE DATAS (MANTIDA) ---
+        from datetime import datetime
+        for doc in lista_documentos:
+            if doc['competencia'] and isinstance(doc['competencia'], str):
+                try: doc['competencia'] = datetime.strptime(doc['competencia'], '%Y-%m-%d')
+                except: pass
+            if doc['data_validade'] and isinstance(doc['data_validade'], str):
+                try: doc['data_validade'] = datetime.strptime(doc['data_validade'], '%Y-%m-%d')
+                except: pass
+            if doc['data_envio'] and isinstance(doc['data_envio'], str):
+                try: doc['data_envio'] = datetime.strptime(doc['data_envio'].split('.')[0], '%Y-%m-%d %H:%M:%S')
+                except: pass
+
+        agora = datetime.now().date()
+
+        return render_template('documentos.html', 
+                               tipos=tipos_documentos, 
+                               documentos=lista_documentos,
+                               now=agora,
+                               # Retorna o que o usuário escolheu para manter selecionado
+                               ft_periodicidade=filtro_periodicidade,
+                               ft_area=filtro_area,
+                               ft_mes=filtro_mes,
+                               ft_uvr=filtro_uvr)
+
     except Exception as e:
-        docs_enviados = []
-        print(f"Erro ao buscar documentos: {e}")
+        flash(f'Erro ao carregar lista: {str(e)}', 'danger')
+        app.logger.error(f"ERRO GET DOCUMENTOS: {e}")
+        return redirect(url_for('index'))
     finally:
-        conn.close()
-    
-    # Passamos "now" para o template para comparar datas de validade
-    return render_template('documentos.html', tipos=TIPOS_DOCUMENTOS, docs=docs_enviados, now=date.today())
+        if not cursor.closed: cursor.close()
+        if not conn.closed: conn.close()
 
 @app.route('/editar_documento', methods=['POST'])
 @login_required
@@ -4947,6 +5022,50 @@ def api_entidades_com_saldo():
         return jsonify({"erro": str(e)}), 500
     finally:
         conn.close()
+# --- ROTA TEMPORÁRIA PARA CRIAR TABELAS ---
+@app.route('/setup_banco')
+def setup_banco():
+    try:
+        criar_tabelas_se_nao_existir()
+        # Se quiser garantir, vamos inserir os tipos padrão aqui também
+        conn = conectar_banco()
+        cursor = conn.cursor()
+        
+        # Verifica se já tem tipos, se não tiver, insere
+        cursor.execute("SELECT COUNT(*) FROM tipos_documentos")
+        count = cursor.fetchone()[0]
+        
+        if count == 0:
+            cursor.execute("""
+                INSERT INTO tipos_documentos (nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda) VALUES
+                ('Nota Fiscal de Serviço', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe autorização se necessário'),
+                ('Medição Mensal', 'Mensal – Financeiro', TRUE, FALSE, FALSE, FALSE, 'Deve estar atestada pelo fiscal'),
+                ('Relatório de Associados', 'Mensal – Trabalhista', TRUE, FALSE, FALSE, FALSE, 'Lista de ativos, baixados e novos'),
+                ('Recibos de Rateio', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, TRUE, 'Comprovantes de pagamento aos associados'),
+                ('GPS – INSS', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, FALSE, 'Guia e comprovante de pagamento'),
+                ('Extrato Bancário – Associação', 'Mensal – Financeiro', TRUE, FALSE, FALSE, TRUE, 'Conta principal da associação'),
+                ('MTR – Manifesto de Transporte', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Documento de transporte de resíduos'),
+                ('Certidão Regularidade Municipal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
+                ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão');
+            """)
+            conn.commit()
+            msg = "Tabelas criadas e Tipos inseridos com sucesso!"
+        else:
+            msg = "Tabelas já existiam. Nenhuma alteração feita."
+            
+        conn.close()
+        return f"<h1>Tudo certo!</h1><p>{msg}</p><a href='/documentos'>Ir para Documentos</a>"
+    
+    except Exception as e:
+        return f"<h1>Erro ao criar tabelas:</h1><p>{str(e)}</p>"
+
+
+# --- ROTA PARA VISUALIZAR ARQUIVOS DA PASTA UPLOADS ---
+@app.route('/uploads/<path:filename>')
+@login_required
+def uploaded_file(filename):
+    # O primeiro argumento é o nome da pasta física no seu computador ('uploads')
+    return send_from_directory('uploads', filename)
 
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
