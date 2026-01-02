@@ -4850,7 +4850,6 @@ def documentos():
         if not cursor.closed: cursor.close()
         if not conn.closed: conn.close()
 
-# --- NOVA ROTA: EDITAR DOCUMENTO (COM LÓGICA DE APROVAÇÃO) ---
 @app.route('/editar_documento', methods=['POST'])
 @login_required
 def editar_documento():
@@ -4860,21 +4859,30 @@ def editar_documento():
         id_doc = request.form.get('id_documento')
         competencia = request.form.get('competencia') or None
         data_validade = request.form.get('data_validade') or None
-        valor = request.form.get('valor')
+        valor_bruto = request.form.get('valor')
         numero_ref = request.form.get('numero_referencia')
         obs = request.form.get('observacoes')
         
-        # Tratamento Valor
-        if valor: valor = valor.replace('.', '').replace(',', '.')
-        else: valor = None
+        # --- TRATAMENTO DE VALOR (CORREÇÃO PARA NUMERIC FIELD OVERFLOW) ---
+        valor = None
+        if valor_bruto:
+            # Remove pontos de milhar e substitui vírgula por ponto decimal
+            valor_limpo = valor_bruto.replace('.', '').replace(',', '.')
+            try:
+                # Converte para float para validar se é um número, 
+                # o banco converterá para NUMERIC(10,2) automaticamente
+                valor = float(valor_limpo)
+            except ValueError:
+                valor = None
 
-        # Lógica de Status
+        # --- LÓGICA DE STATUS (WORKFLOW DE APROVAÇÃO) ---
         if current_user.role == 'admin':
-            # Admin define o status que quiser (Aprovado, Reprovado, etc)
+            # Admin define o status via seletor do modal (Aprovado, Reprovado, etc)
             novo_status = request.form.get('status')
         else:
-            # Usuário comum edita -> Volta para Pendente (Solicitação de Correção)
-            novo_status = 'Pendente'
+            # Usuário comum edita -> Status muda para 'Edição Pendente' 
+            # (Melhor que apenas 'Pendente' para o Admin saber que houve alteração)
+            novo_status = 'Edição Pendente'
 
         cursor.execute("""
             UPDATE documentos 
@@ -4887,10 +4895,12 @@ def editar_documento():
         if current_user.role == 'admin':
             flash('Documento atualizado/auditado com sucesso!', 'success')
         else:
-            flash('Correção enviada para aprovação do Admin!', 'info')
+            flash('Alterações enviadas para aprovação do Admin!', 'info')
 
     except Exception as e:
         conn.rollback()
+        # Log do erro para debug no terminal
+        print(f"Erro detalhado ao editar: {e}")
         flash(f'Erro ao editar: {str(e)}', 'danger')
     finally:
         conn.close()
