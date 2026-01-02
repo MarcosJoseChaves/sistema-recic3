@@ -4706,17 +4706,31 @@ def documentos():
     conn = conectar_banco()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-    # 1. UPLOAD (POST) - Mantém a lógica de envio que já funciona
+    # 1. UPLOAD (POST)
     if request.method == 'POST':
         try:
-            uvr = request.form.get('uvr')
+            # Lógica de Segurança na UVR do Upload
+            uvr_form = request.form.get('uvr')
+            
+            # Se não for admin, força a UVR do usuário logado
+            if current_user.role != 'admin':
+                uvr = current_user.uvr_acesso 
+            else:
+                uvr = uvr_form # Admin pode escolher
+
+            # ... (Restante da lógica de pegar campos igual ao anterior) ...
             id_tipo = request.form.get('tipo_documento')
-            competencia = request.form.get('competencia')
-            data_validade = request.form.get('data_validade')
+            competencia = request.form.get('competencia') # Virá como "2025-11"
+            data_validade = request.form.get('data_validade') or None
             valor = request.form.get('valor')
             numero_referencia = request.form.get('numero_referencia')
             observacoes = request.form.get('observacoes')
             
+            # Tratamento de valor
+            if valor: valor = valor.replace('.', '').replace(',', '.')
+            else: valor = None
+
+            # Tratamento Arquivo
             arquivo = request.files.get('arquivo_upload')
             nome_arquivo_salvo = ""
             nome_original = ""
@@ -4729,19 +4743,8 @@ def documentos():
                 nome_arquivo_salvo = f"doc_{uvr}_{timestamp}{extensao}"
                 
                 caminho_pasta = os.path.join('uploads') 
-                if not os.path.exists(caminho_pasta):
-                    os.makedirs(caminho_pasta)
-                    
-                caminho_completo = os.path.join(caminho_pasta, nome_arquivo_salvo)
-                arquivo.save(caminho_completo)
-            
-            competencia = competencia if competencia else None
-            data_validade = data_validade if data_validade else None
-            
-            if valor:
-                valor = valor.replace('.', '').replace(',', '.')
-            else:
-                valor = None
+                if not os.path.exists(caminho_pasta): os.makedirs(caminho_pasta)
+                arquivo.save(os.path.join(caminho_pasta, nome_arquivo_salvo))
 
             cursor.execute("""
                 INSERT INTO documentos 
@@ -4750,26 +4753,24 @@ def documentos():
             """, (uvr, id_tipo, nome_arquivo_salvo, nome_original, competencia, data_validade, valor, numero_referencia, observacoes, current_user.username))
             
             conn.commit()
-            flash('Documento enviado com sucesso!', 'success')
+            flash('Documento enviado! Aguardando aprovação.', 'success')
             
         except Exception as e:
             conn.rollback()
-            flash(f'Erro ao salvar documento: {str(e)}', 'danger')
-            app.logger.error(f"ERRO DOCUMENTOS: {e}") 
-            
+            flash(f'Erro: {str(e)}', 'danger')
         finally:
             cursor.close()
             conn.close()
             return redirect(url_for('documentos'))
 
-    # 2. VISUALIZAR E FILTRAR (GET)
+    # 2. VISUALIZAÇÃO (GET) - AQUI ESTÁ O ISOLAMENTO
     try:
         cursor.execute("SELECT * FROM tipos_documentos ORDER BY categoria, nome")
         tipos_documentos = cursor.fetchall()
 
-        # --- NOVOS FILTROS ESPECÍFICOS ---
-        filtro_periodicidade = request.args.get('filtro_periodicidade') # Geral ou Mensal
-        filtro_area = request.args.get('filtro_area') # Financeiro, Fiscal, etc
+        # Filtros vindos do HTML
+        filtro_periodicidade = request.args.get('filtro_periodicidade')
+        filtro_area = request.args.get('filtro_area')
         filtro_mes = request.args.get('filtro_mes')
         filtro_uvr = request.args.get('filtro_uvr')
 
@@ -4781,179 +4782,154 @@ def documentos():
         """
         params = []
 
-        # Filtro 1: Periodicidade (Busca no início da categoria: "Mensal..." ou "Geral...")
+        # --- REGRA DE OURO: ISOLAMENTO DE DADOS ---
+        if current_user.role != 'admin':
+            # Se não for admin, SÓ VÊ a própria UVR
+            sql_query += " AND d.uvr = %s"
+            params.append(current_user.uvr_acesso)
+        else:
+            # Se for admin e escolheu uma UVR no filtro, aplica
+            if filtro_uvr:
+                sql_query += " AND d.uvr = %s"
+                params.append(filtro_uvr)
+
+        # Restante dos filtros (igual antes)
         if filtro_periodicidade:
             sql_query += " AND t.categoria ILIKE %s"
             params.append(f"{filtro_periodicidade}%")
-
-        # Filtro 2: Área (Busca no meio da categoria: "...Financeiro")
         if filtro_area:
             sql_query += " AND t.categoria ILIKE %s"
             params.append(f"%{filtro_area}%")
-
-        # Filtro 3: Mês (Tratando erro de texto/data)
         if filtro_mes:
             sql_query += " AND LEFT(CAST(d.competencia AS TEXT), 7) = %s"
             params.append(filtro_mes)
-
-        # Filtro 4: UVR
-        if filtro_uvr:
-            sql_query += " AND d.uvr = %s"
-            params.append(filtro_uvr)
 
         sql_query += " ORDER BY d.data_envio DESC LIMIT 100"
 
         cursor.execute(sql_query, tuple(params))
         lista_documentos = cursor.fetchall()
-        
-        # --- CORREÇÃO DE DATAS (MANTIDA) ---
+
+        # Correção de Datas (Visualização)
         from datetime import datetime
         for doc in lista_documentos:
+            # 1. Converte Competência
             if doc['competencia'] and isinstance(doc['competencia'], str):
-                try: doc['competencia'] = datetime.strptime(doc['competencia'], '%Y-%m-%d')
-                except: pass
-            if doc['data_validade'] and isinstance(doc['data_validade'], str):
-                try: doc['data_validade'] = datetime.strptime(doc['data_validade'], '%Y-%m-%d')
-                except: pass
-            if doc['data_envio'] and isinstance(doc['data_envio'], str):
-                try: doc['data_envio'] = datetime.strptime(doc['data_envio'].split('.')[0], '%Y-%m-%d %H:%M:%S')
-                except: pass
+                try:
+                    doc['competencia'] = datetime.strptime(doc['competencia'], '%Y-%m-%d')
+                except:
+                    try:
+                        doc['competencia'] = datetime.strptime(doc['competencia'], '%Y-%m')
+                    except:
+                        pass
 
-        agora = datetime.now().date()
+            # 2. Converte Validade
+            if doc['data_validade'] and isinstance(doc['data_validade'], str):
+                try:
+                    doc['data_validade'] = datetime.strptime(doc['data_validade'], '%Y-%m-%d')
+                except:
+                    pass
+            
+            # 3. Converte Data Envio
+            if doc['data_envio'] and isinstance(doc['data_envio'], str):
+                try:
+                    data_limpa = doc['data_envio'].split('.')[0]
+                    doc['data_envio'] = datetime.strptime(data_limpa, '%Y-%m-%d %H:%M:%S')
+                except:
+                    pass
 
         return render_template('documentos.html', 
                                tipos=tipos_documentos, 
-                               documentos=lista_documentos,
-                               now=agora,
-                               # Retorna o que o usuário escolheu para manter selecionado
-                               ft_periodicidade=filtro_periodicidade,
-                               ft_area=filtro_area,
-                               ft_mes=filtro_mes,
-                               ft_uvr=filtro_uvr)
+                               documentos=lista_documentos, 
+                               now=datetime.now().date(),
+                               ft_periodicidade=filtro_periodicidade, ft_area=filtro_area, ft_mes=filtro_mes, ft_uvr=filtro_uvr)
 
     except Exception as e:
-        flash(f'Erro ao carregar lista: {str(e)}', 'danger')
-        app.logger.error(f"ERRO GET DOCUMENTOS: {e}")
+        app.logger.error(f"Erro GET Documentos: {e}")
         return redirect(url_for('index'))
     finally:
         if not cursor.closed: cursor.close()
         if not conn.closed: conn.close()
 
+# --- NOVA ROTA: EDITAR DOCUMENTO (COM LÓGICA DE APROVAÇÃO) ---
 @app.route('/editar_documento', methods=['POST'])
 @login_required
 def editar_documento():
-    # REMOVIDO O BLOQUEIO: Agora usuários comuns podem acessar, mas com comportamento diferente
-    
     conn = conectar_banco()
-    cur = conn.cursor()
+    cursor = conn.cursor()
     try:
-        doc_id = request.form['id_documento']
+        id_doc = request.form.get('id_documento')
+        competencia = request.form.get('competencia') or None
+        data_validade = request.form.get('data_validade') or None
+        valor = request.form.get('valor')
+        numero_ref = request.form.get('numero_referencia')
+        obs = request.form.get('observacoes')
         
-        # --- LÓGICA DE PERMISSÃO ---
-        # Se for admin, pega o status do formulário. 
-        # Se for usuário, FORÇA o status para 'Pendente' (para o admin revisar depois).
+        # Tratamento Valor
+        if valor: valor = valor.replace('.', '').replace(',', '.')
+        else: valor = None
+
+        # Lógica de Status
         if current_user.role == 'admin':
-            novo_status = request.form['status']
+            # Admin define o status que quiser (Aprovado, Reprovado, etc)
+            novo_status = request.form.get('status')
         else:
-            novo_status = 'Pendente' 
+            # Usuário comum edita -> Volta para Pendente (Solicitação de Correção)
+            novo_status = 'Pendente'
 
-        # Dados do formulário
-        nova_validade = request.form.get('validade') or None
-        nova_competencia = request.form.get('competencia') or None
-        novo_valor = request.form.get('valor')
-        novo_numero = request.form.get('numero') or None
-        observacoes = request.form.get('observacoes')
-
-        # Tratamento do valor
-        if novo_valor:
-            novo_valor = novo_valor.replace(',', '.')
-        else:
-            novo_valor = 0
-
-        # Adiciona uma nota nas observações se for usuário comum editando
-        if current_user.role != 'admin':
-            observacoes = f"[Editado por {current_user.id}] {observacoes or ''}"
-
-        cur.execute("""
-            UPDATE documentos
-            SET status = %s,
-                data_validade = %s,
-                competencia = %s,
-                valor = %s,
-                numero_ref = %s,
-                observacoes = %s
-            WHERE id = %s
-        """, (novo_status, nova_validade, nova_competencia, novo_valor, novo_numero, observacoes, doc_id))
+        cursor.execute("""
+            UPDATE documentos 
+            SET competencia=%s, data_validade=%s, valor=%s, numero_referencia=%s, observacoes=%s, status=%s
+            WHERE id=%s
+        """, (competencia, data_validade, valor, numero_ref, obs, novo_status, id_doc))
         
         conn.commit()
         
         if current_user.role == 'admin':
-            flash("Documento atualizado/aprovado com sucesso!", "success")
+            flash('Documento atualizado/auditado com sucesso!', 'success')
         else:
-            flash("Solicitação de alteração enviada! Aguarde aprovação do administrador.", "info")
-        
+            flash('Correção enviada para aprovação do Admin!', 'info')
+
     except Exception as e:
         conn.rollback()
-        flash(f"Erro ao atualizar: {str(e)}", "danger")
+        flash(f'Erro ao editar: {str(e)}', 'danger')
     finally:
         conn.close()
-        
-    return redirect(url_for('documentos'))
+        return redirect(url_for('documentos'))
 
-# --- ROTA: EXCLUIR OU SOLICITAR EXCLUSÃO ---
-@app.route('/excluir_documento/<int:id>', methods=['GET'])
+# --- NOVA ROTA: EXCLUIR DOCUMENTO (SÓ ADMIN) ---
+@app.route('/excluir_documento/<int:id_doc>')
 @login_required
-def excluir_documento(id):
+def excluir_documento(id_doc):
+    if current_user.role != 'admin':
+        flash('Apenas administradores podem excluir documentos.', 'danger')
+        return redirect(url_for('documentos'))
+        
     conn = conectar_banco()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    
+    cursor = conn.cursor()
     try:
-        # 1. Verifica se o usuário é ADMIN
-        if current_user.role == 'admin':
-            # --- FLUXO ADMIN (DELEÇÃO REAL) ---
+        # Primeiro pega o nome do arquivo para deletar da pasta
+        cursor.execute("SELECT caminho_arquivo FROM documentos WHERE id=%s", (id_doc,))
+        res = cursor.fetchone()
+        
+        # Deleta do Banco
+        cursor.execute("DELETE FROM documentos WHERE id=%s", (id_doc,))
+        conn.commit()
+        
+        # Tenta deletar o arquivo físico (se existir)
+        if res and res[0]:
+            try:
+                caminho = os.path.join('uploads', res[0])
+                if os.path.exists(caminho):
+                    os.remove(caminho)
+            except: pass # Se não achar o arquivo, segue a vida
             
-            # Busca o nome do arquivo para deletar da pasta
-            cur.execute("SELECT caminho_arquivo FROM documentos WHERE id = %s", (id,))
-            doc = cur.fetchone()
-            
-            if doc:
-                # Deleta do Banco de Dados
-                cur.execute("DELETE FROM documentos WHERE id = %s", (id,))
-                conn.commit()
-                
-                # Tenta deletar o arquivo físico
-                try:
-                    caminho_arquivo = os.path.join(app.root_path, 'static', 'uploads', doc['caminho_arquivo'])
-                    if os.path.exists(caminho_arquivo):
-                        os.remove(caminho_arquivo)
-                except Exception as e_arquivo:
-                    print(f"Aviso: Arquivo físico não encontrado ou erro ao deletar: {e_arquivo}")
-
-                flash("Documento excluído permanentemente.", "success")
-            else:
-                flash("Documento não encontrado.", "warning")
-
-        else:
-            # --- FLUXO USUÁRIO (SOLICITAÇÃO) ---
-            # Não deleta, apenas muda o status para avisar o Admin
-            
-            cur.execute("""
-                UPDATE documentos 
-                SET status = 'Solicitar_Exclusao', 
-                    observacoes = CONCAT(observacoes, ' [Solicitação de Exclusão pelo usuário]')
-                WHERE id = %s
-            """, (id,))
-            conn.commit()
-            
-            flash("Solicitação de exclusão enviada ao administrador.", "info")
-
+        flash('Documento excluído permanentemente.', 'success')
     except Exception as e:
         conn.rollback()
-        flash(f"Erro ao processar: {str(e)}", "danger")
+        flash(f'Erro ao excluir: {str(e)}', 'danger')
     finally:
         conn.close()
-
-    return redirect(url_for('documentos'))
+        return redirect(url_for('documentos'))
 
 # --- NOVA ROTA API: Filtra Entidades com Saldo (Diferente de Zero) ---
 @app.route('/api/entidades_com_saldo')

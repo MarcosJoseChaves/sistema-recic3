@@ -42,13 +42,20 @@
             <div class="row g-3">
                 
                 <div class="col-md-3">
-                    <label class="form-label fw-bold">1. UVR / Associação</label>
-                    <select name="uvr" class="form-select" required>
-                        <option value="">Selecione...</option>
-                        <option value="UVR 01">UVR 01</option>
-                        <option value="UVR 02">UVR 02</option>
-                    </select>
-                </div>
+    <label class="form-label fw-bold">1. UVR / Associação</label>
+    <select name="uvr" class="form-select" required 
+            {% if current_user.role != 'admin' %} style="pointer-events: none; background-color: #e9ecef;" {% endif %}>
+        
+        {% if current_user.role == 'admin' %}
+            <option value="">Selecione a UVR...</option>
+            <option value="UVR 01">UVR 01</option>
+            <option value="UVR 02">UVR 02</option>
+        {% else %}
+            <option value="UVR 01" {% if current_user.uvr_acesso == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+            <option value="UVR 02" {% if current_user.uvr_acesso == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+        {% endif %}
+    </select>
+</div>
 
                 <div class="col-md-3">
                     <label class="form-label fw-bold text-muted">2. Periodicidade</label>
@@ -89,8 +96,8 @@
                 </div>
 
                 <div class="col-md-4 campo-dinamico" id="div-competencia" style="display:none;">
-                    <label class="form-label">Competência (Mês/Ano)</label>
-                    <input type="date" name="competencia" class="form-control" title="Selecione o dia 1 do mês de referência">
+                    <label class="form-label">Competência</label>
+                    <input type="month" name="competencia" id="edit_competencia" class="form-control">
                 </div>
 
                 <div class="col-md-4 campo-dinamico" id="div-validade" style="display:none;">
@@ -163,10 +170,10 @@
 
                 <div class="col-md-2">
                     <label class="form-label fw-bold text-muted" style="font-size:0.9em">UVR</label>
-                    <select name="filtro_uvr" class="form-select form-select-sm">
+                    <select name="filtro_uvr" class="form-select form-select-sm" {% if current_user.role != 'admin' %}disabled{% endif %}>
                         <option value="">Todas</option>
-                        <option value="UVR 01" {% if ft_uvr == 'UVR 01' %}selected{% endif %}>UVR 01</option>
-                        <option value="UVR 02" {% if ft_uvr == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                        <option value="UVR 01" {% if ft_uvr == 'UVR 01' or (current_user.role != 'admin' and current_user.uvr_acesso == 'UVR 01') %}selected{% endif %}>UVR 01</option>
+                        <option value="UVR 02" {% if ft_uvr == 'UVR 02' or (current_user.role != 'admin' and current_user.uvr_acesso == 'UVR 02') %}selected{% endif %}>UVR 02</option>
                     </select>
                 </div>
 
@@ -214,7 +221,9 @@
                     </td>
                     <td>
                         {% if doc.competencia %} 
-                            <div class="mb-1"><span class="badge bg-light text-dark border">Ref: {{ doc.competencia.strftime('%m/%Y') }}</span></div> 
+                            <div class="mb-1"><span class="badge bg-light text-dark border">Ref: {{ doc.competencia.strftime('%m/%Y') }}</span></div>
+                                 </span>
+                            </div> 
                         {% endif %}
                         
                         {% if doc.data_validade %} 
@@ -252,6 +261,13 @@
                                 onclick='abrirModalEditar({{ doc|tojson }}, "{{ current_user.role }}")'>
                             <i class="fas fa-edit"></i>
                         </button>
+                        
+                        {% if current_user.role == 'admin' %}
+                        <a href="/excluir_documento/{{ doc.id }}" class="btn btn-sm btn-outline-danger mb-1" title="Excluir Permanentemente"
+                           onclick="return confirm('Tem certeza? Isso apagará o arquivo e o registro para sempre.')">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
@@ -287,13 +303,13 @@
                     </div>
 
                     <div class="alert alert-info" id="msgUsuarioComum" style="display:none;">
-                        <i class="fas fa-info-circle"></i> Suas alterações serão enviadas para aprovação.
+                        <i class="fas fa-info-circle"></i> Qualquer alteração enviará o documento de volta para a fila de <b>Aprovação</b>.
                     </div>
 
                     <div class="row">
                         <div class="col-6 mb-3">
                             <label class="form-label">Competência</label>
-                            <input type="date" name="competencia" id="edit_competencia" class="form-control">
+                            <input type="month" name="competencia" id="edit_competencia" class="form-control">
                         </div>
                         <div class="col-6 mb-3">
                             <label class="form-label">Validade</label>
@@ -331,35 +347,28 @@
     $(document).ready(function(){
         $('.money').mask('#.##0,00', {reverse: true});
         
-        // Salva todas as opções originais do select na memória ao carregar
+        // Salva opções originais para o filtro
         var $select = $('#tipo_documento');
         $select.data('options', $select.find('option').clone());
         
-        // Executa a filtragem inicial (para limpar a lista)
+        // Filtra ao carregar
         filtrarOpcoesUpload();
     });
 
-    // --- NOVA FUNÇÃO DE FILTRAGEM NO UPLOAD ---
+    // --- FILTRO DE UPLOAD EM CASCATA ---
     function filtrarOpcoesUpload() {
         var periodo = document.getElementById("upload_filtro_periodo").value;
         var area = document.getElementById("upload_filtro_area").value;
         var select = $('#tipo_documento');
-        
-        // Recupera todas as opções originais
         var options = select.data('options');
         
-        // Limpa o select atual
         select.empty();
-        
-        // Adiciona a opção padrão
         select.append('<option value="">Selecione o documento...</option>');
         
         var count = 0;
-        
-        // Filtra e readiciona
         options.each(function() {
-            var cat = $(this).attr('data-categoria'); // Ex: "Mensal - Financeiro"
-            if (!cat) return; // Pula se não tiver categoria (ex: o placeholder antigo)
+            var cat = $(this).attr('data-categoria'); 
+            if (!cat) return; 
 
             var matchPeriodo = !periodo || cat.includes(periodo);
             var matchArea = !area || cat.includes(area);
@@ -371,12 +380,10 @@
         });
 
         document.getElementById("msgContador").innerText = count + " documento(s) encontrado(s).";
-        
-        // Atualiza os campos dinâmicos (esconde tudo pois o usuário ainda tem que selecionar o doc)
         atualizarCamposDinamicos();
     }
 
-    // Função que mostra/esconde campos (Validade, Valor) baseado no documento escolhido
+    // --- CONTROLE DE CAMPOS DINÂMICOS ---
     function atualizarCamposDinamicos() {
         var select = document.getElementById("tipo_documento");
         var option = select.options[select.selectedIndex];
@@ -397,35 +404,56 @@
         document.getElementById("div-competencia").style.display = pedeComp ? "block" : "none";
     }
 
-    // Modal de Edição Inteligente
+// --- MODAL INTELIGENTE (ADMIN vs USER) ---
     function abrirModalEditar(doc, userRole) {
+        // Preenche o ID oculto
         document.getElementById('edit_id').value = doc.id;
-        document.getElementById('edit_competencia').value = doc.competencia ? doc.competencia.substring(0, 10) : ''; 
+
+        // Ajuste da Competência para o formato AAAA-MM (exigido pelo input type="month")
+        // Pegamos os 7 primeiros caracteres da data (YYYY-MM)
+        if (doc.competencia) {
+            document.getElementById('edit_competencia').value = doc.competencia.substring(0, 7);
+        } else {
+            document.getElementById('edit_competencia').value = '';
+        }
+
+        // Data de Validade (Formato AAAA-MM-DD para input type="date")
         document.getElementById('edit_validade').value = doc.data_validade ? doc.data_validade.substring(0, 10) : '';
+        
+        // Outros campos
         document.getElementById('edit_valor').value = doc.valor || '';
         document.getElementById('edit_numero').value = doc.numero_referencia || '';
         document.getElementById('edit_observacoes').value = doc.observacoes || '';
 
+        // Lógica de interface baseada no Cargo (Role)
         if (userRole === 'admin') {
+            // Visão de Administrador
             document.getElementById('divStatusAdmin').style.display = 'block';
             document.getElementById('msgUsuarioComum').style.display = 'none';
             document.getElementById('edit_status').value = doc.status;
             document.getElementById('modalTitulo').innerText = "Gerenciar Documento (Admin)";
             document.getElementById('btnSalvarModal').innerText = "Salvar / Aprovar";
+            
+            // Ajuste de cores do botão
             document.getElementById('btnSalvarModal').classList.remove('btn-warning');
             document.getElementById('btnSalvarModal').classList.add('btn-success');
         } else {
+            // Visão de Usuário Comum
             document.getElementById('divStatusAdmin').style.display = 'none';
             document.getElementById('msgUsuarioComum').style.display = 'block';
             document.getElementById('modalTitulo').innerText = "Solicitar Correção";
             document.getElementById('btnSalvarModal').innerText = "Enviar Solicitação";
+            
+            // Ajuste de cores do botão
             document.getElementById('btnSalvarModal').classList.remove('btn-success');
             document.getElementById('btnSalvarModal').classList.add('btn-warning');
         }
 
+        // Abre o modal
         var myModal = new bootstrap.Modal(document.getElementById('modalEditar'));
         myModal.show();
     }
 </script>
+
 </body>
 </html>
