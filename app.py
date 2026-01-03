@@ -2792,38 +2792,70 @@ def get_solicitacoes_pendentes():
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Busca TUDO que está pendente (Associados e Cadastros)
+        # Busca TUDO que está pendente (Associados, Cadastros E DOCUMENTOS)
+        # Atenção: Adicionado o CASE para 'documentos'
         sql = """
             SELECT s.id, s.usuario_solicitante, s.data_solicitacao, s.tabela_alvo, s.tipo_solicitacao, s.dados_novos,
                    CASE 
                        WHEN s.tabela_alvo = 'associados' THEN (SELECT nome FROM associados WHERE id = s.id_registro)
                        WHEN s.tabela_alvo = 'cadastros' THEN (SELECT razao_social FROM cadastros WHERE id = s.id_registro)
-                   END as nome_atual
+                       WHEN s.tabela_alvo = 'documentos' THEN (SELECT nome_original FROM documentos WHERE id = s.id_registro)
+                   END as nome_atual,
+                   s.id_registro
             FROM solicitacoes_alteracao s
-            WHERE s.status = 'PENDENTE'
+            WHERE s.status = 'PENDENTE' OR s.status = 'Pendente'
             ORDER BY s.data_solicitacao DESC
         """
         cur.execute(sql)
         res = []
         for r in cur.fetchall():
+            # [0]id, [1]solicitante, [2]data, [3]tabela, [4]tipo, [5]dados, [6]nome_atual, [7]id_registro
+            
             # --- CORREÇÃO DE TIPO (STR ou DICT) ---
             raw_data = r[5]
+            dados = {}
             if isinstance(raw_data, str):
-                dados = json.loads(raw_data)
-            else:
+                try: dados = json.loads(raw_data)
+                except: dados = {}
+            elif isinstance(raw_data, dict):
                 dados = raw_data
             # --------------------------------------
 
-            # Se for exclusão, o nome novo é irrelevante, usamos o tipo da ação
-            nome_novo_ou_acao = "EXCLUSÃO" if r[4] == 'EXCLUSAO' else dados.get('nome') or dados.get('razao_social')
+            # Lógica para exibir o "Novo Valor" ou o "Tipo de Ação" na lista
+            nome_novo_ou_acao = ""
+            
+            # Se for EXCLUSÃO
+            if str(r[4]).upper() == 'EXCLUSAO' or str(r[4]).upper() == 'EXCLUSÃO':
+                nome_novo_ou_acao = "SOLICITAÇÃO DE EXCLUSÃO"
+            
+            # Se for EDIÇÃO
+            else:
+                if r[3] == 'documentos':
+                    # Documentos geralmente não mudam de nome, mostramos a referência ou valor
+                    ref = dados.get('numero_referencia')
+                    val = dados.get('valor')
+                    if ref: nome_novo_ou_acao = f"Ref: {ref}"
+                    elif val: nome_novo_ou_acao = f"Novo Valor: {val}"
+                    else: nome_novo_ou_acao = "Alteração de Dados/Datas"
+                else:
+                    # Associados e Cadastros
+                    nome_novo_ou_acao = dados.get('nome') or dados.get('razao_social') or "Edição de Dados"
             
             res.append({
-                "id": r[0], "solicitante": r[1], "data": r[2].strftime('%d/%m %H:%M'),
-                "tabela": r[3], "tipo": r[4], 
-                "nome_atual": r[6] or "(Registro não encontrado/Já excluído)", 
-                "nome_novo": nome_novo_ou_acao
+                "id": r[0], 
+                "solicitante": r[1], 
+                "data": r[2].strftime('%d/%m %H:%M') if r[2] else '-',
+                "tabela": r[3],      # ex: 'documentos'
+                "tipo": r[4],        # ex: 'Edicao'
+                "nome_atual": r[6] or "(Item não encontrado/Já excluído)", 
+                "nome_novo": nome_novo_ou_acao,
+                "dados_novos": dados, # Envia o JSON completo para o modal usar se precisar
+                "id_origem": r[7]
             })
         return jsonify(res)
+    except Exception as e:
+        print(f"Erro na API get_solicitacoes_pendentes: {e}")
+        return jsonify([])
     finally:
         if conn: conn.close()
 
@@ -3575,8 +3607,12 @@ def get_detalhes_solicitacao(id):
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # 1. Busca os dados brutos da solicitação
-        cur.execute("SELECT id_registro, dados_novos, usuario_solicitante, data_solicitacao, tabela_alvo, tipo_solicitacao FROM solicitacoes_alteracao WHERE id = %s", (id,))
+        # 1. Busca os dados brutos da solicitação na tabela unificada
+        cur.execute("""
+            SELECT id_registro, dados_novos, usuario_solicitante, data_solicitacao, tabela_alvo, tipo_solicitacao 
+            FROM solicitacoes_alteracao 
+            WHERE id = %s
+        """, (id,))
         solic = cur.fetchone()
         
         if not solic: return jsonify({"error": "Solicitação não encontrada"}), 404
@@ -3591,10 +3627,9 @@ def get_detalhes_solicitacao(id):
                 except: d_novos = {}
             else: d_novos = dados_novos_json
         
-        # 3. Se for EXCLUSÃO, retorna resumo simples (pois não há "dados novos" para comparar campo a campo)
-        if tipo == 'EXCLUSAO':
-             # Tenta pegar um nome amigável do JSON se existir (ex: nome_visual)
-             nome_item = d_novos.get('nome_visual') or d_novos.get('descricao') or f"ID {id_reg}"
+        # 3. Se for EXCLUSÃO, retorna resumo simples
+        if tipo == 'EXCLUSAO' or tipo == 'EXCLUSÃO':
+             nome_item = d_novos.get('nome_visual') or d_novos.get('descricao') or f"Registro ID {id_reg}"
              
              return jsonify({
                 "id_solicitacao": id, "usuario": usuario, 
@@ -3622,6 +3657,21 @@ def get_detalhes_solicitacao(id):
             sql_atual = "SELECT uvr, associacao, banco_codigo, banco_nome, agencia, conta_corrente, descricao_conta FROM contas_correntes WHERE id = %s"
             cols = ["uvr", "associacao", "banco_codigo", "banco_nome", "agencia", "conta_corrente", "descricao_conta"]
             labels = {"uvr":"UVR", "associacao":"Assoc", "banco_codigo":"Cód Banco", "banco_nome":"Nome Banco", "agencia":"Agência", "conta_corrente":"Conta", "descricao_conta":"Descrição"}
+
+        # --- BLOCO ADICIONADO: DOCUMENTOS ---
+        elif tabela == 'documentos':
+            sql_atual = """
+                SELECT competencia, data_validade, valor, numero_referencia, observacoes 
+                FROM documentos WHERE id = %s
+            """
+            cols = ["competencia", "data_validade", "valor", "numero_referencia", "observacoes"]
+            labels = {
+                "competencia": "Competência", 
+                "data_validade": "Data Validade", 
+                "valor": "Valor (R$)", 
+                "numero_referencia": "Nº Ref/Doc", 
+                "observacoes": "Observações"
+            }
         
         elif tabela == 'transacoes_financeiras':
             sql_atual = """
@@ -3637,7 +3687,6 @@ def get_detalhes_solicitacao(id):
                 "numero_documento": "Nº Doc", "nome_origem": "Origem/Destino", "valor_total": "Total (R$)"
             }
 
-        # --- NOVO BLOCO: PATRIMÔNIO ---
         elif tabela == 'patrimonio':
             sql_atual = """
                 SELECT uvr, descricao, tipo_bem, categoria, placa, codigo_patrimonio, 
@@ -3650,7 +3699,6 @@ def get_detalhes_solicitacao(id):
                 "placa": "Placa", "codigo_patrimonio": "Cód. Patrimônio", "status_bem": "Status", 
                 "nome_responsavel": "Responsável", "observacoes_gerais": "Observações"
             }
-        # ------------------------------
 
         if not sql_atual: 
             return jsonify({"error": f"Tabela '{tabela}' desconhecida ou não configurada para detalhes."}), 400
@@ -3662,10 +3710,13 @@ def get_detalhes_solicitacao(id):
         d_atuais = {}
         if atual:
             for i, c in enumerate(cols): 
-                # Converte None para string vazia
-                d_atuais[c] = str(atual[i]) if atual[i] is not None else ""
+                # Converte None, datas e decimais para string
+                val = atual[i]
+                if val is None: d_atuais[c] = ""
+                elif isinstance(val, (date, datetime)): d_atuais[c] = val.strftime('%Y-%m-%d')
+                else: d_atuais[c] = str(val)
         else:
-            for c in cols: d_atuais[c] = "(Registro não encontrado - Talvez excluído?)"
+            for c in cols: d_atuais[c] = "(Não encontrado)"
 
         # Monta a lista de comparação
         comp = []
@@ -3677,11 +3728,10 @@ def get_detalhes_solicitacao(id):
             if raw_novo is None: val_novo = ""
             else: val_novo = str(raw_novo).strip()
             
-            # Normalizações para evitar falso positivo na comparação
-            if val_atual == "None": val_atual = ""
-            if val_novo == "None": val_novo = ""
+            # Normalizações para evitar falso positivo
+            if val_atual.lower() == "none": val_atual = ""
+            if val_novo.lower() == "none": val_novo = ""
             
-            # Adiciona na lista visual
             comp.append({ 
                 "campo": l, 
                 "valor_atual": val_atual, 
@@ -3689,59 +3739,45 @@ def get_detalhes_solicitacao(id):
                 "mudou": val_atual != val_novo 
             })
         
-        # --- LÓGICA ESPECIAL PARA ITENS DA TRANSAÇÃO (TABELA HTML) ---
+        # --- LÓGICA PARA ITENS DA TRANSAÇÃO (TABELA HTML) ---
         if tabela == 'transacoes_financeiras':
-            # 1. Busca Itens do Banco (Antigos)
             cur.execute("""
                 SELECT descricao, unidade, quantidade, valor_unitario, valor_total_item 
                 FROM itens_transacao WHERE id_transacao = %s ORDER BY id ASC
             """, (id_reg,))
             itens_db = cur.fetchall()
-            
-            # 2. Busca Itens do JSON (Novos)
             itens_novos = d_novos.get('itens', [])
 
-            # Função auxiliar interna
             def gerar_html_tabela(lista_itens, origem):
                 if not lista_itens: return '<small class="text-muted">Nenhum item</small>'
-                
-                html = '<table class="table table-sm table-bordered mb-0" style="font-size:0.7rem; background-color: #fff;">'
+                html = '<table class="table table-sm table-bordered mb-0" style="font-size:0.7rem;">'
                 html += '<thead class="table-light"><tr><th>Desc</th><th>Qtd</th><th>Tot</th></tr></thead><tbody>'
-                
                 for it in lista_itens:
                     if origem == 'db':
                         desc, un, qtd, unit, tot = it[0], it[1], it[2], it[3], it[4]
                     else: # json
-                        desc = it.get('descricao')
-                        un = it.get('unidade')
-                        qtd = it.get('quantidade')
-                        tot = it.get('valor_total_item')
+                        desc, un, qtd, tot = it.get('descricao'), it.get('unidade'), it.get('quantidade'), it.get('valor_total_item')
                     
                     try: qtd_fmt = f"{float(qtd):g}" 
                     except: qtd_fmt = str(qtd)
-                    
                     try: tot_fmt = f"{float(tot):.2f}".replace('.', ',')
                     except: tot_fmt = str(tot)
 
                     html += f'<tr><td>{desc}</td><td>{qtd_fmt} {un}</td><td>{tot_fmt}</td></tr>'
-                
                 html += '</tbody></table>'
                 return html
 
             html_atual = gerar_html_tabela(itens_db, 'db')
             html_novo = gerar_html_tabela(itens_novos, 'json')
             
-            mudou_itens = (html_atual != html_novo)
-
             comp.append({
                 "campo": "Detalhamento de Itens",
                 "valor_atual": html_atual,
                 "valor_novo": html_novo,
-                "mudou": mudou_itens
+                "mudou": (html_atual != html_novo)
             })
-        # ------------------------------------------------------------------
 
-        # Verifica se tem foto nova (Patrimônio ou Associado)
+        # Verifica se tem foto nova
         foto_nova = d_novos.get("foto_bem_base64") or d_novos.get("foto_base64") or ""
 
         return jsonify({
@@ -4700,243 +4736,371 @@ TIPOS_DOCUMENTOS = {
     'FGTS':                   {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True}
 }
 
-@app.route('/documentos', methods=['GET', 'POST'])
+@app.route("/documentos", methods=['GET', 'POST'])
 @login_required
 def documentos():
     conn = conectar_banco()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
+    # =========================================================
     # 1. UPLOAD (POST)
+    # =========================================================
     if request.method == 'POST':
         try:
-            # Lógica de Segurança na UVR do Upload
+            # --- CONTROLE DE UVR ---
             uvr_form = request.form.get('uvr')
-            
-            # Se não for admin, força a UVR do usuário logado
             if current_user.role != 'admin':
-                uvr = current_user.uvr_acesso 
+                uvr = current_user.uvr_acesso
             else:
-                uvr = uvr_form # Admin pode escolher
+                uvr = uvr_form
 
-            # ... (Restante da lógica de pegar campos igual ao anterior) ...
+            # --- CAPTURA DE CAMPOS ---
             id_tipo = request.form.get('tipo_documento')
-            competencia = request.form.get('competencia') # Virá como "2025-11"
+            competencia = request.form.get('competencia')          # Formato YYYY-MM
             data_validade = request.form.get('data_validade') or None
             valor = request.form.get('valor')
             numero_referencia = request.form.get('numero_referencia')
             observacoes = request.form.get('observacoes')
-            
-            # Tratamento de valor
-            if valor: valor = valor.replace('.', '').replace(',', '.')
-            else: valor = None
 
-            # Tratamento Arquivo
+            # --- TRATAMENTO VALOR FINANCEIRO ---
+            if valor:
+                valor = valor.replace('.', '').replace(',', '.')
+            else:
+                valor = None
+
+            # --- PROCESSAMENTO DO ARQUIVO ---
             arquivo = request.files.get('arquivo_upload')
             nome_arquivo_salvo = ""
             nome_original = ""
-            
-            if arquivo and arquivo.filename != '':
+
+            if arquivo and arquivo.filename:
                 nome_original = arquivo.filename
-                import time
+                import time, os
                 timestamp = int(time.time())
                 extensao = os.path.splitext(nome_original)[1]
                 nome_arquivo_salvo = f"doc_{uvr}_{timestamp}{extensao}"
-                
-                caminho_pasta = os.path.join('uploads') 
-                if not os.path.exists(caminho_pasta): os.makedirs(caminho_pasta)
-                arquivo.save(os.path.join(caminho_pasta, nome_arquivo_salvo))
 
+                pasta = 'uploads'
+                if not os.path.exists(pasta):
+                    os.makedirs(pasta)
+
+                arquivo.save(os.path.join(pasta, nome_arquivo_salvo))
+
+            # --- INSERÇÃO NO BANCO ---
             cursor.execute("""
-                INSERT INTO documentos 
-                (uvr, id_tipo, caminho_arquivo, nome_original, competencia, data_validade, valor, numero_referencia, observacoes, enviado_por, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pendente')
-            """, (uvr, id_tipo, nome_arquivo_salvo, nome_original, competencia, data_validade, valor, numero_referencia, observacoes, current_user.username))
-            
+                INSERT INTO documentos
+                (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+                 data_validade, valor, numero_referencia, observacoes,
+                 enviado_por, status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+            """, (
+                uvr, id_tipo, nome_arquivo_salvo, nome_original,
+                competencia, data_validade, valor,
+                numero_referencia, observacoes,
+                current_user.username
+            ))
+
             conn.commit()
-            flash('Documento enviado! Aguardando aprovação.', 'success')
-            
+            flash('Documento enviado com sucesso! Aguardando conferência.', 'success')
+
         except Exception as e:
             conn.rollback()
-            flash(f'Erro: {str(e)}', 'danger')
+            flash(f'Erro ao enviar documento: {str(e)}', 'danger')
+
         finally:
             cursor.close()
             conn.close()
             return redirect(url_for('documentos'))
 
-    # 2. VISUALIZAÇÃO (GET) - AQUI ESTÁ O ISOLAMENTO
+    # =========================================================
+    # 2. LISTAGEM + FILTROS (GET)
+    # =========================================================
     try:
+        # Carrega tipos para os selects (Upload e Filtro)
         cursor.execute("SELECT * FROM tipos_documentos ORDER BY categoria, nome")
         tipos_documentos = cursor.fetchall()
 
-        # Filtros vindos do HTML
-        filtro_periodicidade = request.args.get('filtro_periodicidade')
-        filtro_area = request.args.get('filtro_area')
-        filtro_mes = request.args.get('filtro_mes')
-        filtro_uvr = request.args.get('filtro_uvr')
+        # --- CAPTURA DOS FILTROS (Sincronizados com os nomes no Canvas) ---
+        f_uvr = request.args.get('filtro_uvr', '')
+        f_mes_inicio = request.args.get('mes_inicio', '') # YYYY-MM
+        f_mes_fim = request.args.get('mes_fim', '')       # YYYY-MM
+        f_tipo = request.args.get('tipo_documento', '')
+        f_status = request.args.get('status', '')
 
-        sql_query = """
-            SELECT d.*, t.nome as nome_tipo, t.categoria 
+        # --- CONSTRUÇÃO DINÂMICA DA QUERY ---
+        sql = """
+            SELECT d.*, t.nome AS nome_tipo, t.categoria
             FROM documentos d
             JOIN tipos_documentos t ON d.id_tipo = t.id
-            WHERE 1=1 
+            WHERE 1=1
         """
         params = []
 
-        # --- REGRA DE OURO: ISOLAMENTO DE DADOS ---
+        # Isolamento por UVR
         if current_user.role != 'admin':
-            # Se não for admin, SÓ VÊ a própria UVR
-            sql_query += " AND d.uvr = %s"
+            sql += " AND d.uvr = %s"
             params.append(current_user.uvr_acesso)
-        else:
-            # Se for admin e escolheu uma UVR no filtro, aplica
-            if filtro_uvr:
-                sql_query += " AND d.uvr = %s"
-                params.append(filtro_uvr)
+        elif f_uvr:
+            sql += " AND d.uvr = %s"
+            params.append(f_uvr)
 
-        # Restante dos filtros (igual antes)
-        if filtro_periodicidade:
-            sql_query += " AND t.categoria ILIKE %s"
-            params.append(f"{filtro_periodicidade}%")
-        if filtro_area:
-            sql_query += " AND t.categoria ILIKE %s"
-            params.append(f"%{filtro_area}%")
-        if filtro_mes:
-            sql_query += " AND LEFT(CAST(d.competencia AS TEXT), 7) = %s"
-            params.append(filtro_mes)
+        # Filtro de Tipo
+        if f_tipo:
+            sql += " AND d.id_tipo = %s"
+            params.append(f_tipo)
 
-        sql_query += " ORDER BY d.data_envio DESC LIMIT 100"
+        # Filtro de Status
+        if f_status:
+            sql += " AND d.status = %s"
+            params.append(f_status)
 
-        cursor.execute(sql_query, tuple(params))
-        lista_documentos = cursor.fetchall()
+        # Filtro de Período (Competência)
+        if f_mes_inicio:
+            sql += " AND d.competencia >= %s"
+            params.append(f_mes_inicio)
 
-        # Correção de Datas (Visualização)
+        if f_mes_fim:
+            sql += " AND d.competencia <= %s"
+            params.append(f_mes_fim)
+
+        sql += " ORDER BY d.data_envio DESC LIMIT 200"
+
+        cursor.execute(sql, tuple(params))
+        documentos = cursor.fetchall()
+
+        # Dicionário para persistência dos campos no Canvas
+        filtros_template = {
+            "uvr": f_uvr,
+            "mes_inicio": f_mes_inicio,
+            "mes_fim": f_mes_fim,
+            "tipo": f_tipo,
+            "status": f_status
+        }
+
+        # Conversão de datas para exibição formatada na tabela
         from datetime import datetime
-        for doc in lista_documentos:
-            # 1. Converte Competência
-            if doc['competencia'] and isinstance(doc['competencia'], str):
+        for doc in documentos:
+            if isinstance(doc.get('data_envio'), str):
                 try:
-                    doc['competencia'] = datetime.strptime(doc['competencia'], '%Y-%m-%d')
-                except:
-                    try:
-                        doc['competencia'] = datetime.strptime(doc['competencia'], '%Y-%m')
-                    except:
-                        pass
-
-            # 2. Converte Validade
-            if doc['data_validade'] and isinstance(doc['data_validade'], str):
-                try:
-                    doc['data_validade'] = datetime.strptime(doc['data_validade'], '%Y-%m-%d')
-                except:
+                    # Remove microsegundos se existirem para evitar erro no parse
+                    dt_str = doc['data_envio'].split('.')[0]
+                    doc['data_envio'] = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                except: 
                     pass
-            
-            # 3. Converte Data Envio
-            if doc['data_envio'] and isinstance(doc['data_envio'], str):
-                try:
-                    data_limpa = doc['data_envio'].split('.')[0]
-                    doc['data_envio'] = datetime.strptime(data_limpa, '%Y-%m-%d %H:%M:%S')
-                except:
-                    pass
+            # Competência e Validade permanecem como strings para o HTML5 input ler corretamente
+            # mas o jinja2 pode formatar na tabela se necessário.
 
-        return render_template('documentos.html', 
-                               tipos=tipos_documentos, 
-                               documentos=lista_documentos, 
-                               now=datetime.now().date(),
-                               ft_periodicidade=filtro_periodicidade, ft_area=filtro_area, ft_mes=filtro_mes, ft_uvr=filtro_uvr)
+        return render_template(
+            'documentos.html',
+            documentos=documentos,
+            tipos=tipos_documentos,
+            filtros=filtros_template, # Essencial para manter os filtros na tela
+            now=date.today()
+        )
 
     except Exception as e:
-        app.logger.error(f"Erro GET Documentos: {e}")
+        app.logger.error(f"Erro GET /documentos: {e}")
+        flash('Erro ao carregar lista de documentos.', 'danger')
         return redirect(url_for('index'))
+
     finally:
-        if not cursor.closed: cursor.close()
-        if not conn.closed: conn.close()
+        if not cursor.closed:
+            cursor.close()
+        if not conn.closed:
+            conn.close()
 
 @app.route('/editar_documento', methods=['POST'])
 @login_required
 def editar_documento():
+    id_doc = request.form.get('id_documento')
+
+    if not id_doc:
+        flash('Documento inválido.', 'danger')
+        return redirect(url_for('documentos'))
+
+    competencia = request.form.get('competencia') or None
+    data_validade = request.form.get('data_validade') or None
+    numero_referencia = request.form.get('numero_referencia')
+    observacoes = request.form.get('observacoes')
+    valor = request.form.get('valor')
+
+    valor = valor.replace('.', '').replace(',', '.') if valor else None
+
+    arquivo = request.files.get('arquivo_upload')
+    novo_arquivo = None
+
     conn = conectar_banco()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
     try:
-        id_doc = request.form.get('id_documento')
-        competencia = request.form.get('competencia') or None
-        data_validade = request.form.get('data_validade') or None
-        valor_bruto = request.form.get('valor')
-        numero_ref = request.form.get('numero_referencia')
-        obs = request.form.get('observacoes')
-        
-        # --- TRATAMENTO DE VALOR (CORREÇÃO PARA NUMERIC FIELD OVERFLOW) ---
-        valor = None
-        if valor_bruto:
-            # Remove pontos de milhar e substitui vírgula por ponto decimal
-            valor_limpo = valor_bruto.replace('.', '').replace(',', '.')
-            try:
-                # Converte para float para validar se é um número, 
-                # o banco converterá para NUMERIC(10,2) automaticamente
-                valor = float(valor_limpo)
-            except ValueError:
-                valor = None
+        if arquivo and arquivo.filename:
+            cursor.execute("SELECT caminho_arquivo, uvr FROM documentos WHERE id=%s", (id_doc,))
+            doc = cursor.fetchone()
 
-        # --- LÓGICA DE STATUS (WORKFLOW DE APROVAÇÃO) ---
-        if current_user.role == 'admin':
-            # Admin define o status via seletor do modal (Aprovado, Reprovado, etc)
-            novo_status = request.form.get('status')
+            if doc:
+                if not os.path.exists('uploads'):
+                    os.makedirs('uploads')
+
+                if doc['caminho_arquivo']:
+                    antigo = os.path.join('uploads', doc['caminho_arquivo'])
+                    if os.path.exists(antigo):
+                        os.remove(antigo)
+
+                ext = arquivo.filename.rsplit('.', 1)[1]
+                novo_arquivo = f"doc_{doc['uvr']}_{int(datetime.now().timestamp())}.{ext}"
+                arquivo.save(os.path.join('uploads', novo_arquivo))
+
+        if novo_arquivo:
+            cursor.execute("""
+                UPDATE documentos SET
+                    competencia=%s,
+                    data_validade=%s,
+                    valor=%s,
+                    numero_referencia=%s,
+                    observacoes=%s,
+                    caminho_arquivo=%s,
+                    status='Pendente',
+                    motivo_rejeicao=NULL
+                WHERE id=%s
+            """, (competencia, data_validade, valor, numero_referencia, observacoes, novo_arquivo, id_doc))
         else:
-            # Usuário comum edita -> Status muda para 'Edição Pendente' 
-            # (Melhor que apenas 'Pendente' para o Admin saber que houve alteração)
-            novo_status = 'Edição Pendente'
+            cursor.execute("""
+                UPDATE documentos SET
+                    competencia=%s,
+                    data_validade=%s,
+                    valor=%s,
+                    numero_referencia=%s,
+                    observacoes=%s,
+                    status='Pendente',
+                    motivo_rejeicao=NULL
+                WHERE id=%s
+            """, (competencia, data_validade, valor, numero_referencia, observacoes, id_doc))
 
-        cursor.execute("""
-            UPDATE documentos 
-            SET competencia=%s, data_validade=%s, valor=%s, numero_referencia=%s, observacoes=%s, status=%s
-            WHERE id=%s
-        """, (competencia, data_validade, valor, numero_ref, obs, novo_status, id_doc))
-        
         conn.commit()
-        
-        if current_user.role == 'admin':
-            flash('Documento atualizado/auditado com sucesso!', 'success')
-        else:
-            flash('Alterações enviadas para aprovação do Admin!', 'info')
+        flash('Documento atualizado e enviado para nova conferência.', 'success')
 
     except Exception as e:
         conn.rollback()
-        # Log do erro para debug no terminal
-        print(f"Erro detalhado ao editar: {e}")
-        flash(f'Erro ao editar: {str(e)}', 'danger')
+        flash(f'Erro ao editar documento: {e}', 'danger')
     finally:
         conn.close()
-        return redirect(url_for('documentos'))
+
+    return redirect(url_for('documentos'))
+    
+@app.route('/api/pendencias_documentos')
+@login_required
+def api_pendencias_documentos():
+    if current_user.role != 'admin': return jsonify([])
+    
+    conn = conectar_banco()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    # Busca a solicitação E os dados originais para comparar
+    query = """
+        SELECT s.id as id_solicitacao, s.tipo_solicitacao, s.dados_novos, s.solicitante, 
+               to_char(s.data_solicitacao, 'DD/MM/YYYY HH24:MI') as data_pedida,
+               d.id as id_doc, d.nome_original, d.uvr, 
+               d.competencia as comp_atual, d.valor as valor_atual, 
+               d.data_validade as validade_atual, d.numero_referencia as num_atual, d.observacoes as obs_atual,
+               t.nome as tipo_nome
+        FROM solicitacoes_documentos s
+        JOIN documentos d ON s.id_documento = d.id
+        JOIN tipos_documentos t ON d.id_tipo = t.id
+        WHERE s.status = 'Pendente'
+        ORDER BY s.data_solicitacao DESC
+    """
+    cursor.execute(query)
+    pendencias = cursor.fetchall()
+    
+    # Tratamento de datas para JSON
+    for p in pendencias:
+        for k, v in p.items():
+            if isinstance(v, (datetime, date)):
+                p[k] = str(v)
+                
+    conn.close()
+    return jsonify(pendencias)
+
+@app.route('/processar_solicitacao_doc', methods=['POST'])
+@login_required
+def processar_solicitacao_doc():
+    if current_user.role != 'admin': return "Acesso Negado", 403
+    
+    id_solicitacao = request.form.get('id_solicitacao')
+    acao = request.form.get('acao') 
+    
+    conn = conectar_banco()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        cursor.execute("SELECT * FROM solicitacoes_alteracao WHERE id=%s", (id_solicitacao,))
+        solicitacao = cursor.fetchone()
+        
+        if solicitacao:
+            tabela = solicitacao['tabela_alvo']
+            id_doc = solicitacao['id_registro']
+            
+            if acao == 'rejeitar':
+                cursor.execute("DELETE FROM solicitacoes_alteracao WHERE id=%s", (id_solicitacao,))
+                flash('Solicitação rejeitada.', 'info')
+                
+            elif acao == 'aprovar':
+                if tabela == 'documentos':
+                    tipo = str(solicitacao['tipo_solicitacao']).upper()
+                    
+                    if tipo == 'EXCLUSAO':
+                        cursor.execute("SELECT caminho_arquivo FROM documentos WHERE id=%s", (id_doc,))
+                        arq = cursor.fetchone()
+                        if arq and arq['caminho_arquivo']:
+                            try: os.remove(os.path.join('uploads', arq['caminho_arquivo']))
+                            except: pass
+                        cursor.execute("DELETE FROM documentos WHERE id=%s", (id_doc,))
+                        flash('Documento excluído!', 'success')
+                    
+                    elif tipo == 'EDICAO':
+                        raw_data = solicitacao['dados_novos']
+                        novos = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+
+                        cursor.execute("""
+                            UPDATE documentos 
+                            SET competencia=%s, data_validade=%s, valor=%s, numero_referencia=%s, observacoes=%s
+                            WHERE id=%s
+                        """, (novos.get('competencia') or None, 
+                              novos.get('data_validade') or None, 
+                              novos.get('valor'), 
+                              novos.get('numero_referencia'), 
+                              novos.get('observacoes'), 
+                              id_doc))
+                        flash('Alterações aplicadas!', 'success')
+                
+                # Remove a pendência após aprovar
+                cursor.execute("DELETE FROM solicitacoes_alteracao WHERE id=%s", (id_solicitacao,))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro: {str(e)}', 'danger')
+    finally:
+        conn.close()
+        return redirect(url_for('index'))
 
 # --- NOVA ROTA: EXCLUIR DOCUMENTO (SÓ ADMIN) ---
 @app.route('/excluir_documento/<int:id_doc>')
 @login_required
 def excluir_documento(id_doc):
-    if current_user.role != 'admin':
-        flash('Apenas administradores podem excluir documentos.', 'danger')
-        return redirect(url_for('documentos'))
-        
     conn = conectar_banco()
     cursor = conn.cursor()
     try:
-        # Primeiro pega o nome do arquivo para deletar da pasta
-        cursor.execute("SELECT caminho_arquivo FROM documentos WHERE id=%s", (id_doc,))
-        res = cursor.fetchone()
+        cursor.execute("""
+            INSERT INTO solicitacoes_alteracao (tabela_alvo, id_registro, tipo_solicitacao, usuario_solicitante, status)
+            VALUES ('documentos', %s, 'EXCLUSAO', %s, 'PENDENTE')
+        """, (id_doc, current_user.username))
         
-        # Deleta do Banco
-        cursor.execute("DELETE FROM documentos WHERE id=%s", (id_doc,))
         conn.commit()
-        
-        # Tenta deletar o arquivo físico (se existir)
-        if res and res[0]:
-            try:
-                caminho = os.path.join('uploads', res[0])
-                if os.path.exists(caminho):
-                    os.remove(caminho)
-            except: pass # Se não achar o arquivo, segue a vida
-            
-        flash('Documento excluído permanentemente.', 'success')
+        flash('Solicitação de exclusão enviada!', 'warning')
     except Exception as e:
         conn.rollback()
-        flash(f'Erro ao excluir: {str(e)}', 'danger')
+        flash(f'Erro ao excluir: {e}', 'danger')
     finally:
         conn.close()
         return redirect(url_for('documentos'))
@@ -5053,6 +5217,63 @@ def uploaded_file(filename):
     # O primeiro argumento é o nome da pasta física no seu computador ('uploads')
     return send_from_directory('uploads', filename)
 
+@app.route('/aprovar_documento_direto/<int:id_doc>')
+@login_required
+def aprovar_documento_direto(id_doc):
+    """Aprovação simples (o 'OK' do Admin) direto na lista de documentos."""
+    if current_user.role != 'admin': 
+        return "Acesso Negado", 403
+    
+    conn = conectar_banco()
+    cursor = conn.cursor()
+    try:
+        # Define como aprovado e limpa qualquer motivo de rejeição anterior
+        cursor.execute("""
+            UPDATE documentos 
+            SET status = 'Aprovado', motivo_rejeicao = NULL 
+            WHERE id = %s
+        """, (id_doc,))
+        conn.commit()
+        flash('Documento conferido e aprovado com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao aprovar: {e}', 'danger')
+    finally:
+        conn.close()
+        return redirect(url_for('documentos'))
+    
+@app.route('/reprovar_documento_com_obs', methods=['POST'])
+@login_required
+def reprovar_documento_com_obs():
+    """Reprova o documento e salva a observação de correção para o usuário."""
+    if current_user.role != 'admin': 
+        return "Acesso Negado", 403
+    
+    id_doc = request.form.get('id_documento')
+    motivo = request.form.get('motivo_rejeicao')
+    
+    if not id_doc or not motivo:
+        flash('Dados insuficientes para processar a reprovação.', 'danger')
+        return redirect(url_for('documentos'))
+
+    conn = conectar_banco()
+    cursor = conn.cursor()
+    try:
+        # Atualiza status e grava o motivo da correção
+        cursor.execute("""
+            UPDATE documentos 
+            SET status = 'Reprovado', motivo_rejeicao = %s 
+            WHERE id = %s
+        """, (motivo, id_doc))
+        conn.commit()
+        flash('Solicitação de correção enviada ao usuário!', 'warning')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao processar reprovação: {e}', 'danger')
+    finally:
+        conn.close()
+        return redirect(url_for('documentos'))
+    
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
     return f"""<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>{titulo}</title>
