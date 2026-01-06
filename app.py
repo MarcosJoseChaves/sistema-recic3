@@ -33,17 +33,15 @@ from reportlab.lib.utils import ImageReader
 
 # --- CONFIGURAÇÕES GLOBAIS ---
 GRUPOS_FIXOS_SISTEMA = [
-    "Despesas de operação",
+    "Operação e Produção",
+    "Gestão Administrativa e Financeira",
     "Despesas de manutenção",
-    "Elétrico ou Eletrônico",
-    "Metal",
-    "Não convencionais",
+    "Comercialização de Materiais Recicláveis",
     "Outras Receitas",
-    "Papel",
-    "Plástico",
     "Rateio dos Associados",
-    "Repasses Governamentais",
-    "Vidro"     
+    "Prestação de Serviços e Parcerias",
+    "Gestão Associativa",
+    "Gestão Administrativa e Financeira"      
 ]
 
 # Carrega as variáveis do arquivo .env
@@ -57,6 +55,27 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+@app.route('/resetar_senhas_local')
+def resetar_senhas_local():
+    try:
+        # Tentando usar a função de conexão que costuma existir no seu projeto
+        # Se o seu arquivo usa outro nome, mude para o nome da função que você usa para conectar ao Neon
+        conn = psycopg2.connect(os.environ.get('DATABASE_URL')) 
+        cur = conn.cursor()
+        
+        # Gera o hash da senha 'uvr123'
+        senha_hash = generate_password_hash('uvr123')
+        
+        # Atualiza o banco
+        cur.execute("UPDATE usuarios SET password_hash = %s WHERE username IN ('uvr01', 'uvr02')", (senha_hash,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        return "<h3>Sucesso!</h3><p>Senhas atualizadas para <b>uvr123</b>. Tente logar agora.</p>"
+    except Exception as e:
+        return f"Erro ao resetar: {str(e)}"
+    
 # --- CONFIGURAÇÃO DO BANCO DE DADOS ---
 DATABASE_URL = os.getenv('DATABASE_URL')
 
@@ -1152,12 +1171,14 @@ def get_distinct_grupos():
     # Mapa baseado no seu CSV e configurações
     mapa_grupos = {
         "Receita": [
-            "Elétrico ou Eletrônico", "Metal", "Não convencionais", 
-            "Outras Receitas", "Papel", "Plástico", 
-            "Repasses Governamentais", "Vidro"
+            "Comercialização de Materiais Recicláveis",      
+            "Outras Receitas",
+            "Prestação de Serviços e Parcerias",
+            "Gestão Associativa",
+            "Gestão Administrativa e Financeira"      
         ],
         "Despesa": [
-            "Despesas de manutenção", "Despesas de operação", 
+            "Despesas de manutenção", "Operação e Produção", "Gestão Administrativa e Financeira",
             "Rateio dos Associados"    
         ]
     }
