@@ -40,8 +40,7 @@ GRUPOS_FIXOS_SISTEMA = [
     "Outras Receitas",
     "Rateio dos Associados",
     "Prestação de Serviços e Parcerias",
-    "Gestão Associativa",
-    "Gestão Administrativa e Financeira"      
+    "Gestão Associativa"  
 ]
 
 # Carrega as variáveis do arquivo .env
@@ -1180,8 +1179,7 @@ def get_distinct_grupos():
             "Comercialização de Materiais Recicláveis",      
             "Outras Receitas",
             "Prestação de Serviços e Parcerias",
-            "Gestão Associativa",
-            "Gestão Administrativa e Financeira"      
+            "Gestão Associativa"     
         ],
         "Despesa": [
             "Despesas de manutenção", "Operação e Produção", "Gestão Administrativa e Financeira",
