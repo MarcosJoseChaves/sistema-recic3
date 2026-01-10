@@ -582,16 +582,18 @@ def cadastrar_associado():
         if current_user.uvr_acesso and current_user.role != 'admin':
             dados["uvr"] = current_user.uvr_acesso
 
-        # Campos obrigatórios (sem 'numero')
-        required_fields = { "nome": "Nome", "cpf": "CPF", "rg": "RG",
-                            "data_nascimento": "Data de Nascimento", "data_admissao": "Data de Admissão",
-                            "status": "Status", "cep": "CEP", "telefone": "Telefone",
-                            "uvr": "UVR", "data_hora_cadastro": "Data/Hora"}
+        # Campos obrigatórios
+        required_fields = { 
+            "nome": "Nome", "cpf": "CPF", "rg": "RG",
+            "data_nascimento": "Data de Nascimento", "data_admissao": "Data de Admissão",
+            "status": "Status", "cep": "CEP", "telefone": "Telefone",
+            "uvr": "UVR", "data_hora_cadastro": "Data/Hora"
+        }
         
         for field, msg in required_fields.items():
             if not dados.get(field): return f"{msg} é obrigatório(a).", 400
 
-        # Validações
+        # Validações de máscara e formato
         cpf_num = re.sub(r'[^0-9]', '', dados["cpf"])
         if not validar_cpf(cpf_num): return "CPF inválido.", 400
         cep_num = re.sub(r'[^0-9]', '', dados["cep"])
@@ -604,19 +606,20 @@ def cadastrar_associado():
         except ValueError as e:
             return f"Formato de data inválido: {e}", 400
 
-        # --- LÓGICA DE FOTO INTELIGENTE (CORREÇÃO) ---
+        # --- LÓGICA DE FOTO INTELIGENTE (REVISADA) ---
         foto_final = ""
         
-        # 1. Verifica se veio da WEBCAM (string base64 já pronta)
-        foto_webcam = dados.get("foto_webcam_base64", "")
-        if foto_webcam and len(foto_webcam) > 100:
-            foto_final = foto_webcam
+        # 1. Prioridade: Verifica se o JavaScript enviou a foto processada (Webcam ou Upload Redimensionado)
+        # O campo agora se chama 'foto_base64' conforme o HTML que ajustamos
+        foto_processada = dados.get("foto_base64", "")
         
-        # 2. Se não tem webcam, verifica se veio ARQUIVO (upload)
-        elif 'foto_associado' in request.files:
-            arquivo = request.files['foto_associado']
+        if foto_processada and len(foto_processada) > 100:
+            foto_final = foto_processada
+        
+        # 2. Backup: Se por algum motivo o JS falhar e enviar o arquivo bruto (input name="foto")
+        elif 'foto' in request.files:
+            arquivo = request.files['foto']
             if arquivo and arquivo.filename:
-                # Converte o arquivo enviado para Base64 para salvar no banco igual à webcam
                 conteudo_arquivo = arquivo.read()
                 encoded_string = base64.b64encode(conteudo_arquivo).decode('utf-8')
                 mime_type = arquivo.content_type or "image/jpeg"
@@ -626,12 +629,13 @@ def cadastrar_associado():
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Gera próximo número
+        # Gera próximo número de associado
         cur.execute("SELECT MAX(CAST(numero AS INTEGER)) FROM associados")
         res_num = cur.fetchone()
         proximo_numero = (res_num[0] + 1) if res_num and res_num[0] else 1
         numero_gerado_str = str(proximo_numero)
         
+        # Inserção no Banco de Dados
         cur.execute("""
             INSERT INTO associados (numero, uvr, associacao, nome, cpf, rg, data_nascimento,
                                     data_admissao, status, cep, logradouro, endereco_numero,
@@ -651,7 +655,7 @@ def cadastrar_associado():
     except Exception as e:
         if conn: conn.rollback()
         app.logger.error(f"Erro cadastro associado: {e}")
-        return f"Erro: {e}", 500
+        return f"Erro interno: {e}", 500
     finally:
         if conn: conn.close()
 
@@ -745,61 +749,66 @@ def get_associado(id):
     conn = None
     try:
         conn = conectar_banco()
-        cur = conn.cursor()
+        # Usamos o RealDictCursor para o JS receber 'data.nome' e não 'data[1]'
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Busca todos os dados do associado pelo ID
-        # Nota: Ajuste os nomes das colunas se seu banco estiver diferente
-        sql = """
-            SELECT id, nome, cpf, rg, data_nascimento, data_admissao, status, 
-                   uvr, associacao, logradouro, endereco_numero, bairro, cidade, 
-                   uf, cep, telefone, foto_base64
-            FROM associados WHERE id = %s
-        """
-        cur.execute(sql, (id,))
+        cur.execute("SELECT * FROM associados WHERE id = %s", (id,))
         row = cur.fetchone()
         
         if not row:
             return jsonify({"error": "Associado não encontrado"}), 404
 
-        # Segurança: Se não for admin, verifica se a UVR bate
-        if current_user.uvr_acesso and current_user.role != 'admin':
-            # row[7] é a coluna UVR
-            if row[7] != current_user.uvr_acesso:
-                return jsonify({"error": "Acesso não autorizado para esta UVR"}), 403
+        # Função interna para formatar datas
+        def fmt(d):
+            return d.strftime('%d/%m/%Y') if hasattr(d, 'strftime') else str(d) if d else ""
 
-        # Formatar datas para string (JSON não aceita objeto date direto)
-        def format_date(d):
-            return d.strftime('%d/%m/%Y') if d else ""
-
-        associado = {
-            "id": row[0], "nome": row[1], "cpf": row[2], "rg": row[3],
-            "data_nascimento": format_date(row[4]),
-            "data_admissao": format_date(row[5]),
-            "status": row[6], "uvr": row[7], "associacao": row[8],
-            "logradouro": row[9], "numero": row[10], "bairro": row[11],
-            "cidade": row[12], "uf": row[13], "cep": row[14],
-            "telefone": row[15],
-            "foto_base64": row[16] # A foto vem aqui!
-        }
+        # --- TRATAMENTO DA FOTO PARA O FRONT-END ---
+        foto = row.get('foto_base64') or ""
         
-        return jsonify(associado)
+        # Se a foto existir e NÃO começar com o cabeçalho data:image, nós adicionamos.
+        # Isso garante que o previewFoto.src do Javascript funcione sempre.
+        if foto and not foto.startswith('data:image'):
+            foto = f"data:image/jpeg;base64,{foto}"
 
+        # Montamos o retorno
+        res = {
+            "id": row['id'],
+            "nome": row['nome'],
+            "cpf": row['cpf'],
+            "rg": row['rg'],
+            "data_nascimento": fmt(row['data_nascimento']),
+            "data_admissao": fmt(row['data_admissao']),
+            "status": row['status'],
+            "uvr": row['uvr'],
+            "logradouro": row['logradouro'],
+            "numero": row['endereco_numero'],
+            "bairro": row['bairro'],
+            "cidade": row['cidade'],
+            "uf": row['uf'],
+            "telefone": row['telefone'],
+            "foto_base64": foto, # Agora vai com o cabeçalho garantido
+            "data_cadastro": fmt(row.get('data_hora_cadastro')) # Adicionei para o relógio da edição
+        }
+        return jsonify(res)
     except Exception as e:
-        app.logger.error(f"Erro ao buscar ficha do associado: {e}")
+        app.logger.error(f"Erro ao buscar associado {id}: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
         
-@app.route("/editar_associado", methods=["POST"])
+@app.route("/editar_associado", methods=["GET", "POST"])
 @login_required
 def editar_associado():
+    if request.method == "GET":
+        return redirect(url_for('index'))
+    
     conn = None
     try:
         dados = request.form.to_dict()
         id_associado = dados.get("id_associado")
         if not id_associado: return "ID não encontrado.", 400
 
-        # Tratamento básico de dados
+        # Tratamento de dados
         cpf_num = re.sub(r'[^0-9]', '', dados.get("cpf", ""))
         cep_num = re.sub(r'[^0-9]', '', dados.get("cep", ""))
         
@@ -811,27 +820,23 @@ def editar_associado():
         data_nasc = processar_data(dados.get("data_nascimento"))
         data_adm = processar_data(dados.get("data_admissao"))
 
-        # --- LÓGICA DE FOTO NA EDIÇÃO ---
-        foto_final = ""
+        # --- LÓGICA DE FOTO NA EDIÇÃO (CORRIGIDA) ---
+        # O JavaScript agora envia tudo (Webcam ou Upload) pelo campo 'foto_base64'
+        foto_final = dados.get("foto_base64", "")
         
-        # 1. Prioridade: Nova foto de Webcam
-        foto_webcam = dados.get("foto_webcam_base64", "")
-        if foto_webcam and len(foto_webcam) > 100:
-            foto_final = foto_webcam
+        # Se o campo 'foto_base64' estiver vazio, tentamos o backup de arquivo bruto
+        if not foto_final or len(foto_final) < 100:
+            if 'foto' in request.files:
+                arquivo = request.files['foto']
+                if arquivo and arquivo.filename:
+                    conteudo = arquivo.read()
+                    encoded = base64.b64encode(conteudo).decode('utf-8')
+                    mime = arquivo.content_type or "image/jpeg"
+                    foto_final = f"data:{mime};base64,{encoded}"
         
-        # 2. Prioridade: Novo Arquivo de Upload
-        elif 'foto_associado' in request.files:
-            arquivo = request.files['foto_associado']
-            if arquivo and arquivo.filename:
-                conteudo = arquivo.read()
-                encoded = base64.b64encode(conteudo).decode('utf-8')
-                mime = arquivo.content_type or "image/jpeg"
-                foto_final = f"data:{mime};base64,{encoded}"
-        
-        # 3. Se não enviou nada novo, mantém a existente (que vem num campo hidden)
-        if not foto_final:
-            foto_final = dados.get("foto_existente_base64", "")
-        # --------------------------------
+        # Se ainda assim estiver vazio, significa que não houve alteração ou a foto foi removida
+        # (Neste caso, a lógica do seu JS já mantém a foto antiga no campo 'foto_base64' ao carregar a edição)
+        # --------------------------------------------
 
         conn = conectar_banco()
         cur = conn.cursor()
@@ -854,11 +859,12 @@ def editar_associado():
             conn.commit()
             msg = "Alterações salvas com sucesso!"
         else:
-            # Para usuário comum, salva na solicitação
+            # Lógica para Usuário Comum (Solicitação de Alteração)
             import json
             dados_json = dados.copy()
-            dados_json['foto_base64'] = foto_final # Garante que a foto vai no JSON
-            # Converte datas para string para não quebrar o JSON
+            dados_json['foto_base64'] = foto_final # Garante a foto no pacote de alteração
+            
+            # Formata datas para string para o JSON não quebrar
             if data_nasc: dados_json['data_nascimento'] = str(data_nasc)
             if data_adm: dados_json['data_admissao'] = str(data_adm)
 
@@ -874,7 +880,7 @@ def editar_associado():
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro edição: {e}")
+        app.logger.error(f"Erro edição associado: {e}")
         return f"Erro: {e}", 500
     finally:
         if conn: conn.close()
@@ -3098,9 +3104,7 @@ def imprimir_ficha_associado(id):
             "tel": row[14], "foto": row[15], "matricula": row[16]
         }
 
-        # --- CONFIGURAÇÃO DO PDF ---
         buffer = io.BytesIO()
-        # Margens ajustadas
         doc = SimpleDocTemplate(buffer, pagesize=A4, 
                                 topMargin=1*cm, bottomMargin=1*cm, 
                                 leftMargin=1.5*cm, rightMargin=1.5*cm)
@@ -3108,133 +3112,117 @@ def imprimir_ficha_associado(id):
         story = []
         styles = getSampleStyleSheet()
         
-        # Estilos
         style_titulo = ParagraphStyle('FichaTitulo', parent=styles['Heading1'], alignment=TA_CENTER, fontSize=16, spaceAfter=20)
         style_label = ParagraphStyle('FichaLabel', parent=styles['Normal'], fontSize=8, textColor=colors.gray)
-        style_valor = ParagraphStyle('FichaValor', parent=styles['Normal'], fontSize=10, leading=12) # removed spaceAfter to compact rows
+        style_valor = ParagraphStyle('FichaValor', parent=styles['Normal'], fontSize=10, leading=12)
         
-        # Cabeçalho
         story.append(Paragraph(f"Ficha Cadastral do Associado - {dados['assoc']}", style_titulo))
         story.append(Spacer(1, 0.5*cm))
 
-        # --- PROCESSAMENTO DA FOTO (CORRIGIDO PROPORÇÃO) ---
+        # --- PROCESSAMENTO DA FOTO COM PROPORÇÃO MANTIDA (FORMATO 3x4) ---
         img_obj = None
         if dados['foto'] and len(dados['foto']) > 100:
             try:
                 img_str = dados['foto'].split(",")[1] if "," in dados['foto'] else dados['foto']
                 img_data = base64.b64decode(img_str)
-                
-                # Cria um objeto de arquivo na memória
                 imagem_io = io.BytesIO(img_data)
                 
-                # Lê as dimensões originais da imagem para calcular a proporção
-                utils_img = ImageReader(imagem_io)
-                iw, ih = utils_img.getSize() 
-                aspect = ih / float(iw) # Calcula a proporção (Altura / Largura)
+                # Lê o tamanho original para calcular proporção
+                img_reader = ImageReader(imagem_io)
+                orig_w, orig_h = img_reader.getSize()
+                aspect = orig_h / float(orig_w)
                 
-                # Define limites máximos (A coluna do PDF tem 3.5cm de largura)
-                max_w = 3.5 * cm
-                max_h = 5.0 * cm 
+                # Definimos a largura base de 3cm
+                render_w = 3.0 * cm
+                render_h = render_w * aspect
                 
-                # Cálculo inteligente: Ajusta pela largura máxima primeiro
-                display_w = max_w
-                display_h = max_w * aspect
+                # Se a altura fugir muito do padrão 4cm (proporção), limitamos para não esticar a ficha
+                if render_h > 4.5 * cm:
+                    render_h = 4.5 * cm
+                    render_w = render_h / aspect
                 
-                # Se a altura resultante for muito grande (foto muito vertical), ajusta pela altura máxima
-                if display_h > max_h:
-                    display_h = max_h
-                    display_w = display_h / aspect
-                
-                # Reinicia o ponteiro do arquivo para o ReportLab ler do início
-                imagem_io.seek(0)
-                
-                # Cria a imagem com as dimensões calculadas
-                img_obj = ReportLabImage(imagem_io, width=display_w, height=display_h)
+                img_obj = ReportLabImage(imagem_io, width=render_w, height=render_h)
             except Exception as e: 
                 app.logger.error(f"Erro imagem PDF: {e}")
 
-        # --- ORGANIZAÇÃO DOS DADOS EM LISTAS ---
-        # Formato: (Label, Valor)
+        # Listas de campos (Sem retirar nenhuma informação)
         lista_pessoais = [
             ("Nome Completo", dados['nome']), ("Matrícula", dados['matricula']),
-            ("CPF", dados['cpf']),            ("RG", dados['rg']),
-            ("Data Nascimento", dados['nasc']),("Telefone", dados['tel'])
+            ("CPF", dados['cpf']), ("RG", dados['rg']),
+            ("Data Nascimento", dados['nasc']), ("Telefone", dados['tel'])
         ]
         
         lista_sistema = [
-            ("UVR", dados['uvr']),            ("Associação", dados['assoc']),
+            ("UVR", dados['uvr']), ("Associação", dados['assoc']),
             ("Data Admissão", dados['admissao']), ("Status", dados['status'])
         ]
         
         lista_endereco = [
             ("Endereço", f"{dados['logradouro']}, {dados['num']}"), ("Bairro", dados['bairro']),
-            ("Cidade/UF", f"{dados['cidade']} - {dados['uf']}"),    ("CEP", dados['cep'])
+            ("Cidade/UF", f"{dados['cidade']} - {dados['uf']}"), ("CEP", dados['cep'])
         ]
 
-        # --- FUNÇÃO PARA CRIAR TABELAS DE SEÇÃO (2 COLUNAS) ---
-        # Define largura da coluna interna baseada na presença da foto
-        # Se tem foto (4cm), sobra ~12cm para texto -> 6cm por coluna
-        # Se não tem, sobra ~16cm -> 8cm por coluna
-        col_w = 6*cm if img_obj else 8*cm
+        # Largura das colunas de texto (ajusta se houver foto)
+        col_w = 6.5*cm if img_obj else 8.0*cm
 
         def criar_tabela_secao(lista_campos):
             rows = []
-            # Itera de 2 em 2 para fazer pares
             for i in range(0, len(lista_campos), 2):
-                campo1 = lista_campos[i]
-                cell1 = [Paragraph(f"<b>{campo1[0]}</b>", style_label), Paragraph(campo1[1], style_valor)]
-                
+                c1 = lista_campos[i]
+                cell1 = [Paragraph(f"<b>{c1[0]}</b>", style_label), Paragraph(str(c1[1]), style_valor)]
                 cell2 = []
                 if i + 1 < len(lista_campos):
-                    campo2 = lista_campos[i+1]
-                    cell2 = [Paragraph(f"<b>{campo2[0]}</b>", style_label), Paragraph(campo2[1], style_valor)]
-                
+                    c2 = lista_campos[i+1]
+                    cell2 = [Paragraph(f"<b>{c2[0]}</b>", style_label), Paragraph(str(c2[1]), style_valor)]
                 rows.append([cell1, cell2])
             
             t = Table(rows, colWidths=[col_w, col_w])
             t.setStyle(TableStyle([
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
                 ('LEFTPADDING', (0,0), (-1,-1), 0),
-                ('RIGHTPADDING', (0,0), (-1,-1), 5),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 6), # Espaço entre linhas de dados
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6)
             ]))
             return t
 
-        # --- MONTAGEM DA COLUNA DA ESQUERDA (TEXTOS) ---
         elementos_texto = []
-        
         elementos_texto.append(Paragraph("<b>DADOS PESSOAIS</b>", styles['Heading4']))
         elementos_texto.append(criar_tabela_secao(lista_pessoais))
         elementos_texto.append(Spacer(1, 0.3*cm))
-        
         elementos_texto.append(Paragraph("<b>DADOS DO SISTEMA</b>", styles['Heading4']))
         elementos_texto.append(criar_tabela_secao(lista_sistema))
         elementos_texto.append(Spacer(1, 0.3*cm))
-        
         elementos_texto.append(Paragraph("<b>ENDEREÇO</b>", styles['Heading4']))
         elementos_texto.append(criar_tabela_secao(lista_endereco))
 
-        # --- TABELA PRINCIPAL (TEXTO x FOTO) ---
+# --- TABELA PRINCIPAL (CORREÇÃO DO RETÂNGULO ALTO) ---
         if img_obj:
-            # Coluna 1: Lista de Elementos de Texto | Coluna 2: Foto
-            # Ajuste de largura da coluna da foto para acomodar até 3.5cm + bordas
-            data_main = [[elementos_texto, img_obj]]
-            widths_main = [12.5*cm, 3.5*cm]
-            style_main = [
+            # Criamos uma tabela apenas para a foto para que a borda (GRID) 
+            # fique colada nela e não estique com o texto
+            tbl_foto = Table([[img_obj]], colWidths=[render_w + 4]) # 4 é o respiro da borda
+            tbl_foto.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
-                ('ALIGN', (1,0), (1,0), 'CENTER'), # Centraliza foto
-                ('BORDER', (1,0), (1,0), 1, colors.black), # Borda na foto
-                ('TOPPADDING', (1,0), (1,0), 5), # Padding na foto
-                ('BOTTOMPADDING', (1,0), (1,0), 5),
-            ]
+                ('TOPPADDING', (0,0), (-1,-1), 2),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+            ]))
+
+            data_main = [[elementos_texto, tbl_foto]]
+            widths_main = [13.0*cm, 4.0*cm]
+            
+            # Note que aqui removemos o GRID da tbl_main para não criar o retângulo longo
+            tbl_main = Table(data_main, colWidths=widths_main, rowHeights=[None])
+            tbl_main.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('ALIGN', (1,0), (1,0), 'CENTER'),
+                ('LEFTPADDING', (1,0), (1,0), 5),
+            ]))
         else:
             data_main = [[elementos_texto]]
-            widths_main = [16.5*cm]
-            style_main = [('VALIGN', (0,0), (-1,-1), 'TOP')]
+            widths_main = [17*cm]
+            tbl_main = Table(data_main, colWidths=widths_main)
+            tbl_main.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
 
-        tbl_main = Table(data_main, colWidths=widths_main)
-        tbl_main.setStyle(TableStyle(style_main))
-        
         story.append(tbl_main)
         
         # Assinatura
