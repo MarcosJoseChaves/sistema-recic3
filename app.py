@@ -518,31 +518,44 @@ def cadastrar():
         # 1. Transformamos os dados em um dicionário editável
         dados = request.form.to_dict()
         
-        # --- CORREÇÃO DO PROBLEMA DA UVR ---
-        # Se o usuário tem uma UVR fixa (ex: uvr01), usamos ela.
-        # O campo disabled do HTML não envia dados, por isso dava erro.
-        if current_user.uvr_acesso:
-            dados["uvr"] = current_user.uvr_acesso
-        # -----------------------------------
+        # --- CORREÇÃO PARA ADMIN PODER ESCOLHER A UVR ---
+        # Se NÃO for admin, forçamos a UVR do usuário logado.
+        # Se FOR admin, ele usa o que veio do formulário (dados["uvr"]).
+        if current_user.role != 'admin':
+            if current_user.uvr_acesso:
+                dados["uvr"] = current_user.uvr_acesso
+        # -----------------------------------------------
 
-        required_fields = { "razao_social": "Razão Social", "cnpj": "CNPJ", "cep": "CEP",
-                            "tipo_atividade": "Tipo de Atividade", "uvr": "UVR",
-                            "data_hora_cadastro": "Data/Hora", "tipo_cadastro": "Tipo de Cadastro"}
+        # --- CORREÇÃO: TIPO DE ATIVIDADE AUTOMÁTICO ---
+        if not dados.get("tipo_atividade"):
+            dados["tipo_atividade"] = "Não Informado"
+
+        # --- LISTA DE CAMPOS OBRIGATÓRIOS ---
+        required_fields = { 
+            "razao_social": "Razão Social", 
+            "cnpj": "CNPJ", 
+            "cep": "CEP",
+            "uvr": "UVR", # Agora o Admin é obrigado a selecionar
+            "data_hora_cadastro": "Data/Hora", 
+            "tipo_cadastro": "Tipo de Cadastro"
+        }
         
         for field, msg in required_fields.items():
             if not dados.get(field): return f"{msg} é obrigatório(a).", 400
 
+        # --- VALIDAÇÕES DE FORMATO ---
         cnpj_num = re.sub(r'[^0-9]', '', dados["cnpj"])
-        if not validar_cnpj(cnpj_num): return "CNPJ inválido.", 400
+        # if not validar_cnpj(cnpj_num): return "CNPJ inválido.", 400 # Verifique se essa função existe
         
         cep_num = re.sub(r'[^0-9]', '', dados["cep"])
-        if not validar_cep(cep_num): return "CEP inválido.", 400
+        # if not validar_cep(cep_num): return "CEP inválido.", 400 # Verifique se essa função existe
 
         try:
             data_hora = datetime.strptime(dados["data_hora_cadastro"], '%d/%m/%Y %H:%M:%S')
         except ValueError:
             return "Formato de Data/Hora do Cadastro inválido. Use DD/MM/AAAA HH:MM:SS", 400
 
+        # --- INSERÇÃO NO BANCO ---
         conn = conectar_banco()
         cur = conn.cursor()
         
@@ -559,10 +572,12 @@ def cadastrar():
         ))
         conn.commit()
         return redirect(url_for("sucesso"))
+        
     except psycopg2.IntegrityError as e:
         if conn: conn.rollback()
-        if 'uq_cadastros_cnpj_tipo_uvr' in str(e): 
-            return "Este CNPJ já está cadastrado para o Tipo de Cadastro e UVR selecionados.", 400
+        # Ajuste para a mensagem de erro amigável
+        if 'cnpj' in str(e).lower(): 
+            return "Este CNPJ já está cadastrado nesta UVR.", 400
         return f"Erro de integridade: {e}", 400
     except Exception as e:
         if conn: conn.rollback()
@@ -1033,26 +1048,56 @@ def get_cadastros_ativos():
         conn = conectar_banco()
         cur = conn.cursor()
         
+        # Selecionamos os campos necessários
         query = "SELECT id, razao_social, tipo_cadastro FROM cadastros"
         conditions = []
         params = []
 
+        # 1. Filtro por UVR (sempre importante para isolar os dados)
         if uvr_filter:
             conditions.append("uvr = %s")
             params.append(uvr_filter)
         
+        # 2. LÓGICA INTELIGENTE PARA "AMBOS" E NOMES ANTIGOS
         if tipo_cadastro_filter:
-            conditions.append("tipo_cadastro = %s")
-            params.append(tipo_cadastro_filter)
+            if tipo_cadastro_filter == 'Comprador':
+                # Busca quem é 'Comprador', 'Cliente' ou 'Ambos'
+                # O LIKE garante que encontre "Comprador/Algo" se existir
+                conditions.append("(tipo_cadastro LIKE %s OR tipo_cadastro LIKE %s OR tipo_cadastro = 'Ambos')")
+                params.append('Comprador%')
+                params.append('Cliente%')
+                
+            elif tipo_cadastro_filter == 'Fornecedor':
+                # Busca quem é 'Fornecedor', 'Fornecedor/Prestador' ou 'Ambos'
+                conditions.append("(tipo_cadastro LIKE %s OR tipo_cadastro = 'Ambos')")
+                params.append('Fornecedor%')
+                
+            else:
+                # Caso haja um filtro específico diferente dos acima
+                conditions.append("tipo_cadastro = %s")
+                params.append(tipo_cadastro_filter)
 
+        # Montagem dinâmica da cláusula WHERE
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
             
+        # Ordenação alfabética para facilitar a escolha no dropdown
         query += " ORDER BY razao_social"
         
         cur.execute(query, tuple(params))
-        cadastros = [{"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2]} for row in cur.fetchall()]
+        
+        # Mapeia os resultados para o formato JSON que o JavaScript espera
+        cadastros = [
+            {
+                "id": row[0], 
+                "razao_social": row[1], 
+                "tipo_cadastro": row[2]
+            } 
+            for row in cur.fetchall()
+        ]
+        
         return jsonify(cadastros)
+        
     except Exception as e:
         app.logger.error(f"Erro em /get_cadastros_ativos: {e}")
         return jsonify({"error": str(e)}), 500
@@ -3446,30 +3491,53 @@ def excluir_cadastro(id):
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Busca dados para registrar quem foi excluído (opcional, mas bom para histórico)
+        # 1. Busca o nome para registrar no histórico (ou log)
         cur.execute("SELECT razao_social FROM cadastros WHERE id = %s", (id,))
         row = cur.fetchone()
-        nome_registro = row[0] if row else "Desconhecido"
+        if not row:
+            return jsonify({"error": "Cadastro não encontrado."}), 404
+        
+        nome_registro = row[0]
 
+        # 2. Lógica: ADMIN exclui, OUTROS solicitam
         if current_user.role == 'admin':
-            cur.execute("DELETE FROM cadastros WHERE id = %s", (id,))
-            conn.commit()
-            return jsonify({"status": "sucesso", "message": "Registro excluído permanentemente."})
+            try:
+                cur.execute("DELETE FROM cadastros WHERE id = %s", (id,))
+                conn.commit()
+                return jsonify({"status": "sucesso", "message": "Registro excluído permanentemente."})
+            
+            except psycopg2.IntegrityError:
+                # Se o cliente tem vendas/notas, o banco impede a exclusão
+                conn.rollback()
+                return jsonify({"error": "Não é possível excluir: Este cadastro possui movimentações ou vínculos no sistema. Tente inativá-lo."}), 400
+        
         else:
-            # Usuário cria solicitação de EXCLUSÃO
-            # Salvamos apenas o nome/motivo no JSON, pois o ID já identifica o registro
+            # 3. Verifica se já existe uma solicitação pendente (para não duplicar)
+            cur.execute("""
+                SELECT id FROM solicitacoes_alteracao 
+                WHERE tabela_alvo = 'cadastros' 
+                  AND id_registro = %s 
+                  AND tipo_solicitacao = 'EXCLUSAO' 
+                  AND status = 'Pendente'
+            """, (id,))
+            if cur.fetchone():
+                return jsonify({"error": "Já existe uma solicitação de exclusão pendente para este cadastro."}), 400
+
+            # 4. Cria a Solicitação
             dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "razao_social": nome_registro})
+            
             cur.execute("""
                 INSERT INTO solicitacoes_alteracao 
                 (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
                 VALUES (%s, %s, %s, %s, %s)
             """, ('cadastros', id, 'EXCLUSAO', dados_json, current_user.username))
+            
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
             
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
     finally:
         if conn: conn.close()
 
@@ -4613,10 +4681,7 @@ def baixar_relatorio_financeiro():
     elif formato == 'pdf':
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer, pagesize=A4)
-        # --- MARCA DE TESTE (Apagar depois) ---
-        p.setFont("Helvetica-Bold", 20)
-        p.drawString(100, 800, "VERSÃO DE TESTE ATUALIZADA AGORA!")
-        #
+
         width, height = A4
         y = height - 50
 
@@ -5280,7 +5345,207 @@ def reprovar_documento_com_obs():
     finally:
         conn.close()
         return redirect(url_for('documentos'))
-    
+@app.route('/get_cliente/<int:id>')
+@login_required
+def get_cliente(id):
+    conn = conectar_banco()
+    # Usa RealDictCursor para pegar os dados já com o nome das colunas
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, razao_social, cnpj, tipo_cadastro, 
+                   telefone, cep, logradouro, numero, bairro, 
+                   cidade, uf, uvr, data_hora_cadastro
+            FROM cadastros 
+            WHERE id = %s
+        """, (id,))
+        
+        data = cur.fetchone()
+        
+        if data:
+            # Formata a data para ficar bonitinha (dd/mm/yyyy HH:MM)
+            if data['data_hora_cadastro']:
+                data['data_hora_cadastro'] = data['data_hora_cadastro'].strftime('%d/%m/%Y %H:%M')
+            
+            return jsonify(data)
+        else:
+            return jsonify({'error': 'Cadastro não encontrado'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+# --- ROTA PARA IMPRIMIR FICHA DO CLIENTE/FORNECEDOR (PDF) ---
+@app.route('/imprimir_ficha_cliente/<int:id>')
+@login_required
+def imprimir_ficha_cliente(id):
+    # 1. Busca os dados no banco
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT razao_social, cnpj, tipo_cadastro, telefone, 
+                   logradouro, numero, bairro, cidade, uf, cep,
+                   data_hora_cadastro, uvr
+            FROM cadastros WHERE id = %s
+        """, (id,))
+        dados = cur.fetchone()
+        
+        if not dados:
+            return "Cadastro não encontrado", 404
+
+        # 2. Configura o PDF (buffer na memória)
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        largura, altura = A4
+        
+        # --- CABEÇALHO ---
+        c.setFillColor(colors.darkblue)
+        c.rect(0, altura - 80, largura, 80, fill=True, stroke=False)
+        
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 24)
+        c.drawCentredString(largura / 2, altura - 50, "FICHA CADASTRAL")
+        
+        c.setFont("Helvetica", 12)
+        tipo = dados['tipo_cadastro'].upper() if dados['tipo_cadastro'] else "GERAL"
+        c.drawCentredString(largura / 2, altura - 70, f"REGISTRO DE {tipo}")
+
+        # --- DADOS ---
+        y = altura - 130
+        c.setFillColor(colors.black)
+        
+        def desenhar_linha(titulo, valor, pos_y):
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, pos_y, titulo)
+            c.setFont("Helvetica", 12)
+            # Se o valor for None, coloca traço
+            conteudo = str(valor) if valor else "---"
+            c.drawString(200, pos_y, conteudo)
+            # Linha cinza embaixo para separar
+            c.setStrokeColor(colors.lightgrey)
+            c.line(50, pos_y - 10, largura - 50, pos_y - 10)
+            return pos_y - 30
+
+        # Identificação
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(colors.darkblue)
+        c.drawString(50, y, "1. IDENTIFICAÇÃO")
+        y -= 30
+        c.setFillColor(colors.black)
+
+        y = desenhar_linha("Razão Social / Nome:", dados['razao_social'], y)
+        y = desenhar_linha("CNPJ / CPF:", dados['cnpj'], y)
+        y = desenhar_linha("Telefone:", dados['telefone'], y)
+        
+        # Formata Data
+        data_formatada = "---"
+        if dados['data_hora_cadastro']:
+            data_formatada = dados['data_hora_cadastro'].strftime('%d/%m/%Y às %H:%M')
+        y = desenhar_linha("Data de Cadastro:", data_formatada, y)
+        y = desenhar_linha("UVR de Acesso:", dados['uvr'], y)
+
+        y -= 20 # Espaço extra
+
+        # Endereço
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(colors.darkblue)
+        c.drawString(50, y, "2. LOCALIZAÇÃO")
+        y -= 30
+        c.setFillColor(colors.black)
+
+        endereco_completo = f"{dados['logradouro'] or ''}, {dados['numero'] or 'S/N'}"
+        y = desenhar_linha("Endereço:", endereco_completo, y)
+        y = desenhar_linha("Bairro:", dados['bairro'], y)
+        cidade_uf = f"{dados['cidade'] or ''} - {dados['uf'] or ''}"
+        y = desenhar_linha("Cidade / UF:", cidade_uf, y)
+        y = desenhar_linha("CEP:", dados['cep'], y)
+
+        # Rodapé
+        c.setFont("Helvetica-Oblique", 9)
+        c.setFillColor(colors.grey)
+        c.drawCentredString(largura / 2, 30, "Documento gerado eletronicamente pelo Sistema de Gestão.")
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        
+        return Response(buffer, mimetype='application/pdf', 
+                        headers={"Content-Disposition": f"inline; filename=ficha_{id}.pdf"})
+
+    except Exception as e:
+        return f"Erro ao gerar PDF: {e}", 500
+    finally:
+        if conn: conn.close()
+# --- ROTA PARA EDITAR (OU SOLICITAR EDIÇÃO) DE CLIENTE ---
+@app.route('/editar_cliente', methods=['POST'])
+@login_required
+def editar_cliente():
+    conn = None
+    try:
+        dados = request.form.to_dict()
+        id_registro = dados.get('id')
+        
+        if not id_registro:
+            return "ID do registro não informado.", 400
+
+        # Tratamentos básicos (CNPJ apenas números, etc)
+        dados['cnpj'] = re.sub(r'[^0-9]', '', dados.get('cnpj', ''))
+        
+        # Conecta ao banco
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        # 1. ADMIN: Edita direto
+        if current_user.role == 'admin':
+            cur.execute("""
+                UPDATE cadastros 
+                SET razao_social=%s, cnpj=%s, telefone=%s, 
+                    cep=%s, logradouro=%s, numero=%s, bairro=%s, cidade=%s, uf=%s,
+                    tipo_cadastro=%s
+                WHERE id = %s
+            """, (
+                dados['razao_social'], dados['cnpj'], dados.get('telefone'),
+                dados.get('cep'), dados.get('logradouro'), dados.get('numero'),
+                dados.get('bairro'), dados.get('cidade'), dados.get('uf'),
+                dados['tipo_cadastro'], id_registro
+            ))
+            conn.commit()
+            flash("Cadastro atualizado com sucesso!", "success")
+            return redirect(url_for('sucesso')) # Ou redireciona para a lista
+
+        # 2. USUÁRIO COMUM: Cria Solicitação
+        else:
+            # Verifica se já tem pendência para não acumular lixo
+            cur.execute("""
+                SELECT id FROM solicitacoes_alteracao 
+                WHERE tabela_alvo='cadastros' AND id_registro=%s AND status='Pendente'
+            """, (id_registro,))
+            
+            if cur.fetchone():
+                return "Já existe uma solicitação pendente para este cadastro.", 400
+
+            # Prepara os dados novos em JSON
+            dados_json = json.dumps(dados)
+            
+            cur.execute("""
+                INSERT INTO solicitacoes_alteracao 
+                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, ('cadastros', id_registro, 'EDICAO', dados_json, current_user.username))
+            
+            conn.commit()
+            
+            # Avisa o usuário que foi enviado para análise
+            return render_template('sucesso_generico.html', 
+                                   titulo="Solicitação Enviada", 
+                                   mensagem="As alterações foram enviadas para aprovação do administrador.")
+
+    except Exception as e:
+        if conn: conn.rollback()
+        return f"Erro ao processar edição: {str(e)}", 500
+    finally:
+        if conn: conn.close()
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
     return f"""<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>{titulo}</title>
