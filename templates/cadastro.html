@@ -331,7 +331,7 @@
         </div>
 
         <div class="row mb-3">
-            <div class="col-md-3">
+            <div class="col-md-5">
                 <label class="form-label required-field">Cidade</label>
                 <input type="text" class="form-control" name="cidade" id="cidadeAssociado" required>
             </div>
@@ -339,21 +339,41 @@
                 <label class="form-label required-field">UF</label>
                 <input type="text" class="form-control" name="uf" id="ufAssociado" maxlength="2" required>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-5">
                 <label class="form-label required-field">Telefone</label>
                 <input type="text" class="form-control phone-mask" name="telefone" required>
             </div>
-            <div class="col-md-2">
-                <label class="form-label required-field">Admissão</label>
+        </div>
+
+        <div class="row mb-3 p-2 bg-light border rounded mx-0">
+             <div class="col-md-3">
+                <label class="form-label required-field">Data de Admissão</label>
                 <input type="date" class="form-control" name="data_admissao" required>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label required-field">Status</label>
                 <select class="form-select" name="status" required>
                     <option value="Ativo" selected>Ativo</option>
                     <option value="Inativo">Inativo</option>
                     <option value="Suspenso">Suspenso</option>
                     <option value="Afastado">Afastado</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label required-field">Função Exercida</label>
+                <select class="form-select" name="funcao" required>
+                    <option value="">Selecione...</option>
+                    <option value="Coletor">Coletor</option>
+                    <option value="Motorista de caminhão">Motorista de caminhão</option>
+                    <option value="Triador">Triador</option>
+                    <option value="Prenseiro">Prenseiro</option>
+                    <option value="Encarregado">Encarregado</option>
+                    <option value="Administrativo">Administrativo</option>
+                    <option value="Cozinheiro">Cozinheiro</option>
+                    <option value="Limpeza">Limpeza</option>
+                    <option value="Educador Ambiental">Educador Ambiental</option>
+                    <option value="Ecoponto">Ecoponto</option>
+                    <option value="Serviços Gerais">Serviços Gerais</option>
                 </select>
             </div>
         </div>
@@ -5068,544 +5088,522 @@ $(document).ready(function(){
     });
 
 
+/* =================================================================================
+   1. CONTROLE DE NAVEGAÇÃO E FORMULÁRIOS
+   ================================================================================= */
+
 function mostrarFormulario(idForm, ignorarReset = false) {
-        // Esconde tudo
-        $('#menuPrincipal').hide();
-        $('.form-container').hide();
-        $('#' + idForm).fadeIn();
+    // Esconde tudo primeiro
+    $('#menuPrincipal').hide();
+    $('.form-container').hide();
+    $('#' + idForm).fadeIn();
+
+    // === LÓGICA PARA CLIENTE / FORNECEDOR ===
+    if (idForm === 'clienteFornecedorForm' && !ignorarReset) {
+        console.log("Abrindo formulário de Cliente (Novo)...");
+
+        const form = $('#clienteFornecedorForm form');
+        if (form.length > 0) {
+            form[0].reset();
+            $('#idClienteHidden').val(''); // Limpa ID para garantir que é um novo cadastro
+
+            // Ajusta botão e ação para modo "Cadastrar"
+            form.attr('action', '/cadastrar_cliente');
+            form.find('button[type="submit"]').html('<i class="fas fa-save"></i> Salvar Cadastro').removeClass('btn-warning').addClass('btn-primary');
+
+            // GERA A DATA E HORA ATUAL
+            const now = new Date();
+            const dia = String(now.getDate()).padStart(2, '0');
+            const mes = String(now.getMonth() + 1).padStart(2, '0');
+            const ano = now.getFullYear();
+            const hora = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const dataFormatada = `${dia}/${mes}/${ano} ${hora}:${min}`;
+
+            // Preenche os campos de data (visual e hidden)
+            $('#visualDataCadastroCliente').val(dataFormatada);
+            $('#inputDataCadastroCliente').val(dataFormatada);
+        }
+    }
+
+    // === LÓGICA PARA ASSOCIADO ===
+    if (idForm === 'associadoForm' && !ignorarReset) {
+        console.log("Abrindo formulário de Associado (Novo)...");
         
-        // === LÓGICA PARA CLIENTE / FORNECEDOR ===
-        if(idForm === 'clienteFornecedorForm' && !ignorarReset) {
-            console.log("Abrindo formulário de Cliente..."); // Para debug no console (F12)
+        const form = $('#associadoForm form');
+        if (form.length > 0) {
+            form[0].reset();
+            
+            // Reseta área de foto
+            $('#previewFoto').hide().attr('src', '');
+            $('#fotoBase64').val('');
+            $('#iconSemFotoAssociado').show();
+            if (typeof fecharCamera === "function") fecharCamera();
 
-            const form = $('#clienteFornecedorForm form');
-            if(form.length > 0) {
-                form[0].reset();
-                $('#idClienteHidden').val(''); 
+            // Ajusta botão e ação para modo "Cadastrar"
+            form.attr('action', '/cadastrar_associado');
+            $('#idAssociadoHidden').val('');
+            $('#btnSalvarAssociado').html('<i class="fas fa-save"></i> Salvar Associado').removeClass('btn-warning').addClass('btn-primary');
+            $('#btnCancelarEdicaoAssociado').hide();
 
-                // GERA A DATA E HORA
-                const now = new Date();
-                const dia = String(now.getDate()).padStart(2, '0');
-                const mes = String(now.getMonth() + 1).padStart(2, '0');
-                const ano = now.getFullYear();
-                const hora = String(now.getHours()).padStart(2, '0');
-                const min = String(now.getMinutes()).padStart(2, '0');
-                
-                const dataFormatada = `${dia}/${mes}/${ano} ${hora}:${min}`;
-                
-                // FORÇA O PREENCHIMENTO (Usando JavaScript puro e jQuery para garantir)
-                document.getElementById('visualDataCadastroCliente').value = dataFormatada;
-                document.getElementById('inputDataCadastroCliente').value = dataFormatada;
-                
-                // Se ainda falhar, tenta via jQuery
-                $('#visualDataCadastroCliente').val(dataFormatada);
-                $('#inputDataCadastroCliente').val(dataFormatada);
-            }
-        }
-
-        // === LÓGICA PARA ASSOCIADO ===
-        if(idForm === 'associadoForm' && !ignorarReset) {
-            const form = $('#associadoForm form');
-            if(form.length > 0) {
-                form[0].reset();
-                $('#previewFoto').hide().attr('src', '');
-                $('#fotoBase64').val('');
-                $('#iconSemFotoAssociado').show();
-                if (typeof fecharCamera === "function") fecharCamera();
-                
-                form.attr('action', '/cadastrar_associado');
-                $('#idAssociadoHidden').val('');
-                $('#btnSalvarAssociado').html('<i class="fas fa-save"></i> Salvar Associado').removeClass('btn-warning').addClass('btn-primary');
-                $('#btnCancelarEdicaoAssociado').hide();
-
-                setTimeout(function() {
-                    if (typeof atualizarAssociacaoAssociado === "function") atualizarAssociacaoAssociado(); 
-                }, 100);
-            }
+            // Preenche Associação se tiver UVR fixa
+            setTimeout(function() {
+                if (typeof atualizarAssociacaoAssociado === "function") atualizarAssociacaoAssociado();
+            }, 100);
         }
     }
-    
-    // ==========================================
-    // 2. LÓGICA DE FOTO E CÂMERA (CORRIGIDA E OTIMIZADA)
-    // ==========================================
+}
 
-    // 1. Processar Arquivo (Upload do Computador)
-    function processarArquivoFoto(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                // Manda para a função que reduz o tamanho (evita erro 413)
-                redimensionarImagem(e.target.result);
-            }
-            reader.readAsDataURL(input.files[0]);
+/* =================================================================================
+   2. LÓGICA DE FOTO E CÂMERA (ASSOCIADO)
+   ================================================================================= */
+
+// 1. Processar Arquivo (Upload do Computador)
+function processarArquivoFoto(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            redimensionarImagem(e.target.result);
         }
+        reader.readAsDataURL(input.files[0]);
     }
+}
 
-    // 2. Abrir Câmera (No formulário)
-    function abrirCamera() {
-        $('#areaCamera').slideDown(); // Mostra a área da câmera
-        const video = document.getElementById('videoCamera');
+// 2. Abrir Câmera
+function abrirCamera() {
+    $('#areaCamera').slideDown();
+    const video = document.getElementById('videoCamera');
 
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(function(stream) {
                 video.srcObject = stream;
-                window.localStream = stream; // Salva para poder fechar depois
+                window.localStream = stream; // Salva para fechar depois
             })
             .catch(function(err) {
                 console.error("Erro Câmera:", err);
-                alert("Erro ao abrir câmera. Verifique se o site tem permissão (HTTPS ou localhost).");
+                alert("Erro ao abrir câmera. Verifique permissões ou HTTPS.");
                 $('#areaCamera').hide();
             });
-        } else {
-            alert("Navegador sem suporte a câmera.");
-        }
+    } else {
+        alert("Navegador sem suporte a câmera.");
     }
+}
 
-    // 3. Tirar Foto (Capturar)
-    function tirarFoto() {
-        const video = document.getElementById('videoCamera');
+// 3. Tirar Foto
+function tirarFoto() {
+    const video = document.getElementById('videoCamera');
+    const canvas = document.getElementById('canvasProcessamento');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    redimensionarImagem(dataUrl);
+    fecharCamera();
+}
+
+// 4. Fechar Câmera
+function fecharCamera() {
+    $('#areaCamera').slideUp();
+    if (window.localStream) {
+        window.localStream.getTracks().forEach(track => track.stop());
+        window.localStream = null;
+    }
+}
+
+// 5. Remover Foto
+function removerFoto() {
+    $('#previewFoto').hide().attr('src', '');
+    $('#iconSemFotoAssociado').show();
+    $('#fotoBase64').val('');
+    $('#inputFotoArquivo').val('');
+}
+
+// 6. Redimensionar Imagem (Otimização para Banco de Dados)
+function redimensionarImagem(base64Str) {
+    const img = new Image();
+    img.src = base64Str;
+
+    img.onload = function() {
         const canvas = document.getElementById('canvasProcessamento');
+        const ctx = canvas.getContext('2d');
 
-        // Ajusta tamanho
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        const MAX_SIZE = 800; // Máximo 800px (leve e boa qualidade para crachá)
+        let w = img.width;
+        let h = img.height;
 
-        // Desenha a foto no canvas oculto
-        const context = canvas.getContext('2d');
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Pega a imagem e manda reduzir
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        redimensionarImagem(dataUrl);
-
-        fecharCamera();
-    }
-
-    // 4. Fechar Câmera
-    function fecharCamera() {
-        $('#areaCamera').slideUp();
-        if (window.localStream) {
-            window.localStream.getTracks().forEach(track => track.stop());
-            window.localStream = null;
+        if (w > h) {
+            if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; }
+        } else {
+            if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; }
         }
+
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const novaBase64 = canvas.toDataURL('image/jpeg', 0.7); // Qualidade 70%
+
+        $('#previewFoto').attr('src', novaBase64).show();
+        $('#iconSemFotoAssociado').hide();
+        $('#fotoBase64').val(novaBase64);
+    };
+}
+
+/* =================================================================================
+   3. AUTOMACÃO UVR -> ASSOCIAÇÃO
+   ================================================================================= */
+
+function getAssociacaoFromUVR(uvrValue) {
+    if (!uvrValue) return '';
+    let clean = uvrValue.toString().toUpperCase().replace(/\s+/g, '');
+    if (clean === 'UVR01') return 'ASCAMAR';
+    if (clean === 'UVR02') return 'ACAN';
+    if (clean === 'UVR03') return 'COOPERLIN';
+    return '';
+}
+
+function atualizarAssociacaoAssociado() {
+    let $select = $('#uvrSelectAssociado');
+    let $input = $('#uvrInputAssociado');
+    let $alvo = $('#associacaoInput');
+    let uvr = '';
+
+    if ($select.length > 0 && $select.is(':visible')) {
+        uvr = $select.val();
+    } else if ($input.length > 0) {
+        uvr = $input.val();
     }
 
-    // 5. Remover Foto (Botão X)
-    function removerFoto() {
-        $('#previewFoto').hide().attr('src', '');
-        $('#iconSemFotoAssociado').show();
-        $('#fotoBase64').val('');
-        $('#inputFotoArquivo').val('');
-    }
+    let assoc = getAssociacaoFromUVR(uvr);
+    $alvo.val(assoc);
+}
 
-    // 6. FUNÇÃO IMPORTANTE: Redimensiona e Comprime
-    // Isso resolve o problema do banco de dados travar com fotos grandes
-    function redimensionarImagem(base64Str) {
-        const img = new Image();
-        img.src = base64Str;
+/* =================================================================================
+   4. CEP E ENDEREÇO
+   ================================================================================= */
 
-        img.onload = function() {
-            const canvas = document.getElementById('canvasProcessamento');
-            const ctx = canvas.getContext('2d');
+// Busca CEP Específico para Associado
+function setupBuscaCepAssociado() {
+    $('#cepAssociado').blur(function() {
+        var cep = $(this).val().replace(/\D/g, '');
+        if (cep != "") {
+            $.getJSON("https://viacep.com.br/ws/" + cep + "/json/?callback=?", function(dados) {
+                if (!("erro" in dados)) {
+                    $("#logradouroAssociado").val(dados.logradouro);
+                    $("#bairroAssociado").val(dados.bairro);
+                    $("#cidadeAssociado").val(dados.localidade);
+                    $("#ufAssociado").val(dados.uf);
+                    $("input[name='endereco_numero']").focus();
+                } else {
+                    alert("CEP não encontrado.");
+                }
+            });
+        }
+    });
+}
 
-            // Define tamanho máximo (800px é suficiente para crachá e leve para o banco)
-            const MAX_SIZE = 800;
-            let w = img.width;
-            let h = img.height;
-
-            // Mantém a proporção correta
-            if (w > h) {
-                if (w > MAX_SIZE) { h *= MAX_SIZE/w; w = MAX_SIZE; }
-            } else {
-                if (h > MAX_SIZE) { w *= MAX_SIZE/h; h = MAX_SIZE; }
+// Busca CEP Genérica (Para Cliente/Fornecedor)
+function buscarEndereco(idCep, idLog, idBairro, idCidade, idUf) {
+    var cep = $('#' + idCep).val().replace(/\D/g, '');
+    if (cep != "") {
+        $.getJSON("https://viacep.com.br/ws/" + cep + "/json/?callback=?", function(dados) {
+            if (!("erro" in dados)) {
+                $('#' + idLog).val(dados.logradouro);
+                $('#' + idBairro).val(dados.bairro);
+                $('#' + idCidade).val(dados.localidade);
+                $('#' + idUf).val(dados.uf);
             }
-
-            canvas.width = w;
-            canvas.height = h;
-
-            // Desenha imagem redimensionada
-            ctx.drawImage(img, 0, 0, w, h);
-
-            // Gera o Base64 final comprimido (Qualidade 0.7)
-            const novaBase64 = canvas.toDataURL('image/jpeg', 0.7);
-
-            // Atualiza a tela e o input hidden que vai para o Python
-            $('#previewFoto').attr('src', novaBase64).show();
-            $('#iconSemFotoAssociado').hide();
-            $('#fotoBase64').val(novaBase64);
-        };
-    }
-
-    // ==========================================
-    // 2. LÓGICA DE PREENCHIMENTO AUTOMÁTICO (UVR -> Associação)
-    // ==========================================
-    
-    // Helper: Converte UVR em Associação
-    function getAssociacaoFromUVR(uvrValue) {
-        if (!uvrValue) return '';
-        let clean = uvrValue.toString().toUpperCase().replace(/\s+/g, '');
-        if (clean === 'UVR01') return 'ASCAMAR';
-        if (clean === 'UVR02') return 'ACAN';
-        if (clean === 'UVR03') return 'COOPERLIN'; 
-        return '';
-    }
-
-    function atualizarAssociacaoAssociado() {
-        let $select = $('#uvrSelectAssociado');
-        let $input = $('#uvrInputAssociado');
-        let $alvo = $('#associacaoInput');
-        let uvr = '';
-        
-        // Verifica se é um ADMIN (Select visível) ou USUÁRIO COMUM (Input fixo)
-        if ($select.length > 0 && $select.is(':visible')) {
-            uvr = $select.val();
-        } else if ($input.length > 0) {
-            uvr = $input.val();
-        }
-        
-        // Pega a sigla correta usando a função que você colou acima
-        let assoc = getAssociacaoFromUVR(uvr);
-        $alvo.val(assoc);
-    }
-    
-    // Ativa a automação assim que a página carrega
-    $(document).ready(function() {
-        // Quando mudar o select, atualiza a associação
-        $(document).on('change', '#uvrSelectAssociado', function() {
-            atualizarAssociacaoAssociado();
         });
+    }
+}
+
+/* =================================================================================
+   5. FUNÇÕES DO ASSOCIADO (Visualizar, Editar, Imprimir)
+   ================================================================================= */
+
+function buscarAssociados() {
+    const termo = $('#inputBuscaAssociado').val();
+    const status = $('#filtroStatusAssociado').val();
+    const uvr = $('#filtroUvrAssociado').length ? $('#filtroUvrAssociado').val() : '';
+
+    $('#tabelaAssociadosBody').html('<tr><td colspan="6" class="text-center">Buscando...</td></tr>');
+
+    $.getJSON(`/buscar_associados?q=${termo}&status=${status}&uvr=${uvr}`, function(data) {
+        const tbody = $('#tabelaAssociadosBody');
+        tbody.empty();
+        if (!data || data.length === 0) {
+            tbody.html('<tr><td colspan="6" class="text-center">Nenhum associado encontrado.</td></tr>');
+            return;
+        }
+        data.forEach(assoc => {
+            let badgeClass = 'bg-secondary';
+            if (assoc.status === 'Ativo') badgeClass = 'bg-success';
+            else if (assoc.status === 'Inativo') badgeClass = 'bg-danger';
+            else if (assoc.status === 'Suspenso') badgeClass = 'bg-warning text-dark';
+            else if (assoc.status === 'Afastado') badgeClass = 'bg-info text-white';
+
+            // ATENÇÃO: Adicionei o botão excluir aqui
+            tbody.append(`
+                <tr>
+                    <td>${assoc.nome}</td>
+                    <td>${assoc.cpf}</td>
+                    <td><span class="badge ${badgeClass}">${assoc.status}</span></td>
+                    <td>${assoc.uvr}</td>
+                    <td>${assoc.data_admissao || '-'}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-info text-white" title="Ver" onclick="visualizarAssociado(${assoc.id})"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-warning text-white" title="Editar" onclick="iniciarEdicaoAssociado(${assoc.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" title="Excluir" onclick="confirmarExclusaoAssociado(${assoc.id}, '${assoc.nome.replace(/'/g, "\\'")}')"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `);
+        });
+    });
+}
+
+function visualizarAssociado(id) {
+    $('#verAssocFoto').hide().attr('src', '');
+    $('#verAssocIcone').show();
+
+    $.getJSON(`/get_associado/${id}`, function(data) {
+        if (data.error) { alert("Erro: " + data.error); return; }
+
+        $('#verAssocNome').text(data.nome || '---');
+        $('#verAssocUvr').text(data.uvr || '---');
+        $('#verAssocCpf').text(data.cpf || '---');
+        $('#verAssocRg').text(data.rg || '---');
         
-        // Roda uma vez no início (para quem tem UVR fixa já preencher)
+        // Formata data de YYYY-MM-DD para DD/MM/YYYY
+        let nasc = data.data_nascimento ? data.data_nascimento.split('-').reverse().join('/') : '---';
+        $('#verAssocNasc').text(nasc);
+        
+        let adm = data.data_admissao ? data.data_admissao.split('-').reverse().join('/') : '---';
+        $('#verAssocAdm').text(adm);
+
+        $('#verAssocTel').text(data.telefone || '---');
+        $('#verAssocStatus').text(data.status || '---');
+        
+        const endereco = `${data.logradouro || ''}, ${data.numero || 'S/N'} - ${data.bairro || ''}`;
+        $('#verAssocEndereco').text(endereco);
+
+        if (data.foto_base64 && data.foto_base64.length > 50) {
+            let src = data.foto_base64;
+            if (!src.startsWith('data:image')) src = 'data:image/jpeg;base64,' + src;
+            $('#verAssocFoto').attr('src', src).show();
+            $('#verAssocIcone').hide();
+        } else {
+            $('#verAssocFoto').hide();
+            $('#verAssocIcone').show();
+        }
+
+        $('#btnImprimirNoModal').attr('onclick', `imprimirFichaAssociado(${data.id})`);
+        $('#btnEditarNoModal').attr('onclick', `iniciarEdicaoAssociado(${data.id})`);
+
+        // Usa getOrCreateInstance para evitar bugs do Bootstrap 5
+        var modalElement = document.getElementById('modalVisualizarAssociado');
+        var modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        modal.show();
+    }).fail(function() { alert("Erro ao carregar dados do servidor."); });
+}
+
+function iniciarEdicaoAssociado(id) {
+    $.getJSON(`/get_associado/${id}`, function(data) {
+        if (data.error) { alert(data.error); return; }
+
+        mostrarFormulario('associadoForm', true); // true para não resetar campos
+        const form = $('#associadoForm form');
+
+        form.find('input[name="id_associado"]').remove();
+        form.append(`<input type="hidden" name="id_associado" value="${id}">`);
+        $('#idAssociadoHidden').val(id);
+        
+        form.attr('action', '/editar_associado');
+
+        form.find('input[name="nome"]').val(data.nome);
+        form.find('input[name="cpf"]').val(data.cpf);
+        form.find('input[name="rg"]').val(data.rg);
+        form.find('input[name="uvr"]').val(data.uvr);
+        form.find('input[name="data_nascimento"]').val(data.data_nascimento); // Input type=date espera YYYY-MM-DD
+        form.find('input[name="data_admissao"]').val(data.data_admissao);
+        
+        form.find('input[name="cep"]').val(data.cep);
+        form.find('input[name="logradouro"]').val(data.logradouro);
+        form.find('input[name="endereco_numero"]').val(data.numero);
+        form.find('input[name="bairro"]').val(data.bairro);
+        form.find('input[name="cidade"]').val(data.cidade);
+        form.find('input[name="uf"]').val(data.uf);
+        form.find('input[name="telefone"]').val(data.telefone);
+        form.find('select[name="status"]').val(data.status);
+        form.find('select[name="funcao"]').val(data.funcao); // Adicionado para a melhoria solicitada
+
+        if (data.data_cadastro) {
+            $('#visualDataCadastroAssociado').val(data.data_cadastro);
+            $('#inputDataCadastroAssociado').val(data.data_cadastro);
+        }
+
+        setTimeout(atualizarAssociacaoAssociado, 200);
+
+        if (data.foto_base64 && data.foto_base64.length > 50) {
+            let src = data.foto_base64;
+            if (!src.startsWith('data:image')) src = 'data:image/jpeg;base64,' + src;
+            $('#previewFoto').attr('src', src).show();
+            $('#iconSemFotoAssociado').hide();
+            $('#fotoBase64').val(src);
+        } else {
+            removerFoto();
+        }
+
+        $('#btnSalvarAssociado').html('<i class="fas fa-sync-alt"></i> Salvar Alterações').removeClass('btn-primary').addClass('btn-warning');
+        
+        // Fecha modal se estiver aberto
+        var modalElement = document.getElementById('modalVisualizarAssociado');
+        var modal = bootstrap.Modal.getInstance(modalElement);
+        if(modal) modal.hide();
+
+    }).fail(function() { alert("Erro ao buscar dados para edição."); });
+}
+
+function imprimirFichaAssociado(id) {
+    if (!id) return;
+    window.open(`/imprimir_ficha_associado/${id}`, '_blank');
+}
+
+// Botão de Excluir Associado (Inteligente)
+function confirmarExclusaoAssociado(id, nome) {
+    // 1. Pergunta de segurança
+    if (!confirm(`Tem certeza que deseja excluir (ou solicitar exclusão) do associado: ${nome}?`)) {
+        return;
+    }
+
+    // 2. Chama a rota correta do Python (AQUI ESTAVA O ERRO)
+    // Antes estava: /tentar_excluir_associado/${id}
+    // Agora fica:   /excluir_associado/${id}
+    $.post(`/excluir_associado/${id}`, function(resposta) {
+        
+        if (resposta.status === 'sucesso') {
+            alert("✅ " + resposta.message);
+            buscarAssociados(); // Atualiza a tabela
+        } 
+        // O seu Python retorna 'sucesso' mesmo se for solicitação,
+        // mas se você quiser diferenciar no futuro, pode ajustar aqui.
+        else {
+            alert("ℹ️ " + (resposta.message || "Erro desconhecido"));
+        }
+
+    }).fail(function(xhr) {
+        // Tenta pegar a mensagem de erro específica do Python, se houver
+        let msg = "Erro de comunicação com o servidor.";
+        if(xhr.responseJSON && xhr.responseJSON.error) {
+            msg = "Erro: " + xhr.responseJSON.error;
+        }
+        alert(msg);
+    });
+}
+
+/* =================================================================================
+   6. FUNÇÕES DO CLIENTE/FORNECEDOR (Visualizar, Editar, Excluir)
+   ================================================================================= */
+
+function visualizarCadastro(id) {
+    $.getJSON(`/get_cliente/${id}`, function(data) {
+        if (data.error) { alert("Erro: " + data.error); return; }
+
+        $('#verCadRazao').text(data.razao_social || 'Sem Nome');
+        $('#verCadTipo').text(data.tipo_cadastro || 'Geral');
+        $('#verCadCnpj').text(data.cnpj || '-');
+        $('#verCadTel').text(data.telefone || '-');
+        $('#verCadData').text(data.data_hora_cadastro || '-');
+        $('#verCadUvr').text(data.uvr || 'Todas');
+
+        const numero = data.numero ? `, Nº ${data.numero}` : '';
+        $('#verCadLogradouro').text((data.logradouro || '') + numero);
+        $('#verCadBairro').text(data.bairro || '');
+        $('#verCadCidadeUF').text(`${data.cidade || ''} - ${data.uf || ''}`);
+        $('#verCadCep').text(data.cep || '');
+
+        var modalElement = document.getElementById('modalVisualizarCadastro');
+        var modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        modal.show();
+    }).fail(function() { alert("Erro de conexão com o servidor."); });
+}
+
+function iniciarEdicaoCadastro(id) {
+    $.getJSON(`/get_cliente/${id}`, function(data) {
+        if (data.error) { alert(data.error); return; }
+
+        mostrarFormulario('clienteFornecedorForm', true);
+        const form = $('#clienteFornecedorForm form');
+
+        $('#idClienteHidden').val(data.id);
+        
+        form.find('select[name="uvr"]').val(data.uvr);
+        form.find('select[name="tipo_cadastro"]').val(data.tipo_cadastro);
+        form.find('input[name="razao_social"]').val(data.razao_social);
+        form.find('input[name="cnpj"]').val(data.cnpj);
+        form.find('input[name="telefone"]').val(data.telefone);
+        
+        form.find('input[name="cep"]').val(data.cep);
+        form.find('input[name="logradouro"]').val(data.logradouro);
+        form.find('input[name="numero"]').val(data.numero);
+        form.find('input[name="bairro"]').val(data.bairro);
+        form.find('input[name="cidade"]').val(data.cidade);
+        form.find('input[name="uf"]').val(data.uf);
+
+        form.attr('action', '/editar_cliente');
+        form.find('button[type="submit"]').html('<i class="fas fa-sync-alt"></i> Salvar Alterações (Solicitar)');
+        
+        var modalElement = document.getElementById('modalVisualizarCadastro');
+        var modal = bootstrap.Modal.getInstance(modalElement);
+        if(modal) modal.hide();
+
+    }).fail(function() { alert("Erro ao buscar dados para edição."); });
+}
+
+function solicitarExclusaoCadastro(id, nome) {
+    if (confirm(`ATENÇÃO:\n\nDeseja excluir (ou solicitar exclusão) de:\n"${nome}"?`)) {
+        $.post(`/excluir_cadastro/${id}`, function(response) {
+            alert(response.message);
+            if (typeof buscarCadastros === "function") buscarCadastros(); // Atualiza tabela se existir a função
+            else location.reload();
+        }).fail(function(xhr) {
+            let msg = xhr.responseJSON ? xhr.responseJSON.error : "Erro desconhecido";
+            alert("Erro: " + msg);
+        });
+    }
+}
+
+function imprimirFichaCadastro(id) {
+    if (!id) return;
+    window.open(`/imprimir_ficha_cliente/${id}`, '_blank');
+}
+
+/* =================================================================================
+   7. INICIALIZAÇÃO GLOBAL (DOCUMENT READY)
+   ================================================================================= */
+$(document).ready(function() {
+    
+    // 1. Aplica Máscaras (jQuery Mask Plugin)
+    if ($.fn.mask) {
+        $('.cpf-mask').mask('000.000.000-00');
+        $('.cep-mask').mask('00000-000');
+        $('.phone-mask').mask('(00) 00000-0000');
+        $('.cnpj-mask').mask('00.000.000/0000-00');
+    }
+
+    // 2. Eventos de UVR
+    $(document).on('change', '#uvrSelectAssociado', function() {
         atualizarAssociacaoAssociado();
     });
+    atualizarAssociacaoAssociado(); // Executa ao carregar
 
-    // ==========================================
-    // 3. OUTRAS FUNÇÕES DO SISTEMA (MÁSCARAS E CEP)
-    // ==========================================
-    
-    $(document).ready(function(){
-        // 1. Aplica Máscaras (se o plugin estiver carregado)
-        if($.fn.mask) {
-            $('.cpf-mask').mask('000.000.000-00');
-            $('.cep-mask').mask('00000-000');
-            $('.phone-mask').mask('(00) 00000-0000');
-            $('.cnpj-mask').mask('00.000.000/0000-00'); // Adicionei máscara de CNPJ caso precise
-        }
-
-        // 2. Busca de CEP
-        // Essa função genérica serve tanto para associado quanto para cliente
-        // Mas o seu código original só tinha o ID do associado fixo.
-        // Se quiser usar no cliente, chame buscarEndereco() conforme coloquei no HTML anterior.
-        
-        $('#cepAssociado').blur(function() {
-            var cep = $(this).val().replace(/\D/g, '');
-            if (cep != "") {
-                $.getJSON("https://viacep.com.br/ws/"+ cep +"/json/?callback=?", function(dados) {
-                    if (!("erro" in dados)) {
-                        $("#logradouroAssociado").val(dados.logradouro);
-                        $("#bairroAssociado").val(dados.bairro);
-                        $("#cidadeAssociado").val(dados.localidade);
-                        $("#ufAssociado").val(dados.uf);
-                        $("input[name='endereco_numero']").focus();
-                    } else {
-                        alert("CEP não encontrado.");
-                    }
-                });
-            }
-        });
-    });
-
-    // Função genérica de Busca de CEP (para o Cliente/Fornecedor)
-    function buscarEndereco(idCep, idLog, idBairro, idCidade, idUf) {
-        var cep = $('#' + idCep).val().replace(/\D/g, '');
-        if (cep != "") {
-            $.getJSON("https://viacep.com.br/ws/"+ cep +"/json/?callback=?", function(dados) {
-                if (!("erro" in dados)) {
-                    $('#' + idLog).val(dados.logradouro);
-                    $('#' + idBairro).val(dados.bairro);
-                    $('#' + idCidade).val(dados.localidade);
-                    $('#' + idUf).val(dados.uf);
-                }
-            });
-        }
-    }
-
-    // Funções de Gestão (Busca, Visualizar, etc)
-    function buscarAssociados() {
-        const termo = $('#inputBuscaAssociado').val();
-        const status = $('#filtroStatusAssociado').val();
-        const uvr = $('#filtroUvrAssociado').length ? $('#filtroUvrAssociado').val() : '';
-        
-        $('#tabelaAssociadosBody').html('<tr><td colspan="6" class="text-center">Buscando...</td></tr>');
-
-        $.getJSON(`/buscar_associados?q=${termo}&status=${status}&uvr=${uvr}`, function(data) {
-            const tbody = $('#tabelaAssociadosBody');
-            tbody.empty();
-            if (!data || data.length === 0) {
-                tbody.html('<tr><td colspan="6" class="text-center">Nenhum associado encontrado.</td></tr>');
-                return;
-            }
-            data.forEach(assoc => {
-                let badgeClass = 'bg-secondary';
-                if(assoc.status === 'Ativo') badgeClass = 'bg-success';
-                else if(assoc.status === 'Inativo') badgeClass = 'bg-danger';
-                else if(assoc.status === 'Suspenso') badgeClass = 'bg-warning text-dark';
-                else if(assoc.status === 'Afastado') badgeClass = 'bg-info text-white';
-                
-                tbody.append(`
-                    <tr>
-                        <td>${assoc.nome}</td>
-                        <td>${assoc.cpf}</td>
-                        <td><span class="badge ${badgeClass}">${assoc.status}</span></td>
-                        <td>${assoc.uvr}</td>
-                        <td>${assoc.data_admissao || '-'}</td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white" onclick="visualizarAssociado(${assoc.id})"><i class="fas fa-eye"></i></button>
-                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoAssociado(${assoc.id})"><i class="fas fa-edit"></i></button>
-                        </td>
-                    </tr>
-                `);
-            });
-        });
-    }
-
-    function visualizarAssociado(id) {
-        // 1. Limpeza visual imediata antes de carregar
-        $('#verAssocFoto').hide().attr('src', '');
-        $('#verAssocIcone').show();
-
-        // 2. Busca os dados no servidor
-        $.getJSON(`/get_associado/${id}`, function(data) {
-            if (data.error) { 
-                alert("Erro: " + data.error); 
-                return; 
-            }
-
-            // 3. Preenchimento dos textos
-            $('#verAssocNome').text(data.nome || '---');
-            $('#verAssocUvr').text(data.uvr || '---');
-            $('#verAssocCpf').text(data.cpf || '---');
-            $('#verAssocRg').text(data.rg || '---');
-            $('#verAssocNasc').text(data.data_nascimento || '---');
-            $('#verAssocAdm').text(data.data_admissao || '---');
-            $('#verAssocTel').text(data.telefone || '---');
-            $('#verAssocStatus').text(data.status || '---');
-            
-            // 4. Montagem do Endereço
-            const endereco = `${data.logradouro || ''}, ${data.numero || 'S/N'} - ${data.bairro || ''}`;
-            $('#verAssocEndereco').text(endereco);
-
-            // 5. LÓGICA DA FOTO (REVISADA)
-            if (data.foto_base64 && data.foto_base64.length > 50) {
-                let src = data.foto_base64;
-                
-                // Garante o cabeçalho base64 caso o banco tenha salvo apenas o texto puro
-                if (!src.startsWith('data:image')) {
-                    src = 'data:image/jpeg;base64,' + src;
-                }
-                
-                $('#verAssocFoto').attr('src', src).show();
-                $('#verAssocIcone').hide();
-            } else {
-                // Se não tiver foto, esconde a img e mostra o ícone
-                $('#verAssocFoto').hide();
-                $('#verAssocIcone').show();
-            }
-
-            // 6. Configuração dos botões de ação (Imprimir e Editar)
-            $('#btnImprimirNoModal').attr('onclick', `imprimirFichaAssociado(${data.id})`);
-            $('#btnEditarNoModal').attr('onclick', `iniciarEdicaoAssociado(${data.id})`);
-
-            // 7. Abre o Modal
-            var modalElement = document.getElementById('modalVisualizarAssociado');
-            var modal = bootstrap.Modal.getOrCreateInstance(modalElement);
-            modal.show();
-
-        }).fail(function(jqXHR) {
-            console.error("Erro na requisição:", jqXHR);
-            alert("Erro ao carregar dados do servidor.");
-        });
-    }
-
-    function iniciarEdicaoAssociado(id) {
-        $.getJSON(`/get_associado/${id}`, function(data) {
-            if (data.error) { alert(data.error); return; }
-
-            // 1. Usa a função padrão para mostrar o form (já reseta câmera e visual)
-            mostrarFormulario('associadoForm'); 
-            
-            const form = $('#associadoForm form');
-            
-            // 2. Ajusta IDs para Edição
-            form.find('input[name="id_associado"]').remove();
-            form.find('input[name="id"]').remove();
-            form.append(`<input type="hidden" name="id_associado" value="${id}">`);
-            $('#idAssociadoHidden').val(id); // Trava o relógio
-            form.attr('action', '/editar_associado');
-            
-            // 3. Preenche Dados Pessoais
-            form.find('input[name="nome"]').val(data.nome);
-            form.find('input[name="cpf"]').val(data.cpf);
-            form.find('input[name="rg"]').val(data.rg);
-            form.find('input[name="uvr"]').val(data.uvr);
-
-            // Tratamento de Datas (Converte dd/mm/yyyy para yyyy-mm-dd)
-            function dataISO(d) { 
-                if(!d) return ''; 
-                var p = d.split('/'); 
-                return p.length===3 ? `${p[2]}-${p[1]}-${p[0]}` : ''; 
-            }
-            form.find('input[name="data_nascimento"]').val(dataISO(data.data_nascimento));
-            form.find('input[name="data_admissao"]').val(dataISO(data.data_admissao));
-            
-            // 4. Preenche Endereço e Contato
-            form.find('input[name="cep"]').val(data.cep);
-            form.find('input[name="logradouro"]').val(data.logradouro);
-            form.find('input[name="endereco_numero"]').val(data.numero);
-            form.find('input[name="bairro"]').val(data.bairro);
-            form.find('input[name="cidade"]').val(data.cidade);
-            form.find('input[name="uf"]').val(data.uf);
-            form.find('input[name="telefone"]').val(data.telefone);
-            form.find('select[name="status"]').val(data.status);
-
-            // Preenche Data Cadastro (apenas visual)
-            if(data.data_cadastro) {
-                $('#visualDataCadastroAssociado').val(data.data_cadastro); 
-                $('#inputDataCadastroAssociado').val(data.data_cadastro);
-            }
-            
-            // Atualiza a associação automaticamente
-            setTimeout(atualizarAssociacaoAssociado, 200);
-
-            // 5. LÓGICA DA FOTO NA EDIÇÃO (ESSENCIAL)
-            if(data.foto_base64 && data.foto_base64.length > 50) {
-                let src = data.foto_base64;
-                // Adiciona o prefixo se faltar (para a foto aparecer)
-                if (!src.startsWith('data:image')) src = 'data:image/jpeg;base64,' + src;
-                
-                $('#previewFoto').attr('src', src).show();
-                $('#iconSemFotoAssociado').hide();
-                $('#fotoBase64').val(src); // Preenche o hidden input
-            } else {
-                removerFoto();
-            }
-            
-            // Muda botão para "Salvar Alterações"
-            $('#btnSalvarAssociado').html('Salvar Alterações').removeClass('btn-primary').addClass('btn-warning');
-        });
-    }
-    // Função para abrir a impressão da ficha em uma nova aba
-    function imprimirFichaAssociado(id) {
-        if (!id) {
-            alert("ID do associado não encontrado.");
-            return;
-        }
-        // Abre a rota do Python em uma nova janela
-        window.open(`/imprimir_ficha_associado/${id}`, '_blank');
-    }
-// Função para Visualizar Detalhes (Read-Only)
-    function visualizarCadastro(id) {
-        // 1. Busca os dados no Python
-        $.getJSON(`/get_cliente/${id}`, function(data) {
-            if(data.error) { 
-                alert("Erro ao buscar dados: " + data.error); 
-                return; 
-            }
-
-            // 2. Preenche os textos da Modal
-            $('#verCadRazao').text(data.razao_social || 'Sem Nome');
-            $('#verCadTipo').text(data.tipo_cadastro || 'Geral');
-            
-            $('#verCadCnpj').text(data.cnpj || '-');
-            $('#verCadTel').text(data.telefone || '-');
-            $('#verCadData').text(data.data_hora_cadastro || '-');
-            $('#verCadUvr').text(data.uvr || 'Todas');
-
-            // Formata o endereço
-            const numero = data.numero ? `, Nº ${data.numero}` : '';
-            $('#verCadLogradouro').text((data.logradouro || '') + numero);
-            $('#verCadBairro').text(data.bairro || '');
-            $('#verCadCidadeUF').text(`${data.cidade || ''} - ${data.uf || ''}`);
-            $('#verCadCep').text(data.cep || '');
-
-            // 3. Abre a Modal usando Bootstrap 5
-            var modalElement = document.getElementById('modalVisualizarCadastro');
-            var modal = new bootstrap.Modal(modalElement);
-            modal.show();
-        }).fail(function() {
-            alert("Erro de conexão com o servidor.");
-        });
-    }
-    // Função para Imprimir a Ficha
-    function imprimirFichaCadastro(id) {
-        if (!id) {
-            alert("Erro: ID do cadastro não encontrado.");
-            return;
-        }
-        // Abre uma nova aba chamando a criação do PDF
-        window.open(`/imprimir_ficha_cliente/${id}`, '_blank');
-    }
-    // Função para Excluir Cadastro
-    function solicitarExclusaoCadastro(id, nome) {
-        if (confirm(`ATENÇÃO:\n\nDeseja excluir (ou solicitar exclusão) de:\n"${nome}"?`)) {
-            
-            $.post(`/excluir_cadastro/${id}`, function(response) {
-                // Sucesso (pode ser exclusão real ou solicitação criada)
-                alert(response.message); 
-                buscarCadastros(); // Atualiza a tabela
-            })
-            .fail(function(xhr) {
-                // Erro (Ex: tem vinculos ou erro de servidor)
-                let msg = "Erro desconhecido";
-                if(xhr.responseJSON && xhr.responseJSON.error) {
-                    msg = xhr.responseJSON.error;
-                } else {
-                    msg = xhr.responseText;
-                }
-                alert("Erro: " + msg);
-            });
-        }
-    }
-// Função para Iniciar Edição
-    function iniciarEdicaoCadastro(id) {
-        // Busca os dados atuais
-        $.getJSON(`/get_cliente/${id}`, function(data) {
-            if(data.error) { alert(data.error); return; }
-
-            // 1. Abre o formulário (o 'true' evita que ele limpe os campos)
-            mostrarFormulario('clienteFornecedorForm', true);
-            
-            // 2. Preenche os campos com os dados do banco
-            const form = $('#clienteFornecedorForm form');
-            
-            $('#idClienteHidden').val(data.id); // Define o ID (muito importante!)
-            
-            form.find('select[name="uvr"]').val(data.uvr);
-            form.find('select[name="tipo_cadastro"]').val(data.tipo_cadastro);
-            form.find('input[name="razao_social"]').val(data.razao_social);
-            form.find('input[name="cnpj"]').val(data.cnpj);
-            form.find('input[name="telefone"]').val(data.telefone);
-            
-            // Endereço
-            form.find('input[name="cep"]').val(data.cep);
-            form.find('input[name="logradouro"]').val(data.logradouro);
-            form.find('input[name="numero"]').val(data.numero);
-            form.find('input[name="bairro"]').val(data.bairro);
-            form.find('input[name="cidade"]').val(data.cidade);
-            form.find('input[name="uf"]').val(data.uf);
-
-            // 3. Ajusta o visual para "Modo Edição"
-            // Muda o destino do formulário para a rota de edição
-            form.attr('action', '/editar_cliente');
-            
-            // Muda o texto do botão para ficar claro
-            form.find('button[type="submit"]').html('<i class="fas fa-sync-alt"></i> Salvar Alterações (Solicitar)');
-            
-        }).fail(function() {
-            alert("Erro ao buscar dados para edição.");
-        });
-    }
+    // 3. Inicializa Busca de CEP do Associado
+    setupBuscaCepAssociado();
+});
 </script>
 </body>
 </html>

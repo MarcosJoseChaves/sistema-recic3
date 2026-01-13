@@ -596,12 +596,13 @@ def cadastrar_associado():
         if current_user.uvr_acesso and current_user.role != 'admin':
             dados["uvr"] = current_user.uvr_acesso
 
-        # Campos obrigatórios
+        # Campos obrigatórios (Adicionei "funcao" aqui)
         required_fields = { 
             "nome": "Nome", "cpf": "CPF", "rg": "RG",
             "data_nascimento": "Data de Nascimento", "data_admissao": "Data de Admissão",
             "status": "Status", "cep": "CEP", "telefone": "Telefone",
-            "uvr": "UVR", "data_hora_cadastro": "Data/Hora"
+            "uvr": "UVR", "data_hora_cadastro": "Data/Hora",
+            "funcao": "Função" 
         }
         
         for field, msg in required_fields.items():
@@ -623,14 +624,13 @@ def cadastrar_associado():
         # --- LÓGICA DE FOTO INTELIGENTE (REVISADA) ---
         foto_final = ""
         
-        # 1. Prioridade: Verifica se o JavaScript enviou a foto processada (Webcam ou Upload Redimensionado)
-        # O campo agora se chama 'foto_base64' conforme o HTML que ajustamos
+        # 1. Prioridade: Verifica se o JavaScript enviou a foto processada
         foto_processada = dados.get("foto_base64", "")
         
         if foto_processada and len(foto_processada) > 100:
             foto_final = foto_processada
         
-        # 2. Backup: Se por algum motivo o JS falhar e enviar o arquivo bruto (input name="foto")
+        # 2. Backup: Se o JS falhar e enviar arquivo bruto
         elif 'foto' in request.files:
             arquivo = request.files['foto']
             if arquivo and arquivo.filename:
@@ -649,18 +649,22 @@ def cadastrar_associado():
         proximo_numero = (res_num[0] + 1) if res_num and res_num[0] else 1
         numero_gerado_str = str(proximo_numero)
         
-        # Inserção no Banco de Dados
+        # Inserção no Banco de Dados (ATUALIZADO COM FUNÇÃO)
         cur.execute("""
-            INSERT INTO associados (numero, uvr, associacao, nome, cpf, rg, data_nascimento,
-                                    data_admissao, status, cep, logradouro, endereco_numero,
-                                    bairro, cidade, uf, telefone, data_hora_cadastro, foto_base64)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO associados (
+                numero, uvr, associacao, nome, cpf, rg, data_nascimento,
+                data_admissao, status, cep, logradouro, endereco_numero,
+                bairro, cidade, uf, telefone, data_hora_cadastro, foto_base64, 
+                funcao
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             numero_gerado_str, dados["uvr"], dados.get("associacao",""), dados["nome"],
             cpf_num, dados["rg"], data_nascimento, data_admissao, dados["status"],
             cep_num, dados.get("logradouro", ""), dados.get("endereco_numero", ""), 
             dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf", ""), 
-            dados["telefone"], data_hora, foto_final
+            dados["telefone"], data_hora, foto_final, 
+            dados.get("funcao")
         ))
         
         conn.commit()
