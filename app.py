@@ -1054,34 +1054,47 @@ def cadastrar_produto_servico():
     finally:
         if conn and not conn.closed:
             conn.close()
-@app.route("/cadastrar_epi", methods=["POST"])
+@app.route("/cadastrar_epi", methods=["GET", "POST"])
+@login_required  # Importante: só usuários logados podem acessar
 def cadastrar_epi():
+    # --- SE FOR GET (O usuário está apenas abrindo a página) ---
+    if request.method == "GET":
+        return render_template("cadastrar_epi.html", usuario=current_user)
+
+    # --- SE FOR POST (O usuário clicou em Salvar) ---
+    # AQUI COMEÇA A SUA LÓGICA ORIGINAL
     conn = None
     try:
         dados = request.form
         nome_epi = dados.get("nome_epi", "").strip()
         if not nome_epi:
-            return "Nome do EPI é obrigatório.", 400
+            flash("Nome do EPI é obrigatório.", "error") # Mudei para flash para aparecer bonito no HTML
+            return redirect(url_for('cadastrar_epi'))
 
+        # Lógica de Data (Mantive a sua, mas se vier vazio, usa o agora)
         data_hora_str = dados.get("data_hora_cadastro_epi")
         if data_hora_str:
             try:
                 data_hora_cadastro = datetime.strptime(data_hora_str, '%d/%m/%Y %H:%M:%S')
             except ValueError:
-                return "Formato de Data/Hora do Cadastro inválido. Use DD/MM/AAAA HH:MM:SS", 400
+                flash("Formato de data inválido.", "error")
+                return redirect(url_for('cadastrar_epi'))
         else:
             data_hora_cadastro = datetime.now()
 
         validade_meses = dados.get("validade_meses_epi")
         validade_meses_int = None
-        if validade_meses not in (None, ""):
+        if validade_meses and validade_meses.strip():
             try:
                 validade_meses_int = int(validade_meses)
             except ValueError:
-                return "Validade (meses) deve ser um número inteiro.", 400
+                flash("Validade deve ser um número.", "error")
+                return redirect(url_for('cadastrar_epi'))
 
         conn = conectar_banco()
         cur = conn.cursor()
+        
+        # Sua Query Original
         cur.execute("""
             INSERT INTO epi_itens (nome, categoria, ca, validade_meses, data_hora_cadastro)
             VALUES (%s, %s, %s, %s, %s)
@@ -1094,68 +1107,24 @@ def cadastrar_epi():
         ))
         conn.commit()
         return redirect(url_for("sucesso_epi"))
+
     except psycopg2.IntegrityError as e:
-        if conn:
-            conn.rollback()
-        if 'epi_itens_nome_key' in str(e) or 'violates unique constraint "epi_itens_nome_key"' in str(e).lower():
-            return "Este EPI já está cadastrado.", 400
-        app.logger.error(f"Erro de integridade em /cadastrar_epi: {e}")
-        return f"Erro de integridade no banco de dados: {e}", 400
+        if conn: conn.rollback()
+        # Tratamento de erro amigável para o usuário
+        if 'epi_itens_nome_key' in str(e) or 'unique constraint' in str(e).lower():
+            flash("Este nome de EPI já está cadastrado!", "warning")
+        else:
+            flash(f"Erro de banco de dados: {e}", "error")
+        return redirect(url_for('cadastrar_epi'))
+        
     except Exception as e:
-        if conn:
-            conn.rollback()
-        app.logger.error(f"Erro inesperado em /cadastrar_epi: {e}")
-        return f"Erro ao cadastrar EPI: {e}", 500
+        if conn: conn.rollback()
+        app.logger.error(f"Erro: {e}")
+        flash(f"Erro inesperado: {e}", "error")
+        return redirect(url_for('cadastrar_epi'))
+        
     finally:
         if conn and not conn.closed:
-            conn.close()
-
-@app.route("/buscar_epis", methods=["GET"])
-def buscar_epis():
-    conn = None
-    try:
-        termo = request.args.get("q", "").strip()
-        categoria = request.args.get("categoria", "").strip()
-        ca = request.args.get("ca", "").strip()
-
-        conn = conectar_banco()
-        cur = conn.cursor()
-        query = """
-            SELECT id, nome, categoria, ca, validade_meses, data_hora_cadastro
-            FROM epi_itens
-            WHERE 1=1
-        """
-        params = []
-        if termo:
-            query += " AND nome ILIKE %s"
-            params.append(f"%{termo}%")
-        if categoria:
-            query += " AND categoria = %s"
-            params.append(categoria)
-        if ca:
-            query += " AND ca ILIKE %s"
-            params.append(f"%{ca}%")
-        query += " ORDER BY nome"
-
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        resultados = []
-        for row in rows:
-            data_formatada = row[5].strftime('%d/%m/%Y %H:%M:%S') if row[5] else ""
-            resultados.append({
-                "id": row[0],
-                "nome": row[1],
-                "categoria": row[2],
-                "ca": row[3],
-                "validade_meses": row[4],
-                "data_hora_cadastro": data_formatada
-            })
-        return jsonify(resultados)
-    except Exception as e:
-        app.logger.error(f"Erro ao buscar EPIs: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if conn:
             conn.close()
 
 @app.route("/cadastrar_conta_corrente", methods=["POST"])
@@ -5764,6 +5733,62 @@ def editar_cliente():
         return f"Erro ao processar edição: {str(e)}", 500
     finally:
         if conn: conn.close()
+
+# --- ROTA: BUSCAR LISTA DE EPIs COM FILTRO ---
+@app.route("/buscar_epis", methods=["GET"])
+@login_required
+def buscar_epis():
+    conn = None
+    try:
+        # Pega os parâmetros da URL (ex: .../buscar_epis?q=luva&categoria=Proteção...)
+        termo = request.args.get("q", "").strip()
+        categoria = request.args.get("categoria", "").strip()
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+        
+        # Começa a query básica (WHERE 1=1 é um truque para facilitar adicionar AND depois)
+        query = """
+            SELECT nome, categoria, ca, validade_meses 
+            FROM epi_itens 
+            WHERE 1=1 
+        """
+        params = []
+
+        # Se o usuário digitou algo no nome
+        if termo:
+            query += " AND nome ILIKE %s"
+            params.append(f"%{termo}%") # O % permite buscar parte do nome
+        
+        # Se o usuário selecionou uma categoria
+        if categoria:
+            query += " AND categoria = %s"
+            params.append(categoria)
+
+        query += " ORDER BY nome ASC"
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        
+        resultados = []
+        for row in rows:
+            resultados.append({
+                "nome": row[0],
+                "categoria": row[1],
+                "ca": row[2],
+                "validade_meses": row[3]
+            })
+            
+        return jsonify(resultados)
+
+    except Exception as e:
+        app.logger.error(f"Erro ao buscar EPIs: {e}")
+        return jsonify({"error": str(e)}), 500
+        
+    finally:
+        if conn and not conn.closed:
+            conn.close()
+
 # --- Páginas de Sucesso ---
 def pagina_sucesso_base(titulo, mensagem):
     return f"""<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>{titulo}</title>
