@@ -776,16 +776,19 @@ def get_associado(id):
         if not row:
             return jsonify({"error": "Associado não encontrado"}), 404
 
-        # Função interna para formatar datas
-        def fmt(d):
-            return d.strftime('%d/%m/%Y') if hasattr(d, 'strftime') else str(d) if d else ""
+        # --- TRATAMENTO DE DATAS ---
+        # Enviamos no formato ISO (YYYY-MM-DD) para que o <input type="date"> funcione na edição
+        # e o JavaScript possa formatar para BR na visualização.
+        def fmt_iso(d):
+            return d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d) if d else ""
 
-        # --- TRATAMENTO DA FOTO PARA O FRONT-END ---
+        # Data/Hora completa para exibição visual
+        def fmt_br_completo(d):
+            return d.strftime('%d/%m/%Y %H:%M') if hasattr(d, 'strftime') else str(d) if d else ""
+
+        # --- TRATAMENTO DA FOTO ---
         foto = row.get('foto_base64') or ""
-        
-        # Se a foto existir e NÃO começar com o cabeçalho data:image, nós adicionamos.
-        # Isso garante que o previewFoto.src do Javascript funcione sempre.
-        if foto and not foto.startswith('data:image'):
+        if foto and len(foto) > 100 and not foto.startswith('data:image'):
             foto = f"data:image/jpeg;base64,{foto}"
 
         # Montamos o retorno
@@ -793,21 +796,24 @@ def get_associado(id):
             "id": row['id'],
             "nome": row['nome'],
             "cpf": row['cpf'],
-            "rg": row['rg'],
-            "data_nascimento": fmt(row['data_nascimento']),
-            "data_admissao": fmt(row['data_admissao']),
+            "rg": row.get('rg', ''),
+            "data_nascimento": fmt_iso(row['data_nascimento']), # YYYY-MM-DD
+            "data_admissao": fmt_iso(row['data_admissao']),     # YYYY-MM-DD
             "status": row['status'],
             "uvr": row['uvr'],
             "logradouro": row['logradouro'],
-            "numero": row['endereco_numero'],
+            "numero": row.get('endereco_numero', ''), # Garante compatibilidade com os dois nomes
+            "endereco_numero": row.get('endereco_numero', ''),
             "bairro": row['bairro'],
             "cidade": row['cidade'],
             "uf": row['uf'],
             "telefone": row['telefone'],
-            "foto_base64": foto, # Agora vai com o cabeçalho garantido
-            "data_cadastro": fmt(row.get('data_hora_cadastro')) # Adicionei para o relógio da edição
+            "foto_base64": foto,
+            "data_cadastro": fmt_br_completo(row.get('data_hora_cadastro')),
+            "funcao": row.get('funcao', '')  # <--- AQUI ESTÁ A NOVIDADE
         }
         return jsonify(res)
+
     except Exception as e:
         app.logger.error(f"Erro ao buscar associado {id}: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1202,11 +1208,27 @@ def get_associados_ativos():
         conn = conectar_banco()
         cur = conn.cursor()
         
-        query = "SELECT id, nome FROM associados WHERE uvr = %s AND status = 'Ativo' ORDER BY nome"
+        # MELHORIA: Adicionei a coluna 'funcao' na busca
+        query = """
+            SELECT id, nome, funcao 
+            FROM associados 
+            WHERE uvr = %s AND status = 'Ativo' 
+            ORDER BY nome
+        """
         cur.execute(query, (uvr_filter,))
         
-        associados = [{"id": row[0], "nome": row[1]} for row in cur.fetchall()]
+        # Agora o JSON retorna também a função (ou 'Não informada' se estiver vazio)
+        associados = [
+            {
+                "id": row[0], 
+                "nome": row[1], 
+                "funcao": row[2] if row[2] else ""
+            } 
+            for row in cur.fetchall()
+        ]
+        
         return jsonify(associados)
+
     except Exception as e:
         app.logger.error(f"Erro em /get_associados_ativos: {e}")
         return jsonify({"error": str(e)}), 500
@@ -3129,10 +3151,11 @@ def imprimir_ficha_associado(id):
         conn = conectar_banco()
         cur = conn.cursor()
         
+        # 1. ATUALIZAÇÃO NO SQL (Adicionado 'funcao' ao final)
         sql = """
             SELECT nome, cpf, rg, data_nascimento, data_admissao, status, 
                    uvr, associacao, logradouro, endereco_numero, bairro, cidade, 
-                   uf, cep, telefone, foto_base64, numero
+                   uf, cep, telefone, foto_base64, numero, funcao
             FROM associados WHERE id = %s
         """
         cur.execute(sql, (id,))
@@ -3140,6 +3163,7 @@ def imprimir_ficha_associado(id):
         
         if not row: return "Associado não encontrado", 404
 
+        # 2. ATUALIZAÇÃO NO DICIONÁRIO (Pegando row[17])
         dados = {
             "nome": row[0], "cpf": row[1], "rg": row[2],
             "nasc": row[3].strftime('%d/%m/%Y') if row[3] else "-",
@@ -3148,7 +3172,8 @@ def imprimir_ficha_associado(id):
             "logradouro": row[8] or "", "num": row[9] or "",
             "bairro": row[10] or "", "cidade": row[11] or "",
             "uf": row[12] or "", "cep": row[13] or "",
-            "tel": row[14], "foto": row[15], "matricula": row[16]
+            "tel": row[14], "foto": row[15], "matricula": row[16],
+            "funcao": row[17] if row[17] else "Não informada"  # <--- CAMPO NOVO
         }
 
         buffer = io.BytesIO()
@@ -3166,7 +3191,7 @@ def imprimir_ficha_associado(id):
         story.append(Paragraph(f"Ficha Cadastral do Associado - {dados['assoc']}", style_titulo))
         story.append(Spacer(1, 0.5*cm))
 
-        # --- PROCESSAMENTO DA FOTO COM PROPORÇÃO MANTIDA (FORMATO 3x4) ---
+        # --- PROCESSAMENTO DA FOTO (3x4) ---
         img_obj = None
         if dados['foto'] and len(dados['foto']) > 100:
             try:
@@ -3174,16 +3199,13 @@ def imprimir_ficha_associado(id):
                 img_data = base64.b64decode(img_str)
                 imagem_io = io.BytesIO(img_data)
                 
-                # Lê o tamanho original para calcular proporção
                 img_reader = ImageReader(imagem_io)
                 orig_w, orig_h = img_reader.getSize()
                 aspect = orig_h / float(orig_w)
                 
-                # Definimos a largura base de 3cm
                 render_w = 3.0 * cm
                 render_h = render_w * aspect
                 
-                # Se a altura fugir muito do padrão 4cm (proporção), limitamos para não esticar a ficha
                 if render_h > 4.5 * cm:
                     render_h = 4.5 * cm
                     render_w = render_h / aspect
@@ -3192,16 +3214,18 @@ def imprimir_ficha_associado(id):
             except Exception as e: 
                 app.logger.error(f"Erro imagem PDF: {e}")
 
-        # Listas de campos (Sem retirar nenhuma informação)
+        # Listas de campos
         lista_pessoais = [
             ("Nome Completo", dados['nome']), ("Matrícula", dados['matricula']),
             ("CPF", dados['cpf']), ("RG", dados['rg']),
             ("Data Nascimento", dados['nasc']), ("Telefone", dados['tel'])
         ]
         
+        # 3. ATUALIZAÇÃO VISUAL (Adicionei Função aqui)
         lista_sistema = [
-            ("UVR", dados['uvr']), ("Associação", dados['assoc']),
-            ("Data Admissão", dados['admissao']), ("Status", dados['status'])
+            ("Função", dados['funcao']), ("UVR", dados['uvr']), # <--- Adicionado aqui
+            ("Associação", dados['assoc']), ("Status", dados['status']),
+            ("Data Admissão", dados['admissao'])
         ]
         
         lista_endereco = [
@@ -3209,7 +3233,6 @@ def imprimir_ficha_associado(id):
             ("Cidade/UF", f"{dados['cidade']} - {dados['uf']}"), ("CEP", dados['cep'])
         ]
 
-        # Largura das colunas de texto (ajusta se houver foto)
         col_w = 6.5*cm if img_obj else 8.0*cm
 
         def criar_tabela_secao(lista_campos):
@@ -3241,11 +3264,9 @@ def imprimir_ficha_associado(id):
         elementos_texto.append(Paragraph("<b>ENDEREÇO</b>", styles['Heading4']))
         elementos_texto.append(criar_tabela_secao(lista_endereco))
 
-# --- TABELA PRINCIPAL (CORREÇÃO DO RETÂNGULO ALTO) ---
+        # --- TABELA PRINCIPAL ---
         if img_obj:
-            # Criamos uma tabela apenas para a foto para que a borda (GRID) 
-            # fique colada nela e não estique com o texto
-            tbl_foto = Table([[img_obj]], colWidths=[render_w + 4]) # 4 é o respiro da borda
+            tbl_foto = Table([[img_obj]], colWidths=[render_w + 4])
             tbl_foto.setStyle(TableStyle([
                 ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
                 ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -3257,7 +3278,6 @@ def imprimir_ficha_associado(id):
             data_main = [[elementos_texto, tbl_foto]]
             widths_main = [13.0*cm, 4.0*cm]
             
-            # Note que aqui removemos o GRID da tbl_main para não criar o retângulo longo
             tbl_main = Table(data_main, colWidths=widths_main, rowHeights=[None])
             tbl_main.setStyle(TableStyle([
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
