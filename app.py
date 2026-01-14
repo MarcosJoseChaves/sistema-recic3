@@ -188,6 +188,32 @@ def criar_tabelas_se_nao_existir():
         except psycopg2.Error:
             conn.rollback()
 
+        # --- MÓDULO EPI: Tabelas base ---
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epis (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(255) NOT NULL UNIQUE,
+                descricao TEXT,
+                unidade VARCHAR(50) NOT NULL DEFAULT 'un',
+                ca_numero VARCHAR(50),
+                data_hora_cadastro TIMESTAMP NOT NULL,
+                ativo BOOLEAN NOT NULL DEFAULT TRUE
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epi_movimentos (
+                id SERIAL PRIMARY KEY,
+                id_epi INTEGER NOT NULL REFERENCES epis(id),
+                uvr VARCHAR(10) NOT NULL,
+                associacao VARCHAR(50) NOT NULL,
+                tipo_movimento VARCHAR(20) NOT NULL,
+                quantidade DECIMAL(12, 3) NOT NULL,
+                data_movimento DATE NOT NULL,
+                observacao TEXT
+            )
+        """)
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS contas_correntes (
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, associacao VARCHAR(50) NOT NULL,
