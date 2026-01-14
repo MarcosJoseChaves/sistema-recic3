@@ -213,6 +213,33 @@ def criar_tabelas_se_nao_existir():
         except psycopg2.Error:
             conn.rollback()
 
+        # --- MÓDULO EPI: Tabelas base ---
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epis (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(255) NOT NULL UNIQUE,
+                descricao TEXT,
+                unidade VARCHAR(50) NOT NULL DEFAULT 'un',
+                ca_numero VARCHAR(50),
+                data_hora_cadastro TIMESTAMP NOT NULL,
+                ativo BOOLEAN NOT NULL DEFAULT TRUE
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epi_movimentos (
+                id SERIAL PRIMARY KEY,
+                id_epi INTEGER NOT NULL REFERENCES epis(id),
+                uvr VARCHAR(10) NOT NULL,
+                associacao VARCHAR(50) NOT NULL,
+                tipo_movimento VARCHAR(20) NOT NULL,
+                quantidade DECIMAL(12, 3) NOT NULL,
+                data_movimento DATE NOT NULL,
+                observacao TEXT
+            )
+        """)
+
+
         # 4. Bancos e Fluxo de Caixa
         cur.execute("""
             CREATE TABLE IF NOT EXISTS contas_correntes (
@@ -275,6 +302,70 @@ def criar_tabelas_se_nao_existir():
                 id SERIAL PRIMARY KEY, tabela_alvo VARCHAR(50) NOT NULL, id_registro INTEGER NOT NULL,
                 tipo_solicitacao VARCHAR(20) NOT NULL, dados_novos JSONB, usuario_solicitante VARCHAR(50) NOT NULL,
                 data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP, status VARCHAR(20) DEFAULT 'PENDENTE', observacoes_admin TEXT
+            )
+        """)
+
+        # 3. Controle de EPIs
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epi_itens (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(255) NOT NULL UNIQUE,
+                categoria VARCHAR(100),
+                ca VARCHAR(50),
+                validade_meses INTEGER,
+                data_hora_cadastro TIMESTAMP NOT NULL
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epi_estoque (
+                id SERIAL PRIMARY KEY,
+                id_item INTEGER NOT NULL REFERENCES epi_itens(id),
+                uvr VARCHAR(10) NOT NULL,
+                associacao VARCHAR(50),
+                unidade VARCHAR(50) NOT NULL,
+                quantidade DECIMAL(10, 3) NOT NULL DEFAULT 0,
+                data_hora_atualizacao TIMESTAMP NOT NULL,
+                UNIQUE (uvr, associacao, id_item)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epi_entregas (
+                id SERIAL PRIMARY KEY,
+                id_associado INTEGER NOT NULL REFERENCES associados(id),
+                uvr VARCHAR(10) NOT NULL,
+                associacao VARCHAR(50),
+                data_entrega DATE NOT NULL,
+                observacoes TEXT,
+                usuario_registro VARCHAR(50),
+                data_hora_registro TIMESTAMP NOT NULL
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epi_entrega_itens (
+                id SERIAL PRIMARY KEY,
+                id_entrega INTEGER NOT NULL REFERENCES epi_entregas(id) ON DELETE CASCADE,
+                id_item INTEGER NOT NULL REFERENCES epi_itens(id),
+                unidade VARCHAR(50) NOT NULL,
+                quantidade DECIMAL(10, 3) NOT NULL,
+                data_validade DATE
+            )
+        """)
+
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS epis_catalogo (
+                id SERIAL PRIMARY KEY,
+                grupo VARCHAR(255) NOT NULL,
+                epi VARCHAR(255) NOT NULL,
+                ca VARCHAR(50),
+                tipo_protecao VARCHAR(255),
+                funcao VARCHAR(100),
+                tempo_troca VARCHAR(50),
+                data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (grupo, epi, ca, funcao)
             )
         """)
 
@@ -962,6 +1053,109 @@ def cadastrar_produto_servico():
         return f"Erro ao cadastrar produto/serviço: {e}", 500
     finally:
         if conn and not conn.closed:
+            conn.close()
+@app.route("/cadastrar_epi", methods=["POST"])
+def cadastrar_epi():
+    conn = None
+    try:
+        dados = request.form
+        nome_epi = dados.get("nome_epi", "").strip()
+        if not nome_epi:
+            return "Nome do EPI é obrigatório.", 400
+
+        data_hora_str = dados.get("data_hora_cadastro_epi")
+        if data_hora_str:
+            try:
+                data_hora_cadastro = datetime.strptime(data_hora_str, '%d/%m/%Y %H:%M:%S')
+            except ValueError:
+                return "Formato de Data/Hora do Cadastro inválido. Use DD/MM/AAAA HH:MM:SS", 400
+        else:
+            data_hora_cadastro = datetime.now()
+
+        validade_meses = dados.get("validade_meses_epi")
+        validade_meses_int = None
+        if validade_meses not in (None, ""):
+            try:
+                validade_meses_int = int(validade_meses)
+            except ValueError:
+                return "Validade (meses) deve ser um número inteiro.", 400
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO epi_itens (nome, categoria, ca, validade_meses, data_hora_cadastro)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            nome_epi,
+            dados.get("categoria_epi", "").strip() or None,
+            dados.get("ca_epi", "").strip() or None,
+            validade_meses_int,
+            data_hora_cadastro
+        ))
+        conn.commit()
+        return redirect(url_for("sucesso_epi"))
+    except psycopg2.IntegrityError as e:
+        if conn:
+            conn.rollback()
+        if 'epi_itens_nome_key' in str(e) or 'violates unique constraint "epi_itens_nome_key"' in str(e).lower():
+            return "Este EPI já está cadastrado.", 400
+        app.logger.error(f"Erro de integridade em /cadastrar_epi: {e}")
+        return f"Erro de integridade no banco de dados: {e}", 400
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Erro inesperado em /cadastrar_epi: {e}")
+        return f"Erro ao cadastrar EPI: {e}", 500
+    finally:
+        if conn and not conn.closed:
+            conn.close()
+
+@app.route("/buscar_epis", methods=["GET"])
+def buscar_epis():
+    conn = None
+    try:
+        termo = request.args.get("q", "").strip()
+        categoria = request.args.get("categoria", "").strip()
+        ca = request.args.get("ca", "").strip()
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+        query = """
+            SELECT id, nome, categoria, ca, validade_meses, data_hora_cadastro
+            FROM epi_itens
+            WHERE 1=1
+        """
+        params = []
+        if termo:
+            query += " AND nome ILIKE %s"
+            params.append(f"%{termo}%")
+        if categoria:
+            query += " AND categoria = %s"
+            params.append(categoria)
+        if ca:
+            query += " AND ca ILIKE %s"
+            params.append(f"%{ca}%")
+        query += " ORDER BY nome"
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        resultados = []
+        for row in rows:
+            data_formatada = row[5].strftime('%d/%m/%Y %H:%M:%S') if row[5] else ""
+            resultados.append({
+                "id": row[0],
+                "nome": row[1],
+                "categoria": row[2],
+                "ca": row[3],
+                "validade_meses": row[4],
+                "data_hora_cadastro": data_formatada
+            })
+        return jsonify(resultados)
+    except Exception as e:
+        app.logger.error(f"Erro ao buscar EPIs: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
             conn.close()
 
 @app.route("/cadastrar_conta_corrente", methods=["POST"])
@@ -5590,6 +5784,8 @@ def sucesso_produto_servico(): return pagina_sucesso_base("Sucesso", "Produto/Se
 def sucesso_conta_corrente(): return pagina_sucesso_base("Sucesso", "Conta Corrente cadastrada com sucesso!")
 @app.route("/sucesso_denuncia")
 def sucesso_denuncia(): return pagina_sucesso_base("Sucesso", "Denúncia registrada com sucesso!")
+@app.route("/sucesso_epi")
+def sucesso_epi(): return pagina_sucesso_base("Sucesso", "EPI cadastrado com sucesso!")
 
 if __name__ == "__main__":
     import logging

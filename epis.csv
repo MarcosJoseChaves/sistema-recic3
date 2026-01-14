@@ -1,0 +1,32 @@
+Grupo EPI;EPI;CA;Tipo de proteção;Função;tempo de troca
+Proteção das Mãos e Braços;Luva de segurança para agentes abrasivos, escoriantes, cortantes e perfurantes;0;Proteção das mãos contra abrasão, corte, perfuração e agentes biológicos;Coletor;2 meses
+Proteção das Mãos e Braços;Luva de segurança para agentes abrasivos, escoriantes, cortantes e perfurantes;0;Proteção das mãos contra abrasão, corte e perfuração;Triador;2 meses
+Proteção das Mãos e Braços;Luva de segurança para agentes abrasivos e escoriantes;0;Proteção das mãos contra abrasão e atrito;Motorista de caminhão;3 meses
+Proteção das Mãos e Braços;Luva de segurança para agentes abrasivos e escoriantes;0;Proteção das mãos contra abrasão;Operador de empilhadeira;3 meses
+Proteção das Mãos e Braços;Luva de segurança para agentes abrasivos e cortantes;0;Proteção das mãos contra abrasão e corte;Prenseiro;2 meses
+Proteção das Mãos e Braços;Luva de segurança para agentes abrasivos;0;Proteção das mãos contra abrasão;Encarregado;4 meses
+Proteção Respiratória;Respirador purificador de ar tipo peça semifacial filtrante (PFF2);0;Proteção das vias respiratórias contra poeiras, partículas e aerossóis;Coletor;1 mês
+Proteção Respiratória;Respirador purificador de ar tipo peça semifacial filtrante (PFF2);0;Proteção das vias respiratórias contra poeiras e partículas;Triador;1 mês
+Proteção Respiratória;Respirador purificador de ar tipo peça semifacial filtrante (PFF2);0;Proteção das vias respiratórias contra poeiras;Prenseiro;1 mês
+Proteção Respiratória;Respirador purificador de ar tipo peça semifacial filtrante (PFF2);0;Proteção das vias respiratórias contra poeiras;Operador de empilhadeira;1 mês
+Proteção dos Olhos e Face;Óculos de segurança incolor contra impacto de partículas;0;Proteção dos olhos contra impacto de partículas volantes;Coletor;12 meses
+Proteção dos Olhos e Face;Óculos de segurança incolor contra impacto de partículas;0;Proteção dos olhos contra partículas e poeira;Triador;12 meses
+Proteção dos Olhos e Face;Óculos de segurança incolor contra impacto de partículas;0;Proteção dos olhos;Prenseiro;12 meses
+Proteção dos Olhos e Face;Óculos de segurança incolor contra impacto de partículas;0;Proteção dos olhos;Operador de empilhadeira;12 meses
+Proteção dos Olhos e Face;Protetor facial tipo viseira;0;Proteção da face contra respingos e partículas;Triador;12 meses
+Proteção dos Olhos e Face;Protetor facial tipo viseira;0;Proteção da face contra partículas;Prenseiro;12 meses
+Proteção Auditiva;Protetor auditivo tipo inserção (plug);0;Proteção do sistema auditivo contra ruído;Prenseiro;3 meses
+Proteção Auditiva;Protetor auditivo tipo concha;0;Proteção do sistema auditivo contra ruído;Operador de empilhadeira;12 meses
+Proteção dos Pés e Pernas;Calçado de segurança com biqueira e palmilha antiperação;0;Proteção dos pés contra impacto, perfuração e escorregamento;Coletor;6 meses
+Proteção dos Pés e Pernas;Calçado de segurança com biqueira e palmilha antiperação;0;Proteção dos pés contra impacto e perfuração;Triador;8 meses
+Proteção dos Pés e Pernas;Calçado de segurança com biqueira;0;Proteção dos pés contra impacto;Motorista de caminhão;12 meses
+Proteção dos Pés e Pernas;Calçado de segurança com biqueira e solado antiderrapante;0;Proteção dos pés contra impacto e escorregamento;Operador de empilhadeira;12 meses
+Proteção dos Pés e Pernas;Calçado de segurança com biqueira;0;Proteção dos pés;Prenseiro;8 meses
+Proteção do Tronco e Corpo;Vestimenta de trabalho com sinalização refletiva;0;Proteção do tronco e aumento de visibilidade;Coletor;6 meses
+Proteção do Tronco e Corpo;Vestimenta de trabalho resistente a agentes mecânicos;0;Proteção do tronco contra abrasão e sujeira;Triador;6 meses
+Proteção do Tronco e Corpo;Vestimenta de trabalho resistente a agentes mecânicos;0;Proteção do tronco;Prenseiro;6 meses
+Alta Visibilidade / Sinalização;Vestimenta de trabalho com sinalização refletiva;0;Proteção do tronco e visibilidade;Operador de empilhadeira;6 meses
+Proteção do Tronco e Corpo;Vestimenta de trabalho padrão;0;Proteção do tronco;Encarregado;12 meses
+Proteção Contra Intempéries;Capa de chuva impermeável;0;Proteção do corpo contra umidade e chuva;Coletor;6 meses
+Proteção Contra Intempéries;Boné ou chapéu tipo árabe;0;Proteção da cabeça e nuca contra radiação solar;Coletor;6 meses
+Proteção Contra Intempéries;Boné ou chapéu tipo árabe;0;Proteção contra radiação solar;Encarregado;6 meses

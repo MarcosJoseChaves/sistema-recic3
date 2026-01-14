@@ -151,6 +151,12 @@
                         </button>
 
                         <hr>
+                        <small class="text-muted d-block mb-2">EPIs</small>
+                        <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="mostrarFormulario('epiCadastroContainer')">
+                            <i class="fas fa-helmet-safety"></i> Cadastrar EPIs
+                        </button>
+
+                        <hr>
                         <small class="text-muted d-block mb-2">REGULARIDADE & ARQUIVOS</small>
                         <a href="/documentos" class="btn btn-info w-100 btn-dashboard text-white mb-2">
                             <i class="fas fa-folder-open"></i> Documentos & Certidões
@@ -214,8 +220,52 @@
     </div>
 </div>
 
-<div class="container d-flex justify-content-center flex-column align-items-center">
+ <div class="container d-flex justify-content-center flex-column align-items-center">
 
+        <div id="epiCadastroContainer" class="form-container">
+            <h2><i class="fas fa-helmet-safety"></i> Cadastro de EPIs</h2>
+            <form method="POST" action="/cadastrar_epi">
+                <div class="mb-3">
+                    <label class="form-label required-field">Data/Hora Cadastro</label>
+                    <input type="text" class="form-control" name="data_hora_cadastro_epi" id="dataHoraCadastroEpi" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required-field">Nome do EPI</label>
+                    <input type="text" class="form-control" name="nome_epi" required>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Categoria</label>
+                        <select class="form-select" name="categoria_epi">
+                            <option value="">Selecione...</option>
+                            <option value="Alta Visibilidade / Sinalização">Alta Visibilidade / Sinalização</option>
+                            <option value="Proteção Auditiva">Proteção Auditiva</option>
+                            <option value="Proteção Contra Intempéries">Proteção Contra Intempéries</option>
+                            <option value="Proteção das Mãos e Braços">Proteção das Mãos e Braços</option>
+                            <option value="Proteção do Tronco e Corpo">Proteção do Tronco e Corpo</option>
+                            <option value="Proteção dos Olhos e Face">Proteção dos Olhos e Face</option>
+                            <option value="Proteção dos Pés e Pernas">Proteção dos Pés e Pernas</option>
+                            <option value="Proteção Respiratória">Proteção Respiratória</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">CA</label>
+                        <input type="text" class="form-control" name="ca_epi">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Validade (meses)</label>
+                        <input type="number" class="form-control" name="validade_meses_epi" min="0" step="1">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Salvar EPI
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="mostrarFormulario('menuPrincipal')">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </button>
+            </form>
+        </div>
+        
 <div id="associadoForm" class="form-container" style="display: none;">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2><i class="fas fa-id-card text-primary"></i> Ficha de Associado</h2>
@@ -2009,6 +2059,9 @@
             else if (formId === 'contaCorrenteForm') { 
                 atualizarDataHora('#dataHoraCadastroConta'); 
                 popularBancos(); 
+            }
+            else if (formId === 'epiCadastroContainer') {
+                atualizarDataHora('#dataHoraCadastroEpi');
             }
             else if (formId === 'receitaDespesaForm') { 
                 atualizarDataHora('#dataHoraCadastroTransacao'); 
