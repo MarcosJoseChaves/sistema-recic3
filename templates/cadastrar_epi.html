@@ -8,13 +8,15 @@
     <style>
         body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .badge-funcao { font-size: 0.75em; margin-right: 2px; margin-bottom: 2px; display: inline-block; }
+        .admin-section { border: 1px solid #0d6efd; border-radius: 8px; padding: 10px; background-color: #f0f7ff; }
     </style>
 </head>
 <body>
     
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-md-8">
+            <div class="col-md-9"> 
                 <div class="card p-4">
                     <h4 class="mb-4"><i class="fas fa-helmet-safety"></i> Cadastrar Novo Tipo de EPI</h4>
                     
@@ -32,6 +34,24 @@
                     <form method="POST" action="{{ url_for('cadastrar_epi') }}">
                         
                         <div class="mb-3">
+                            {% if usuario and usuario.role == 'admin' %}
+                                <div class="admin-section">
+                                    <label for="uvr_cadastro" class="form-label fw-bold text-primary"><i class="fas fa-user-shield"></i> Unidade de Cadastro (ADMIN)</label>
+                                    <select class="form-select border-primary" name="uvr_cadastro" id="uvr_cadastro">
+                                        <option value="UVR 01" {% if usuario.uvr_acesso == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+                                        <option value="UVR 02" {% if usuario.uvr_acesso == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                                        <option value="GERAL">Disponibilidade Geral</option>
+                                    </select>
+                                    <small class="text-muted">Como Admin, você pode definir para qual unidade este tipo de EPI será visível.</small>
+                                </div>
+                            {% else %}
+                                <label class="form-label fw-bold text-muted">Unidade:</label>
+                                <input type="text" class="form-control bg-light" value="{{ usuario.uvr_acesso }}" readonly>
+                                <input type="hidden" name="uvr_cadastro" value="{{ usuario.uvr_acesso }}">
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
                             <label for="nome_epi" class="form-label">Nome do EPI *</label>
                             <input type="text" class="form-control" id="nome_epi" name="nome_epi" required placeholder="Ex: Luva de Raspa">
                         </div>
@@ -43,7 +63,6 @@
                                     <option value="">Selecione...</option>
                                     <option value="Alta Visibilidade / Sinalização">Alta Visibilidade / Sinalização</option>
                                     <option value="Proteção Auditiva">Proteção Auditiva</option>
-                                    <option value="Proteção Contra Intempéries">Proteção Contra Intempéries</option>
                                     <option value="Proteção das Mãos e Braços">Proteção das Mãos e Braços</option>
                                     <option value="Proteção do Tronco e Corpo">Proteção do Tronco e Corpo</option>
                                     <option value="Proteção dos Olhos e Face">Proteção dos Olhos e Face</option>
@@ -59,9 +78,40 @@
                         </div>
 
                         <div class="mb-3">
+                            <label class="form-label d-block fw-bold text-muted small">FUNÇÕES RECOMENDADAS *</label>
+                            <div class="card bg-light border-0 p-3">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Coletor" id="checkColetor">
+                                            <label class="form-check-label" for="checkColetor">Coletor</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Triador" id="checkTriador">
+                                            <label class="form-check-label" for="checkTriador">Triador</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Motorista" id="checkMotorista">
+                                            <label class="form-check-label" for="checkMotorista">Motorista</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Operador de Prensa" id="checkPrensa">
+                                            <label class="form-check-label" for="checkPrensa">Operador de Prensa</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Serviços Gerais" id="checkGerais">
+                                            <label class="form-check-label" for="checkGerais">Serviços Gerais</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
                             <label for="validade_meses_epi" class="form-label">Validade Padrão (meses)</label>
                             <input type="number" class="form-control" id="validade_meses_epi" name="validade_meses_epi" placeholder="Ex: 6">
-                            <div class="form-text">Deixe em branco se não houver validade definida.</div>
                         </div>
 
                         <div class="d-grid gap-2 mt-4">
@@ -72,39 +122,41 @@
 
                     <hr class="my-5">
 
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0"><i class="fas fa-list"></i> EPIs Cadastrados</h5>
-                    </div>
+                    <h5 class="mb-3"><i class="fas fa-list"></i> EPIs Cadastrados na Unidade</h5>
 
                     <div class="card bg-light mb-4 border-0">
                         <div class="card-body py-3">
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-bold text-muted">Buscar por Nome</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="filtroNome" placeholder="Digite o nome...">
-                                        <button class="btn btn-primary" type="button" onclick="carregarEpis()">
-                                            <i class="fas fa-search"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-bold text-muted">Filtrar por Categoria</label>
-                                    <select class="form-select" id="filtroCategoria">
-                                        <option value="">Todas as Categorias</option>
-                                        <option value="Alta Visibilidade / Sinalização">Alta Visibilidade / Sinalização</option>
-                                        <option value="Proteção Auditiva">Proteção Auditiva</option>
-                                        <option value="Proteção Contra Intempéries">Proteção Contra Intempéries</option>
-                                        <option value="Proteção das Mãos e Braços">Proteção das Mãos e Braços</option>
-                                        <option value="Proteção do Tronco e Corpo">Proteção do Tronco e Corpo</option>
-                                        <option value="Proteção dos Olhos e Face">Proteção dos Olhos e Face</option>
-                                        <option value="Proteção dos Pés e Pernas">Proteção dos Pés e Pernas</option>
-                                        <option value="Proteção Respiratória">Proteção Respiratória</option>
+                            <div class="row g-2 align-items-end">
+                                
+                                {% if usuario and usuario.role == 'admin' %}
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold text-primary">Filtrar UVR</label>
+                                    <select class="form-select" id="filtroUvr" onchange="carregarEpis()">
+                                        <option value="">Todas</option>
+                                        <option value="UVR 01">UVR 01</option>
+                                        <option value="UVR 02">UVR 02</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2">
-                                    <button class="btn btn-outline-secondary w-100" onclick="carregarEpis()">
-                                        Pesquisar
+                                {% endif %}
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted">Nome / CA</label>
+                                    <input type="text" class="form-control" id="filtroNome" placeholder="Buscar...">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-muted">Função</label>
+                                    <select class="form-select" id="filtroFuncao" onchange="carregarEpis()">
+                                        <option value="">Todas as Funções</option>
+                                        <option value="Coletor">Coletor</option>
+                                        <option value="Triador">Triador</option>
+                                        <option value="Motorista">Motorista</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-1">
+                                    <button class="btn btn-primary w-100" onclick="carregarEpis()">
+                                        <i class="fas fa-search"></i>
                                     </button>
                                 </div>
                             </div>
@@ -116,19 +168,16 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Nome</th>
-                                    <th>Categoria</th>
+                                    <th>Função Indicada</th>
                                     <th>C.A.</th>
                                     <th>Validade</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted">Carregando...</td>
-                                </tr>
+                                <tr><td colspan="4" class="text-center text-muted py-4">Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
-
                 </div>
             </div>
         </div>
@@ -139,23 +188,18 @@
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             carregarEpis();
-
-            // Adiciona funcionalidade da tecla ENTER no campo de nome
-            document.getElementById("filtroNome").addEventListener("keypress", function(event) {
-                if (event.key === "Enter") {
-                    event.preventDefault(); // Evita enviar o formulário se estivesse dentro de um form
-                    carregarEpis();
-                }
+            document.getElementById("filtroNome").addEventListener("keypress", function(e) {
+                if (e.key === "Enter") { e.preventDefault(); carregarEpis(); }
             });
         });
 
         function carregarEpis() {
-            // Pega os valores dos filtros
             const termo = document.getElementById('filtroNome').value;
-            const categoria = document.getElementById('filtroCategoria').value;
-            
-            // Monta a URL com os parâmetros
-            const url = `/buscar_epis?q=${encodeURIComponent(termo)}&categoria=${encodeURIComponent(categoria)}`;
+            const funcao = document.getElementById('filtroFuncao').value;
+            const campoUvr = document.getElementById('filtroUvr');
+            const uvr = campoUvr ? campoUvr.value : "";
+
+            const url = `/buscar_epis?q=${encodeURIComponent(termo)}&funcao=${encodeURIComponent(funcao)}&uvr=${encodeURIComponent(uvr)}`;
 
             fetch(url)
                 .then(response => response.json())
@@ -164,27 +208,26 @@
                     tbody.innerHTML = "";
                     
                     if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Nenhum EPI encontrado com esses filtros.</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Nenhum registro encontrado.</td></tr>';
                         return;
                     }
 
                     data.forEach(epi => {
                         let validade = epi.validade_meses ? epi.validade_meses + " meses" : "-";
-                        let linha = `
+                        let funcoesHtml = "-";
+                        if (epi.funcao_indicada) {
+                            let funcoes = epi.funcao_indicada.split(" / ");
+                            funcoesHtml = funcoes.map(f => `<span class="badge bg-info text-dark badge-funcao">${f}</span>`).join(" ");
+                        }
+
+                        tbody.innerHTML += `
                             <tr>
-                                <td><strong>${epi.nome}</strong></td>
-                                <td><span class="badge bg-secondary fw-normal text-wrap" style="font-size: 0.8em">${epi.categoria || '-'}</span></td>
+                                <td><strong>${epi.nome}</strong><br><small class="text-muted">${epi.categoria || ''}</small></td>
+                                <td>${funcoesHtml}</td>
                                 <td>${epi.ca || '-'}</td>
                                 <td>${validade}</td>
-                            </tr>
-                        `;
-                        tbody.innerHTML += linha;
+                            </tr>`;
                     });
-                })
-                .catch(err => {
-                    console.error("Erro ao carregar EPIs:", err);
-                    document.querySelector("#tabelaEpis tbody").innerHTML = 
-                        '<tr><td colspan="4" class="text-center text-danger">Erro ao carregar dados.</td></tr>';
                 });
         }
     </script>

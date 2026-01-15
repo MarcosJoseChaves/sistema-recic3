@@ -1054,72 +1054,90 @@ def cadastrar_produto_servico():
     finally:
         if conn and not conn.closed:
             conn.close()
+# --- ROTA: CADASTRO DE EPIs (COM FUNÇÕES) ---
+# --- ROTA: CADASTRAR NOVO TIPO DE EPI (COM CONTROLE DE UVR) ---
 @app.route("/cadastrar_epi", methods=["GET", "POST"])
-@login_required  # Importante: só usuários logados podem acessar
+@login_required
 def cadastrar_epi():
-    # --- SE FOR GET (O usuário está apenas abrindo a página) ---
+    # Define a UVR padrão do usuário logado
+    uvr_usuario = current_user.uvr_acesso if current_user.uvr_acesso else "GERAL"
+
+    # --- SE FOR GET (Abrir a página) ---
     if request.method == "GET":
         return render_template("cadastrar_epi.html", usuario=current_user)
 
-    # --- SE FOR POST (O usuário clicou em Salvar) ---
-    # AQUI COMEÇA A SUA LÓGICA ORIGINAL
+    # --- SE FOR POST (Salvar) ---
     conn = None
     try:
         dados = request.form
         nome_epi = dados.get("nome_epi", "").strip()
+        lista_funcoes = request.form.getlist("funcoes") 
+        
+        # LÓGICA DE UVR: 
+        # Se for ADMIN, ele pode ter escolhido uma UVR específica no select do formulário.
+        # Se não for ADMIN ou não escolheu, usa a UVR do próprio usuário logado.
+        if current_user.role == 'admin' and dados.get("uvr_cadastro"):
+            uvr_para_gravar = dados.get("uvr_cadastro")
+        else:
+            uvr_para_gravar = uvr_usuario
+
+        # Validações básicas
         if not nome_epi:
-            flash("Nome do EPI é obrigatório.", "error") # Mudei para flash para aparecer bonito no HTML
+            flash("Nome do EPI é obrigatório.", "error")
+            return redirect(url_for('cadastrar_epi'))
+            
+        if not lista_funcoes:
+            flash("Selecione pelo menos uma Função Recomendada.", "warning")
             return redirect(url_for('cadastrar_epi'))
 
-        # Lógica de Data (Mantive a sua, mas se vier vazio, usa o agora)
-        data_hora_str = dados.get("data_hora_cadastro_epi")
-        if data_hora_str:
-            try:
-                data_hora_cadastro = datetime.strptime(data_hora_str, '%d/%m/%Y %H:%M:%S')
-            except ValueError:
-                flash("Formato de data inválido.", "error")
-                return redirect(url_for('cadastrar_epi'))
-        else:
-            data_hora_cadastro = datetime.now()
+        # Transforma a lista de checkboxes em texto único (Ex: "Coletor / Triador")
+        funcao_texto = " / ".join(lista_funcoes)
 
+        # Lógica de Data e Validade
+        data_hora_cadastro = datetime.now()
         validade_meses = dados.get("validade_meses_epi")
         validade_meses_int = None
+        
         if validade_meses and validade_meses.strip():
             try:
                 validade_meses_int = int(validade_meses)
             except ValueError:
-                flash("Validade deve ser um número.", "error")
+                flash("Validade deve ser um número inteiro.", "error")
                 return redirect(url_for('cadastrar_epi'))
 
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Sua Query Original
+        # INSERT incluindo a coluna 'uvr' para segmentar o catálogo
         cur.execute("""
-            INSERT INTO epi_itens (nome, categoria, ca, validade_meses, data_hora_cadastro)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO epi_itens (nome, categoria, ca, validade_meses, funcao_indicada, uvr, data_hora_cadastro)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (
             nome_epi,
             dados.get("categoria_epi", "").strip() or None,
             dados.get("ca_epi", "").strip() or None,
             validade_meses_int,
+            funcao_texto,
+            uvr_para_gravar, # Grava a UVR (escolhida pelo admin ou automática do usuário)
             data_hora_cadastro
         ))
+        
         conn.commit()
-        return redirect(url_for("sucesso_epi"))
+        flash(f"EPI '{nome_epi}' cadastrado com sucesso para {uvr_para_gravar}!", "success")
+        return redirect(url_for("cadastrar_epi"))
 
     except psycopg2.IntegrityError as e:
         if conn: conn.rollback()
-        # Tratamento de erro amigável para o usuário
-        if 'epi_itens_nome_key' in str(e) or 'unique constraint' in str(e).lower():
-            flash("Este nome de EPI já está cadastrado!", "warning")
+        # Caso tente cadastrar o mesmo nome na mesma UVR (se houver essa restrição unique)
+        if 'unique constraint' in str(e).lower():
+            flash("Este nome de EPI já está cadastrado nesta unidade!", "warning")
         else:
-            flash(f"Erro de banco de dados: {e}", "error")
+            flash(f"Erro de integridade no banco: {e}", "error")
         return redirect(url_for('cadastrar_epi'))
         
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro: {e}")
+        app.logger.error(f"Erro ao cadastrar EPI: {e}")
         flash(f"Erro inesperado: {e}", "error")
         return redirect(url_for('cadastrar_epi'))
         
@@ -5740,30 +5758,50 @@ def editar_cliente():
 def buscar_epis():
     conn = None
     try:
-        # Pega os parâmetros da URL (ex: .../buscar_epis?q=luva&categoria=Proteção...)
+        # Pega os parâmetros da URL
         termo = request.args.get("q", "").strip()
         categoria = request.args.get("categoria", "").strip()
+        funcao = request.args.get("funcao", "").strip()
+        
+        # --- LÓGICA DE PERMISSÃO E FILTRO POR UVR ---
+        if current_user.role == 'admin':
+            # Admin pode filtrar por uma UVR específica ou ver tudo se deixar vazio
+            uvr_filtro = request.args.get("uvr", "").strip()
+        else:
+            # Usuário comum é forçado a ver apenas o que pertence à sua UVR
+            uvr_filtro = current_user.uvr_acesso
 
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Começa a query básica (WHERE 1=1 é um truque para facilitar adicionar AND depois)
+        # Query básica selecionando também a coluna uvr para conferência
         query = """
-            SELECT nome, categoria, ca, validade_meses 
+            SELECT nome, categoria, ca, validade_meses, funcao_indicada, uvr 
             FROM epi_itens 
             WHERE 1=1 
         """
         params = []
 
-        # Se o usuário digitou algo no nome
+        # Aplica a trava de UVR na Query
+        if uvr_filtro:
+            query += " AND uvr = %s"
+            params.append(uvr_filtro)
+
+        # Filtro por Nome ou CA
         if termo:
-            query += " AND nome ILIKE %s"
-            params.append(f"%{termo}%") # O % permite buscar parte do nome
+            query += " AND (nome ILIKE %s OR ca ILIKE %s)"
+            params.append(f"%{termo}%")
+            params.append(f"%{termo}%")
         
-        # Se o usuário selecionou uma categoria
+        # Filtro por Categoria
         if categoria:
             query += " AND categoria = %s"
             params.append(categoria)
+            
+        # Filtro por Função
+        if funcao:
+            query += " AND funcao_indicada ILIKE %s"
+            params.append(f"%{funcao}%")
 
         query += " ORDER BY nome ASC"
 
@@ -5776,7 +5814,9 @@ def buscar_epis():
                 "nome": row[0],
                 "categoria": row[1],
                 "ca": row[2],
-                "validade_meses": row[3]
+                "validade_meses": row[3],
+                "funcao_indicada": row[4],
+                "uvr": row[5] # Retorna a UVR para o frontend se necessário
             })
             
         return jsonify(resultados)
@@ -5785,6 +5825,194 @@ def buscar_epis():
         app.logger.error(f"Erro ao buscar EPIs: {e}")
         return jsonify({"error": str(e)}), 500
         
+    finally:
+        if conn and not conn.closed:
+            conn.close()
+
+# --- ROTA: LANÇAR ENTRADA DE ESTOQUE ---
+@app.route("/entrada_epi", methods=["GET", "POST"])
+@login_required
+def entrada_epi():
+    # Define a UVR base do usuário logado
+    uvr_usuario = current_user.uvr_acesso if current_user.uvr_acesso else "GERAL"
+    # Tenta pegar a associação se existir no objeto user, senão usa a UVR como fallback
+    associacao_usuario = getattr(current_user, 'associacao', uvr_usuario) 
+
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        if request.method == "POST":
+            id_item = request.form.get("id_item")
+            quantidade = request.form.get("quantidade")
+            marca = request.form.get("marca", "").strip()
+            unidade = request.form.get("unidade", "un")
+            observacao = request.form.get("observacao", "").strip()
+
+            # Se o usuário for admin, ele pode ter enviado uma UVR específica pelo form
+            # Caso contrário, prevalece a uvr_usuario definida no início
+            if current_user.role == 'admin' and request.form.get("uvr_destino"):
+                uvr_usuario = request.form.get("uvr_destino")
+
+            # Validações básicas
+            if not id_item or not quantidade:
+                flash("EPI e Quantidade são obrigatórios.", "warning")
+                return redirect(url_for('entrada_epi'))
+            
+            try:
+                qtd_float = float(quantidade)
+                if qtd_float <= 0:
+                    raise ValueError
+            except ValueError:
+                flash("A quantidade deve ser um número maior que zero.", "error")
+                return redirect(url_for('entrada_epi'))
+
+            # 1. Registrar no Histórico (epi_movimentos)
+            # Corrigido para username para evitar erro de atributo
+            cur.execute("""
+                INSERT INTO epi_movimentos 
+                (id_item, uvr, associacao, tipo_movimento, quantidade, marca, data_movimento, observacao, usuario_responsavel)
+                VALUES (%s, %s, %s, 'ENTRADA', %s, %s, NOW(), %s, %s)
+            """, (id_item, uvr_usuario, associacao_usuario, qtd_float, marca, observacao, current_user.username))
+
+            # 2. Atualizar ou Inserir no Estoque (epi_estoque)
+            # Usando ON CONFLICT para evitar SELECT manual e garantir integridade
+            cur.execute("""
+                INSERT INTO epi_estoque (id_item, uvr, associacao, unidade, quantidade, data_hora_atualizacao)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (uvr, associacao, id_item) 
+                DO UPDATE SET 
+                    quantidade = epi_estoque.quantidade + EXCLUDED.quantidade,
+                    unidade = EXCLUDED.unidade,
+                    data_hora_atualizacao = NOW();
+            """, (id_item, uvr_usuario, associacao_usuario, unidade, qtd_float))
+
+            conn.commit()
+            flash(f"Entrada de {quantidade} {unidade} registrada com sucesso!", "success")
+            return redirect(url_for('entrada_epi'))
+
+        # --- SE FOR GET (Carregar a página) ---
+        # Busca lista de EPIs ordenados para o formulário
+        cur.execute("SELECT id, nome, ca, categoria FROM epi_itens ORDER BY nome ASC")
+        lista_epis = cur.fetchall()
+        
+        return render_template("entrada_epi.html", usuario=current_user, epis=lista_epis)
+
+    except Exception as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro Entrada EPI: {e}")
+        flash(f"Erro ao processar entrada: {str(e)}", "error")
+        return redirect(url_for('index'))
+    finally:
+        if conn: conn.close()
+
+@app.route("/api/get_epis_filtrados")
+@login_required
+def get_epis_filtrados():
+    termo = request.args.get("q", "").strip()
+    categoria = request.args.get("categoria", "").strip()
+    
+    conn = conectar_banco()
+    cur = conn.cursor()
+    
+    query = "SELECT id, nome, ca FROM epi_itens WHERE 1=1"
+    params = []
+    
+    if categoria:
+        query += " AND categoria = %s"
+        params.append(categoria)
+    if termo:
+        query += " AND (nome ILIKE %s OR ca ILIKE %s)"
+        params.extend([f"%{termo}%", f"%{termo}%"])
+        
+    query += " ORDER BY nome ASC LIMIT 50"
+    cur.execute(query, params)
+    epis = [{"id": r[0], "nome": r[1], "ca": r[2]} for r in cur.fetchall()]
+    conn.close()
+    return jsonify(epis)
+# --- ROTA: CONSULTA DE SALDO DE ESTOQUE ---
+@app.route("/saldo_epis")
+@login_required
+def saldo_epis():
+    return render_template("saldo_epis.html", usuario=current_user)
+
+# --- API: BUSCAR DADOS DO SALDO (COM FILTROS) ---
+@app.route("/api/get_saldo_epis")
+@login_required
+def get_saldo_epis():
+    conn = None
+    try:
+        # Lógica de permissão de UVR
+        # Admin pode escolher filtrar uma específica ou ver todas. 
+        # Usuário comum só vê a dele.
+        if current_user.role == 'admin':
+            uvr_filtro = request.args.get("uvr", "").strip()
+        else:
+            uvr_filtro = current_user.uvr_acesso
+
+        categoria = request.args.get("categoria", "").strip()
+        termo = request.args.get("q", "").strip()
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        # Query que faz o JOIN entre o Estoque (e) e o Catálogo de Itens (i)
+        query = """
+            SELECT 
+                i.nome, 
+                i.categoria, 
+                e.quantidade, 
+                e.unidade, 
+                e.uvr, 
+                e.data_hora_atualizacao,
+                i.ca
+            FROM epi_estoque e
+            JOIN epi_itens i ON e.id_item = i.id
+            WHERE 1=1
+        """
+        params = []
+
+        # Aplica trava de UVR (obrigatória para usuário, opcional para admin)
+        if uvr_filtro:
+            query += " AND e.uvr = %s"
+            params.append(uvr_filtro)
+        
+        # Filtro de Categoria
+        if categoria:
+            query += " AND i.categoria = %s"
+            params.append(categoria)
+
+        # Filtro de Busca por Texto (Nome ou CA)
+        if termo:
+            query += " AND (i.nome ILIKE %s OR i.ca ILIKE %s)"
+            params.extend([f"%{termo}%", f"%{termo}%"])
+
+        # Ordenação por UVR e depois por Nome
+        query += " ORDER BY e.uvr ASC, i.nome ASC"
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+        resultados = []
+        for r in rows:
+            # Tratamento de data para evitar erro de 'NoneType'
+            data_formatada = r[5].strftime('%d/%m/%Y %H:%M') if r[5] else "N/A"
+            
+            resultados.append({
+                "nome": r[0],
+                "categoria": r[1],
+                "quantidade": float(r[2]),
+                "unidade": r[3],
+                "uvr": r[4],
+                "atualizado": data_formatada,
+                "ca": r[6]
+            })
+
+        return jsonify(resultados)
+    except Exception as e:
+        app.logger.error(f"Erro ao buscar saldo de EPIs: {e}")
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn and not conn.closed:
             conn.close()

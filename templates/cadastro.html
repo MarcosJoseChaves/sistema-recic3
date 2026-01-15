@@ -114,26 +114,26 @@
     </div>
     
     <div class="container mb-5" id="menuPrincipal">
-        <div class="row g-4">
-            
-            <div class="col-md-4">
-                <div class="card h-100 dashboard-card">
-                    <div class="card-header card-header-custom bg-primary text-white">
-                        <i class="fas fa-users me-2"></i> Cadastros Gerais
+    <div class="row g-4">
+        
+        <div class="col-md-4">
+            <div class="card h-100 dashboard-card">
+                <div class="card-header card-header-custom bg-primary text-white">
+                    <i class="fas fa-users me-2"></i> Cadastros Gerais
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">PESSOAS & ENTIDADES</small>
+                    <div class="btn-group-dashboard">
+                        <button type="button" class="btn btn-success" 
+                            onclick="mostrarFormulario('clienteFornecedorForm');
+                                    let agora = new Date(); 
+                                    let strData = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR'); 
+                                    document.getElementById('visualDataCadastroCliente').value = strData; 
+                                    document.getElementById('inputDataCadastroCliente').value = strData;">
+                            <i class="fas fa-plus"></i> Novo
+                        </button>
+                        <button id="btnGestaoCadastros" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Pesquisar</button>
                     </div>
-                    <div class="card-body">
-                        <small class="text-muted d-block mb-2">PESSOAS & ENTIDADES</small>
-                        <div class="btn-group-dashboard">
-                            <button type="button" class="btn btn-success" 
-                                onclick="mostrarFormulario('clienteFornecedorForm');
-                                        let agora = new Date(); 
-                                        let strData = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR'); 
-                                        document.getElementById('visualDataCadastroCliente').value = strData; 
-                                        document.getElementById('inputDataCadastroCliente').value = strData;">
-                                <i class="fas fa-plus"></i> Novo
-                            </button>
-                            <button id="btnGestaoCadastros" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Pesquisar</button>
-                        </div>
 
                     <div class="btn-group-dashboard">
                         <button id="btnAssociado" class="btn btn-outline-primary btn-sm" onclick="mostrarFormulario('associadoForm')">
@@ -144,79 +144,89 @@
                         </button>
                     </div>
 
-                        <hr>
-                        <small class="text-muted d-block mb-2">PATRIMÔNIO & ESTRUTURA</small>
-                        <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="mostrarFormulario('gestaoPatrimonioContainer')">
-                            <i class="fas fa-truck-moving"></i> Frota & Equipamentos
-                        </button>
+                    <hr>
+                    <small class="text-muted d-block mb-2">PATRIMÔNIO & ESTRUTURA</small>
+                    <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="mostrarFormulario('gestaoPatrimonioContainer')">
+                        <i class="fas fa-truck-moving"></i> Frota & Equipamentos
+                    </button>
 
-                        <hr>
-                        <small class="text-muted d-block mb-2">EPIs</small>
-                        <a href="{{ url_for('cadastrar_epi') }}" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm">
-                            <i class="fas fa-helmet-safety"></i> Cadastrar EPIs
+                    <hr>
+                    <small class="text-muted d-block mb-2">GESTÃO DE EPIs</small>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('cadastrar_epi') }}" class="btn btn-outline-secondary btn-dashboard btn-sm text-start">
+                            <i class="fas fa-helmet-safety me-2"></i> 1. Cadastrar Tipos de EPI
                         </a>
-
-                        <hr>
-                        <small class="text-muted d-block mb-2">REGULARIDADE & ARQUIVOS</small>
-                        <a href="/documentos" class="btn btn-info w-100 btn-dashboard text-white mb-2">
-                            <i class="fas fa-folder-open"></i> Documentos & Certidões
+                        <a href="{{ url_for('entrada_epi') }}" class="btn btn-outline-success btn-dashboard btn-sm text-start">
+                            <i class="fas fa-boxes-packing me-2"></i> 2. Entrada de Estoque
                         </a>
-
-                        {% if usuario and usuario.role == 'admin' %}
-                        <hr>
-                        <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
-                        <button id="btnGestaoProdutosServicos" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm"><i class="fas fa-box-open"></i> Catálogo de Produtos</button>
-                        {% endif %}
+                        <a href="{{ url_for('saldo_epis') }}" class="btn btn-outline-primary btn-dashboard btn-sm text-start">
+                            <i class="fas fa-list-check me-2"></i> 3. Saldo em Estoque
+                        </a>
                     </div>
+
+                    <hr>
+                    <small class="text-muted d-block mb-2">REGULARIDADE & ARQUIVOS</small>
+                    <a href="/documentos" class="btn btn-info w-100 btn-dashboard text-white mb-2">
+                        <i class="fas fa-folder-open"></i> Documentos & Certidões
+                    </a>
+
+                    {% if usuario and usuario.role == 'admin' %}
+                    <hr>
+                    <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
+                    <button id="btnGestaoProdutosServicos" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm">
+                        <i class="fas fa-box-open"></i> Catálogo de Produtos
+                    </button>
+                    {% endif %}
                 </div>
             </div>
-
-            <div class="col-md-4">
-                <div class="card h-100 dashboard-card">
-                    <div class="card-header card-header-custom bg-success text-white">
-                        <i class="fas fa-wallet me-2"></i> Operacional Financeiro
-                    </div>
-                    <div class="card-body">
-                        <small class="text-muted d-block mb-2">LANÇAMENTOS (Dia a Dia)</small>
-                        <button id="btnReceitaDespesa" class="btn btn-success w-100 btn-dashboard shadow-sm"><i class="fas fa-plus-circle"></i> Nova Receita / Despesa</button>
-                        <button id="btnGestaoTransacoes" class="btn btn-outline-success w-100 btn-dashboard"><i class="fas fa-search-dollar"></i> Pesquisar Transações</button>
-
-                        <hr>
-                        <small class="text-muted d-block mb-2">BANCÁRIO</small>
-                        <div class="btn-group-dashboard">
-                            <button id="btnContaCorrente" class="btn btn-outline-dark btn-sm"><i class="fas fa-landmark"></i> Nova Conta</button>
-                            <button id="btnGestaoContas" class="btn btn-dark btn-sm"><i class="fas fa-list"></i> Listar Contas</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {% if usuario and usuario.role == 'admin' %}
-            <div class="col-md-4">
-                <div class="card h-100 dashboard-card">
-                    <div class="card-header card-header-custom bg-warning text-dark">
-                        <i class="fas fa-chart-line me-2"></i> Gestão & Controle
-                    </div>
-                    <div class="card-body">
-                        <small class="text-muted d-block mb-2">FLUXO DE CAIXA</small>
-                        <button id="btnFluxoCaixa" class="btn btn-danger w-100 btn-dashboard mb-3 text-white"><i class="fas fa-exchange-alt"></i> Baixas & Conciliação</button>
-                        
-                        <small class="text-muted d-block mb-2">RELATÓRIOS</small>
-                        <div class="btn-group-dashboard">
-                            <button id="btnExtratoBancario" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-invoice-dollar"></i> Extrato</button>
-                            <button id="btnRelatorios" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-alt"></i> Financeiro</button>
-                        </div>
-                        
-                        <hr>
-                        <small class="text-muted d-block mb-2">ADMINISTRAÇÃO</small>
-                        <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
-                            <i class="fas fa-check-double"></i> Aprovações Pendentes
-                        </button>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
         </div>
+
+        <div class="col-md-4">
+            <div class="card h-100 dashboard-card">
+                <div class="card-header card-header-custom bg-success text-white">
+                    <i class="fas fa-wallet me-2"></i> Operacional Financeiro
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">LANÇAMENTOS (Dia a Dia)</small>
+                    <button id="btnReceitaDespesa" class="btn btn-success w-100 btn-dashboard shadow-sm"><i class="fas fa-plus-circle"></i> Nova Receita / Despesa</button>
+                    <button id="btnGestaoTransacoes" class="btn btn-outline-success w-100 btn-dashboard"><i class="fas fa-search-dollar"></i> Pesquisar Transações</button>
+
+                    <hr>
+                    <small class="text-muted d-block mb-2">BANCÁRIO</small>
+                    <div class="btn-group-dashboard">
+                        <button id="btnContaCorrente" class="btn btn-outline-dark btn-sm"><i class="fas fa-landmark"></i> Nova Conta</button>
+                        <button id="btnGestaoContas" class="btn btn-dark btn-sm"><i class="fas fa-list"></i> Listar Contas</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if usuario and usuario.role == 'admin' %}
+        <div class="col-md-4">
+            <div class="card h-100 dashboard-card">
+                <div class="card-header card-header-custom bg-warning text-dark">
+                    <i class="fas fa-chart-line me-2"></i> Gestão & Controle
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">FLUXO DE CAIXA</small>
+                    <button id="btnFluxoCaixa" class="btn btn-danger w-100 btn-dashboard mb-3 text-white"><i class="fas fa-exchange-alt"></i> Baixas & Conciliação</button>
+                    
+                    <small class="text-muted d-block mb-2">RELATÓRIOS</small>
+                    <div class="btn-group-dashboard">
+                        <button id="btnExtratoBancario" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-invoice-dollar"></i> Extrato</button>
+                        <button id="btnRelatorios" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-alt"></i> Financeiro</button>
+                    </div>
+                    
+                    <hr>
+                    <small class="text-muted d-block mb-2">ADMINISTRAÇÃO</small>
+                    <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
+                        <i class="fas fa-check-double"></i> Aprovações Pendentes
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
     </div>
 </div>
 
