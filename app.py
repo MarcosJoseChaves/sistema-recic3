@@ -4777,7 +4777,6 @@ def _buscar_nome_frota_por_id(id_patrimonio):
     finally:
         conn.close()
 
-
 @app.route("/baixar_csv_transacoes", methods=["POST"])
 @login_required
 def baixar_csv_transacoes():
@@ -4845,7 +4844,6 @@ def baixar_pdf_transacoes():
         if filters.get("tipo"):
             subtitle_parts.append(f"Tipo: {filters.get('tipo')}")
 
-=======
         frota_nome = (filters.get("nome_frota") or "").strip()
         if not frota_nome:
             frota_nome = _buscar_nome_frota_por_id(filters.get("id_patrimonio"))
@@ -8421,5 +8419,3 @@ if __name__ == "__main__":
     
     app.logger.info("Iniciando o aplicativo Flask...")
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-  
