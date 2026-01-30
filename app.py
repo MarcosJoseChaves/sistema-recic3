@@ -8417,3 +8417,5 @@ if __name__ == "__main__":
     
     app.logger.info("Iniciando o aplicativo Flask...")
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+# Atualização forçada para o Render
