@@ -4777,6 +4777,7 @@ def _buscar_nome_frota_por_id(id_patrimonio):
     finally:
         conn.close()
 
+
 @app.route("/baixar_csv_transacoes", methods=["POST"])
 @login_required
 def baixar_csv_transacoes():
@@ -4843,11 +4844,14 @@ def baixar_pdf_transacoes():
             subtitle_parts.append(f"UVR: {filters.get('uvr')}")
         if filters.get("tipo"):
             subtitle_parts.append(f"Tipo: {filters.get('tipo')}")
+
+=======
         frota_nome = (filters.get("nome_frota") or "").strip()
         if not frota_nome:
             frota_nome = _buscar_nome_frota_por_id(filters.get("id_patrimonio"))
         if frota_nome:
             subtitle_parts.append(f"Frota: {frota_nome}")
+
         if filters.get("data_inicial") or filters.get("data_final"):
             subtitle_parts.append(f"Período: {filters.get('data_inicial','-')} a {filters.get('data_final','-')}")
         subtitle_pdf = " | ".join(subtitle_parts)
@@ -8418,4 +8422,4 @@ if __name__ == "__main__":
     app.logger.info("Iniciando o aplicativo Flask...")
     app.run(host='0.0.0.0', port=5000, debug=True)
 
-# Atualização forçada para o Render
+  
