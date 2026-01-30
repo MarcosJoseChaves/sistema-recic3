@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastro de EPI - Sistema Recic3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .badge-funcao { font-size: 0.75em; margin-right: 2px; margin-bottom: 2px; display: inline-block; }
+        .admin-section { border: 1px solid #0d6efd; border-radius: 8px; padding: 10px; background-color: #f0f7ff; }
+        .form-check-label { cursor: pointer; }
+    </style>
+</head>
+<body>
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-9"> 
+                <div class="card p-4">
+                    <h4 class="mb-4"><i class="fas fa-helmet-safety"></i> Cadastrar Novo Tipo de EPI</h4>
+                    
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'success' }} alert-dismissible fade show">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" action="{{ url_for('cadastrar_epi') }}">
+                        
+                        <div class="mb-3">
+                            {% if usuario and usuario.role == 'admin' %}
+                                <div class="admin-section">
+                                    <label for="uvr_cadastro" class="form-label fw-bold text-primary"><i class="fas fa-user-shield"></i> Unidade de Cadastro (ADMIN)</label>
+                                    <select class="form-select border-primary" name="uvr_cadastro" id="uvr_cadastro">
+                                        <option value="UVR 01" {% if usuario.uvr_acesso == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+                                        <option value="UVR 02" {% if usuario.uvr_acesso == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                                        <option value="GERAL">Disponibilidade Geral</option>
+                                    </select>
+                                    <small class="text-muted">Como Admin, você define onde este EPI estará disponível.</small>
+                                </div>
+                            {% else %}
+                                <label class="form-label fw-bold text-muted">Unidade:</label>
+                                <input type="text" class="form-control bg-light" value="{{ usuario.uvr_acesso }}" readonly>
+                                <input type="hidden" name="uvr_cadastro" value="{{ usuario.uvr_acesso }}">
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="nome_epi" class="form-label">Nome do EPI *</label>
+                            <input type="text" class="form-control" id="nome_epi" name="nome_epi" required placeholder="Ex: Luva de Raspa">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="categoria_epi" class="form-label">Categoria</label>
+                                <select class="form-select" id="categoria_epi" name="categoria_epi">
+                                    <option value="">Selecione...</option>
+                                    <option value="Alta Visibilidade / Sinalização">Alta Visibilidade / Sinalização</option>
+                                    <option value="Proteção Auditiva">Proteção Auditiva</option>
+                                    <option value="Proteção das Mãos e Braços">Proteção das Mãos e Braços</option>
+                                    <option value="Proteção do Tronco e Corpo">Proteção do Tronco e Corpo</option>
+                                    <option value="Proteção dos Olhos e Face">Proteção dos Olhos e Face</option>
+                                    <option value="Proteção dos Pés e Pernas">Proteção dos Pés e Pernas</option>
+                                    <option value="Proteção Respiratória">Proteção Respiratória</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="ca_epi" class="form-label">C.A. (Certificado de Aprovação)</label>
+                                <input type="text" class="form-control" id="ca_epi" name="ca_epi" placeholder="Ex: 12345">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label d-block fw-bold text-muted small">FUNÇÕES RECOMENDADAS *</label>
+                            <div class="card bg-light border-0 p-3">
+                                <div class="row">
+
+                                    <!-- COLUNA 1 (A-C) -->
+                                    <div class="col-md-4">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Administrativo" id="checkAdmin">
+                                            <label class="form-check-label" for="checkAdmin">Administrativo</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Auxiliar de Ecoponto" id="checkEcoponto">
+                                            <label class="form-check-label" for="checkEcoponto">Auxiliar de Ecoponto</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Coletor" id="checkColetor">
+                                            <label class="form-check-label" for="checkColetor">Coletor</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Cozinha" id="checkCozinha">
+                                            <label class="form-check-label" for="checkCozinha">Cozinha / Copa</label>
+                                        </div>
+                                    </div>
+
+                                    <!-- COLUNA 2 (M-O) -->
+                                    <div class="col-md-4">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Manutenção" id="checkManutencao">
+                                            <label class="form-check-label" for="checkManutencao">Manutenção</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Motorista" id="checkMotorista">
+                                            <label class="form-check-label" for="checkMotorista">Motorista</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Operador de Empilhadeira" id="checkEmpilhadeira">
+                                            <label class="form-check-label" for="checkEmpilhadeira">Operador de Empilhadeira</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Operador de Prensa" id="checkPrensa">
+                                            <label class="form-check-label" for="checkPrensa">Operador de Prensa</label>
+                                        </div>
+                                    </div>
+
+                                    <!-- COLUNA 3 (S-V) -->
+                                    <div class="col-md-4">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Serviços Gerais" id="checkGerais">
+                                            <label class="form-check-label" for="checkGerais">Serviços Gerais</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Triador" id="checkTriador">
+                                            <label class="form-check-label" for="checkTriador">Triador</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Visitante" id="checkVisitante">
+                                            <label class="form-check-label" for="checkVisitante">Visitante</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="funcoes" value="Educador Ambiental" id="checkEducador">
+                                            <label class="form-check-label" for="checkEducador">Educador Ambiental</label>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="validade_meses_epi" class="form-label">Validade Padrão (meses)</label>
+                            <input type="number" class="form-control" id="validade_meses_epi" name="validade_meses_epi" placeholder="Ex: 6">
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">Salvar Cadastro</button>
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Voltar ao Menu</a>
+                        </div>
+                    </form>
+
+                    <hr class="my-5">
+
+                    <h5 class="mb-3"><i class="fas fa-list"></i> EPIs Cadastrados na Unidade</h5>
+
+                    <div class="card bg-light mb-4 border-0">
+                        <div class="card-body py-3">
+                            <div class="row g-2 align-items-end">
+                                
+                                {% if usuario and usuario.role == 'admin' %}
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold text-primary">Unidade</label>
+                                    <select class="form-select" id="filtroUvr" onchange="carregarEpis()">
+                                        <option value="">Todas</option>
+                                        <option value="UVR 01">UVR 01</option>
+                                        <option value="UVR 02">UVR 02</option>
+                                        <option value="GERAL">Geral</option>
+                                    </select>
+                                </div>
+                                {% endif %}
+
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-muted">Nome / CA</label>
+                                    <input type="text" class="form-control" id="filtroNome" placeholder="Buscar...">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-muted">Função</label>
+                                    <select class="form-select" id="filtroFuncao" onchange="carregarEpis()">
+                                        <option value="">Todas as Funções</option>
+                                        <option value="Administrativo">Administrativo</option>
+                                        <option value="Auxiliar de Ecoponto">Auxiliar de Ecoponto</option>
+                                        <option value="Coletor">Coletor</option>
+                                        <option value="Cozinha">Cozinha / Copa</option>
+                                        <option value="Educador Ambiental">Educador Ambiental</option>
+                                        <option value="Manutenção">Manutenção</option>
+                                        <option value="Motorista">Motorista</option>
+                                        <option value="Operador de Empilhadeira">Operador de Empilhadeira</option>
+                                        <option value="Operador de Prensa">Operador de Prensa</option>
+                                        <option value="Serviços Gerais">Serviços Gerais</option>
+                                        <option value="Triador">Triador</option>
+                                        <option value="Visitante">Visitante</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-1">
+                                    <button class="btn btn-primary w-100" onclick="carregarEpis()">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered" id="tabelaEpis">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nome / Categoria</th>
+                                    <th>Função Indicada</th>
+                                    <th>C.A.</th>
+                                    <th>Validade</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="text-center text-muted py-4">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="modal fade" id="modalEditarEpi" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <form id="formEditarEpi">
+                                    <div class="modal-header bg-primary text-white">
+                                        <h5 class="modal-title"><i class="fas fa-pen-to-square me-2"></i>Editar EPI</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <input type="hidden" id="edit_id_epi" name="id_epi">
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="edit_nome_epi" class="form-label">Nome do EPI *</label>
+                                                <input type="text" class="form-control" id="edit_nome_epi" name="nome_epi" required>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="edit_categoria_epi" class="form-label">Categoria</label>
+                                                <input type="text" class="form-control" id="edit_categoria_epi" name="categoria_epi">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="edit_ca_epi" class="form-label">C.A.</label>
+                                                <input type="text" class="form-control" id="edit_ca_epi" name="ca_epi">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="edit_validade_meses_epi" class="form-label">Validade (meses)</label>
+                                                <input type="number" class="form-control" id="edit_validade_meses_epi" name="validade_meses_epi">
+                                            </div>
+                                            {% if usuario and usuario.role == 'admin' %}
+                                            <div class="col-md-4">
+                                                <label for="edit_uvr_cadastro" class="form-label">Unidade</label>
+                                                <select class="form-select" id="edit_uvr_cadastro" name="uvr_cadastro">
+                                                    <option value="UVR 01">UVR 01</option>
+                                                    <option value="UVR 02">UVR 02</option>
+                                                    <option value="GERAL">Geral</option>
+                                                </select>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        <hr class="my-4">
+                                        <label class="form-label fw-bold">Função Recomendada *</label>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Coletor" id="edit_checkColetor">
+                                                    <label class="form-check-label" for="edit_checkColetor">Coletor</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Triador" id="edit_checkTriador">
+                                                    <label class="form-check-label" for="edit_checkTriador">Triador</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Motorista" id="edit_checkMotorista">
+                                                    <label class="form-check-label" for="edit_checkMotorista">Motorista</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Operador de Prensa" id="edit_checkPrensa">
+                                                    <label class="form-check-label" for="edit_checkPrensa">Operador de Prensa</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Serviços Gerais" id="edit_checkServicos">
+                                                    <label class="form-check-label" for="edit_checkServicos">Serviços Gerais</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Manutenção" id="edit_checkManutencao">
+                                                    <label class="form-check-label" for="edit_checkManutencao">Manutenção</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Administrativo" id="edit_checkAdmin">
+                                                    <label class="form-check-label" for="edit_checkAdmin">Administrativo</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Visitante" id="edit_checkVisitante">
+                                                    <label class="form-check-label" for="edit_checkVisitante">Visitante</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input edit-funcao" type="checkbox" name="funcoes" value="Cozinha" id="edit_checkCozinha">
+                                                    <label class="form-check-label" for="edit_checkCozinha">Cozinha / Copa</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-primary" id="btnSalvarEpi"></button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        const usuarioIsAdmin = {{ 'true' if usuario and usuario.role == 'admin' else 'false' }};
+
+
+        document.addEventListener("DOMContentLoaded", function() {
+            carregarEpis();
+            document.getElementById("filtroNome").addEventListener("keypress", function(e) {
+                if (e.key === "Enter") { e.preventDefault(); carregarEpis(); }
+            });
+        });
+
+        function carregarEpis() {
+            const termo = document.getElementById('filtroNome').value;
+            const funcao = document.getElementById('filtroFuncao').value;
+            const campoUvr = document.getElementById('filtroUvr');
+            const uvr = campoUvr ? campoUvr.value : "";
+
+            const url = `/buscar_epis?q=${encodeURIComponent(termo)}&funcao=${encodeURIComponent(funcao)}&uvr=${encodeURIComponent(uvr)}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector("#tabelaEpis tbody");
+                    tbody.innerHTML = "";
+                    
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Nenhum registro encontrado.</td></tr>';
+                        return;
+                    }
+
+                    data.forEach(epi => {
+                        let validade = epi.validade_meses ? epi.validade_meses + " meses" : "-";
+                        let funcoesHtml = "-";
+                        if (epi.funcao_indicada) {
+                            let funcoes = epi.funcao_indicada.split(" / ");
+                            funcoesHtml = funcoes.map(f => `<span class="badge bg-info text-dark badge-funcao">${f}</span>`).join(" ");
+                        }
+
+                        tbody.innerHTML += `
+                            <tr>
+                                <td><strong>${epi.nome}</strong><br><small class="text-muted">${epi.categoria || ''}</small></td>
+                                <td>${funcoesHtml}</td>
+                                <td>${epi.ca || '-'}</td>
+                                <td>${validade}</td>
+                                 <td class="text-center">
+                                    <button class="btn btn-sm btn-info text-white me-1" onclick="abrirEdicaoEpi(${epi.id})" title="Editar"><i class="fas fa-pen"></i></button>
+                                    <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoEpi(${epi.id}, '${epi.nome.replace(/'/g, "\\'")}')" title="Excluir"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>`;
+                    });
+                })
+                .catch(err => {
+                    console.error("Erro:", err);
+                    document.querySelector("#tabelaEpis tbody").innerHTML = '<tr><td colspan="5" class="text-center text-danger">Erro ao carregar dados.</td></tr>';
+                });
+        }
+
+        function limparFuncoesEdicao() {
+            document.querySelectorAll('.edit-funcao').forEach(cb => { cb.checked = false; });
+        }
+
+        function abrirEdicaoEpi(id) {
+            fetch(`/get_epi_detalhe/${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    document.getElementById('edit_id_epi').value = data.id;
+                    document.getElementById('edit_nome_epi').value = data.nome || '';
+                    document.getElementById('edit_categoria_epi').value = data.categoria || '';
+                    document.getElementById('edit_ca_epi').value = data.ca || '';
+                    document.getElementById('edit_validade_meses_epi').value = data.validade_meses || '';
+
+                    if (usuarioIsAdmin) {
+                        const campoUvr = document.getElementById('edit_uvr_cadastro');
+                        if (campoUvr) campoUvr.value = data.uvr || '';
+                    }
+
+                    limparFuncoesEdicao();
+                    if (data.funcao_indicada) {
+                        const funcoes = data.funcao_indicada.split(" / ").map(f => f.trim());
+                        document.querySelectorAll('.edit-funcao').forEach(cb => {
+                            if (funcoes.includes(cb.value)) cb.checked = true;
+                        });
+                    }
+
+                    document.getElementById('btnSalvarEpi').textContent = usuarioIsAdmin ? 'Salvar Alterações' : 'Solicitar Alteração';
+
+                    const modal = new bootstrap.Modal(document.getElementById('modalEditarEpi'));
+                    modal.show();
+                })
+                .catch(err => {
+                    console.error("Erro:", err);
+                    alert("Erro ao carregar dados do EPI.");
+                });
+        }
+
+        document.getElementById('formEditarEpi').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+
+            fetch('/editar_epi', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    alert(data.message || 'Solicitação enviada.');
+                    carregarEpis();
+                    const modalEl = document.getElementById('modalEditarEpi');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    modal.hide();
+                })
+                .catch(err => {
+                    console.error("Erro:", err);
+                    alert("Erro ao salvar alterações.");
+                });
+        });
+
+        function solicitarExclusaoEpi(id, nome) {
+            const texto = usuarioIsAdmin
+                ? `Deseja realmente excluir o EPI "${nome}"?`
+                : `Deseja solicitar a exclusão do EPI "${nome}"?
+O administrador precisará aprovar.`;
+
+            if (!confirm(texto)) return;
+
+            fetch(`/excluir_epi/${id}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    alert(data.message || 'Solicitação enviada.');
+                    carregarEpis();
+                })
+                .catch(err => {
+                    console.error("Erro:", err);
+                    alert("Erro ao processar exclusão.");
+                });
+        }
+    </script>
+</body>
+</html>

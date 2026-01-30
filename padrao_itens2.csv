@@ -1,0 +1,51 @@
+Tipo Transação;Grupo;Subgrupo;Item Descrição (Transação)
+Despesa;Despesas Administrativas;Impostos e Contribuições;Impostos/taxas
+Despesa;Rateio dos Associados;Impostos e Contribuições;INSS
+Despesa;Compras de Materiais;Compras de Materiais;EPIs e Uniformes
+Despesa;Serviços Contratados;Serviços Contratados;Obras e reformas
+Despesa;Rateio dos Associados;Rateio dos Associados;Rateio dos Associados
+Despesa;Outras Despesas;Transferências entre contas correntes;Transferências entre contas correntes (saída)
+Receita;Elétrico ou Eletrônico;Bateria;Bateria
+Receita;Elétrico ou Eletrônico;Motor;Motor
+Receita;Elétrico ou Eletrônico;Sucata ;Sucata Celular
+Receita;Metal;Sucata ;Sucata Eletrônica
+Receita;Metal;Alumínio;Alumínio Bloco
+Receita;Metal;Alumínio;Alumínio Chaparia
+Receita;Metal;Alumínio;Alumínio Latinha
+Receita;Metal;Alumínio;Alumínio Panela
+Receita;Metal;Cobre;Cobre Limpo (mel)
+Receita;Metal;Cobre;Cobre Sujo
+Receita;Metal;Ferroso;Ferro fundido
+Receita;Metal;Outro Metal;Outro Metal
+Receita;Não convencionais;ÓLEO DE COZINHA ;Óleo de cozinha
+Receita;Papel;Branco;Papel Branco
+Receita;Papel;Cartonado;Papel Cartonado (tetrapak)
+Receita;Papel;Cimento;Papel Cimento
+Receita;Papel;Misto;Papel Misto (Caixa de ovo, livros, revistas, jornais)
+Receita;Papel;Papelão;Papelão (Tubete de papelão, caixas em geral)
+Receita;Plástico;ABS;ABS Carcaça de eletrodomésticos (TV, monitor, etc)
+Receita;Plástico;BOPP ;BOPP Embalagens de salgadinho metalizada
+Receita;Plástico;Outro Plástico;Outro Plástico
+Receita;Plástico;PEAD ;PEAD  Embalagens de produtos de limpeza
+Receita;Plástico;PEAD ;PEAD  Filme cristal
+Receita;Plástico;PEAD ;PEAD  Filme stretch
+Receita;Plástico;PEAD ;PEAD  Injeção (caixaria)
+Receita;Plástico;PEBD ;PEBD Filme (sacolinhas, sacos de lixo, lonas)
+Receita;Plástico;PET ;PET  Colorido
+Receita;Plástico;PET ;PET  Cristal
+Receita;Plástico;PET ;PET  Óleo
+Receita;Plástico;PET ;PET  Verde
+Receita;Plástico;PP ;PP  Mineral (copinho de água)
+Receita;Plástico;PP ;PP  Plástico Branco
+Receita;Plástico;PP ;PP  Plástico Colorido
+Receita;Plástico;PP ;PP  Preto
+Receita;Plástico;PP ;PP  Ráfia (sacaria, bigbag)
+Receita;Plástico;PP ;PP  Rígido (balde, bacia)
+Receita;Plástico;PS ;PS  Copos descartáveis
+Receita;Plástico;PVC;PVC Tubulações e forros (canos, forro, etc)
+Receita;Outras Receitas;Transferências entre contas;Transferências entre contas (entrada)
+Receita;Repasses Governamentais;Prestação de serviço à prefeitura;Fundo de Benefícios Sociais e Desenvolvimento Associativo (FBDS)
+Receita;Repasses Governamentais;Prestação de serviço à prefeitura;Valor Fixo (VF)
+Receita;Repasses Governamentais;Prestação de serviço à prefeitura;Valor por Produtividade (VP)
+Receita;Vidro;Caco;Vidro em caco
+Receita;Vidro;Inteiro;Vidro inteiro (Garrafas retornáveis, compota, pingas, garrafão)

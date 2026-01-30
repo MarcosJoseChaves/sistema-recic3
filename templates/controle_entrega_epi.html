@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Controle de Entrega de EPIs - Sistema Recic3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .table-input { border: none; background: transparent; width: 100%; }
+        .table-input:focus { outline: none; background: #fff; box-shadow: 0 0 0 2px #ffc107; }
+        .section-title { font-size: 0.9rem; font-weight: bold; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #dee2e6; padding-bottom: 5px; margin-bottom: 15px; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-4">
+        
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-warning text-dark d-flex align-items-center">
+                <i class="fas fa-clipboard-check me-2"></i>
+                <strong>Nova Entrega de EPIs</strong>
+            </div>
+            <div class="card-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'success' }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" id="formEntrega">
+                    
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><div class="section-title">1. Dados da Entrega</div></div>
+                        
+                        {% if usuario and usuario.role == 'admin' %}
+                        <div class="col-md-3">
+                            <label for="uvr_filtro" class="form-label small fw-bold">UVR de Origem</label>
+                            <select class="form-select" id="uvr_filtro" name="uvr_filtro" required onchange="location.href='?uvr=' + this.value;">
+                                <option value="">Selecione...</option>
+                                {% for uvr in lista_uvrs %}
+                                    <option value="{{ uvr }}" {% if uvr == uvr_selecionada %}selected{% endif %}>{{ uvr }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="col-md-3">
+                            <label for="data_entrega" class="form-label small fw-bold">Data da Entrega *</label>
+                            <input type="date" class="form-control" id="data_entrega" name="data_entrega" value="{{ hoje }}" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_associado" class="form-label small fw-bold">Quem Recebeu (Associado) *</label>
+                            <select class="form-select" id="id_associado" name="id_associado" required>
+                                <option value="">Selecione o recebedor...</option>
+                                {% for associado in associados %}
+                                    <option value="{{ associado[0] }}">{{ associado[1] }} ({{ associado[2] }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_responsavel" class="form-label small fw-bold">Quem Entregou (Responsável) *</label>
+                            <select class="form-select" id="id_responsavel" name="id_responsavel" required>
+                                <option value="">Selecione o responsável...</option>
+                                {% for associado in associados %}
+                                    <option value="{{ associado[0] }}">{{ associado[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Observações Gerais</label>
+                            <input type="text" class="form-control" name="observacoes">
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 d-flex justify-content-between align-items-end">
+                            <div class="section-title mb-0" style="flex-grow: 1; border-bottom: none;">2. Itens da Entrega</div>
+                            <button type="button" class="btn btn-sm btn-success mb-2" onclick="adicionarLinhaItem()">
+                                <i class="fas fa-plus me-1"></i> Adicionar Outro Item
+                            </button>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="table-responsive border rounded">
+                                <table class="table table-hover mb-0 align-middle" id="tabelaItens">
+                                    <thead class="table-secondary small">
+                                        <tr>
+                                            <th style="width: 40%;">EPI / Material</th>
+                                            <th style="width: 15%;">Quantidade</th>
+                                            <th style="width: 10%;">Un.</th>
+                                            <th style="width: 10%;">Saldo</th>
+                                            <th style="width: 15%;">C.A.</th>
+                                            <th style="width: 10%; text-align: center;">Excluir</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="containerItens">
+                                        </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4 pt-3 border-top">
+                        <div class="col-12 d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i> Voltar
+                            </a>
+                            <button type="submit" class="btn btn-warning fw-bold px-4 shadow-sm">
+                                <i class="fas fa-save me-2"></i> Confirmar Entrega
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-5">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 fw-bold text-secondary"><i class="fas fa-history me-2"></i> Histórico e Impressão</h6>
+            </div>
+            <div class="card-body">
+                
+                <div class="row g-2 align-items-end mb-4 bg-light p-3 rounded border">
+                    <div class="col-12 mb-2 border-bottom pb-1">
+                        <span class="small fw-bold text-muted text-uppercase">Filtros para Consulta e Impressão</span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Buscar (Nome/EPI)</label>
+                        <input type="text" class="form-control form-control-sm" id="filtroTextoEntregas">
+                    </div>
+
+                    {% if usuario and usuario.role == 'admin' %}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold text-muted mb-1">UVR</label>
+                        <select class="form-select form-select-sm" id="filtroUvrTabela">
+                            <option value="">Todas</option>
+                            {% for uvr in lista_uvrs %}
+                                <option value="{{ uvr }}">{{ uvr }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold text-muted mb-1">Função</label>
+                        <select class="form-select form-select-sm" id="filtroFuncao">
+                            <option value="">Todas</option>
+                            {% if lista_funcoes %}
+                                {% for f in lista_funcoes %}
+                                    <option value="{{ f }}">{{ f }}</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold text-muted mb-1">De</label>
+                        <input type="date" class="form-control form-control-sm" id="filtroDataIni">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold text-muted mb-1">Até</label>
+                        <input type="date" class="form-control form-control-sm" id="filtroDataFim">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="carregarEntregas()">
+                            <i class="fas fa-filter me-1"></i> Atualizar Lista
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm" onclick="imprimirLote()">
+                            <i class="fas fa-print me-1"></i> Imprimir Termos (Lote PDF)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered table-sm mb-0" id="tabelaEntregasEpi">
+                        <thead class="table-light small">
+                            <tr>
+                                <th>Data</th>
+                                <th>Recebedor</th>
+                                <th>Função</th> <th>Item Entregue</th>
+                                <th>Qtd</th>
+                                <th class="text-center" style="width: 100px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="6" class="text-center text-muted py-3">Carregando histórico...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalEditarEntregaEpi" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="formEditarEntregaEpi">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Item</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="edit_id_entrega" name="id_entrega">
+                        <div class="mb-3">
+                            <label class="form-label">Associado</label>
+                            <input type="text" class="form-control" id="edit_associado" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">EPI</label>
+                            <input type="text" class="form-control" id="edit_item" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Quantidade</label>
+                            <input type="number" class="form-control" id="edit_quantidade" name="quantidade" step="0.01" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Observações</label>
+                            <input type="text" class="form-control" id="edit_observacoes" name="observacoes">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning" id="btnSalvarEntrega"></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <template id="templateLinhaItem">
+        <tr class="linha-item fade-in">
+            <td>
+                <select class="form-select form-select-sm select-epi" name="id_item[]" required onchange="atualizarInfoLinha(this)">
+                    <option value="">Selecione...</option>
+                    {% for epi in epis %}
+                        <option value="{{ epi[0] }}" data-saldo="{{ saldo_estoque.get(epi[0], 0) | int }}" data-ca="{{ epi[3] or '' }}">
+                            {{ epi[1] }}{% if epi[2] %} - {{ epi[2] }}{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td><input type="number" class="form-control form-control-sm input-qtd" name="quantidade[]" step="0.01" min="0.01" required oninput="validarSaldoLinha(this)"></td>
+            <td><input type="text" class="form-control form-control-sm bg-light" name="unidade[]" value="un" readonly tabindex="-1"></td>
+            <td><input type="text" class="form-control form-control-sm input-saldo bg-light border-0 fw-bold text-end" readonly tabindex="-1"></td>
+            <td><input type="text" class="form-control form-control-sm input-ca bg-light border-0 text-center" readonly tabindex="-1"></td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="removerLinha(this)"><i class="fas fa-times"></i></button>
+            </td>
+        </tr>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const usuarioIsAdmin = {{ 'true' if usuario and usuario.role == 'admin' else 'false' }};
+
+        function adicionarLinhaItem() {
+            const template = document.getElementById('templateLinhaItem');
+            document.getElementById('containerItens').appendChild(template.content.cloneNode(true));
+        }
+
+        function removerLinha(btn) {
+            btn.closest('tr').remove();
+            if (document.querySelectorAll('.linha-item').length === 0) adicionarLinhaItem();
+        }
+
+        function atualizarInfoLinha(selectElement) {
+            const tr = selectElement.closest('tr');
+            const option = selectElement.options[selectElement.selectedIndex];
+            tr.querySelector('.input-saldo').value = option.getAttribute('data-saldo') || '';
+            tr.querySelector('.input-ca').value = option.getAttribute('data-ca') || '';
+            validarSaldoLinha(tr.querySelector('.input-qtd'));
+        }
+
+        function validarSaldoLinha(inputQtd) {
+            const tr = inputQtd.closest('tr');
+            const saldo = parseFloat(tr.querySelector('.input-saldo').value) || 0;
+            const qtd = parseFloat(inputQtd.value) || 0;
+            inputQtd.classList.toggle('is-invalid', qtd > saldo);
+        }
+
+        // --- FUNÇÃO DE IMPRESSÃO EM LOTE ---
+        function imprimirLote() {
+            const termo = document.getElementById('filtroTextoEntregas')?.value || '';
+            const dataIni = document.getElementById('filtroDataIni')?.value || '';
+            const dataFim = document.getElementById('filtroDataFim')?.value || '';
+            const uvr = document.getElementById('filtroUvrTabela')?.value || '';
+            const funcao = document.getElementById('filtroFuncao')?.value || ''; // PEGA A FUNÇÃO
+
+            // Monta a URL com os filtros atuais
+            const params = new URLSearchParams({
+                q: termo,
+                data_ini: dataIni,
+                data_fim: dataFim,
+                uvr: uvr,
+                funcao: funcao
+            });
+
+            // Abre o PDF em nova aba
+            window.open(`/imprimir_termos_lote?${params.toString()}`, '_blank');
+        }
+
+        function carregarEntregas() {
+            // Captura Filtros
+            const termo = document.getElementById('filtroTextoEntregas')?.value || '';
+            const dataIni = document.getElementById('filtroDataIni')?.value || '';
+            const dataFim = document.getElementById('filtroDataFim')?.value || '';
+            const uvr = document.getElementById('filtroUvrTabela')?.value || '';
+            const funcao = document.getElementById('filtroFuncao')?.value || ''; // PEGA A FUNÇÃO
+
+            const params = new URLSearchParams({
+                q: termo,
+                data_ini: dataIni,
+                data_fim: dataFim,
+                uvr: uvr,
+                funcao: funcao // ENVIA PARA O PYTHON
+            });
+
+            fetch(`/api/get_entregas_epi?${params.toString()}`)
+                .then(r => r.json())
+                .then(data => {
+                    const tbody = document.querySelector('#tabelaEntregasEpi tbody');
+                    tbody.innerHTML = '';
+                    
+                    if (!Array.isArray(data) || data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Nenhuma entrega encontrada.</td></tr>';
+                        return;
+                    }
+                    
+                    data.forEach(item => {
+                        // Verifica se existe função, senão põe traço
+                        const funcaoTexto = item.funcao ? `<span class="badge bg-light text-dark border">${item.funcao}</span>` : '<span class="text-muted">-</span>';
+
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${item.data_entrega}</td>
+                                <td>${item.associado}</td>
+                                <td>${funcaoTexto}</td>
+                                <td>
+                                    <strong>${item.item}</strong>
+                                    ${item.ca ? `<br><small class="text-muted" style="font-size:0.7em">CA: ${item.ca}</small>` : ''}
+                                </td>
+                                <td>${item.quantidade} ${item.unidade || ''}</td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/gerar_declaracao_epi/${item.id}" target="_blank" class="btn btn-outline-secondary" title="Imprimir este"><i class="fas fa-print"></i></a>
+                                        <button class="btn btn-outline-info" onclick="abrirEdicao(${item.id})"><i class="fas fa-pen"></i></button>
+                                        <button class="btn btn-outline-danger" onclick="excluir(${item.id})"><i class="fas fa-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>`;
+                    });
+                })
+                .catch(err => {
+                    console.error("Erro:", err);
+                    document.querySelector('#tabelaEntregasEpi tbody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erro ao carregar dados.</td></tr>';
+                });
+        }
+
+        function abrirEdicao(id) {
+            fetch(`/get_entrega_epi_detalhe/${id}`).then(r=>r.json()).then(data => {
+                if(data.error) { alert(data.error); return; }
+                document.getElementById('edit_id_entrega').value = data.id;
+                document.getElementById('edit_associado').value = data.associado;
+                document.getElementById('edit_item').value = data.item;
+                document.getElementById('edit_quantidade').value = data.quantidade;
+                document.getElementById('edit_observacoes').value = data.observacoes;
+                document.getElementById('btnSalvarEntrega').textContent = usuarioIsAdmin ? 'Salvar' : 'Solicitar';
+                new bootstrap.Modal(document.getElementById('modalEditarEntregaEpi')).show();
+            });
+        }
+        
+        document.getElementById('formEditarEntregaEpi').onsubmit = function(e) {
+            e.preventDefault();
+            fetch('/editar_entrega_epi', { method: 'POST', body: new FormData(e.target) })
+                .then(r=>r.json()).then(d => { alert(d.message); carregarEntregas(); bootstrap.Modal.getInstance(document.getElementById('modalEditarEntregaEpi')).hide(); });
+        };
+
+        function excluir(id) {
+            if(confirm("Excluir entrega?")) fetch(`/excluir_entrega_epi/${id}`, {method:'POST'}).then(r=>r.json()).then(d=>{ alert(d.message); carregarEntregas(); });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if(document.querySelectorAll('.linha-item').length === 0) adicionarLinhaItem();
+            carregarEntregas();
+        });
+    </script>
+    <style>.fade-in { animation: fadeIn 0.4s; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }</style>
+</body>
+</html>

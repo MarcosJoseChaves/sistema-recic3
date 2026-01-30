@@ -1,0 +1,51 @@
+Tipo Transação;Grupo;Subgrupo;Item Descrição (Transação)
+Despesa;Despesas Administrativas;Impostos e Contribuições;Impostos/taxas
+Despesa;Rateio dos Associados;Impostos e Contribuições;INSS
+Despesa;Compras de Materiais;Compras de Materiais;EPIs e Uniformes
+Despesa;Serviços Contratados;Serviços Contratados;Obras e reformas
+Despesa;Rateio dos Associados;Rateio dos Associados;Rateio dos Associados
+Despesa;Outras Despesas;Transferências entre contas correntes;Transferências entre contas correntes (saída)
+Receita;Venda de Recicláveis;BATERIA ;Bateria
+Receita;Venda de Recicláveis;MOTOR ;Motor
+Receita;Venda de Recicláveis;SUCATA ;Sucata Celular
+Receita;Venda de Recicláveis;SUCATA ;Sucata Eletrônica
+Receita;Venda de Recicláveis;Alumínio;Alumínio Bloco
+Receita;Venda de Recicláveis;Alumínio;Alumínio Chaparia
+Receita;Venda de Recicláveis;Alumínio;Alumínio Latinha
+Receita;Venda de Recicláveis;Alumínio;Alumínio Panela
+Receita;Venda de Recicláveis;Cobre;Cobre Limpo (mel)
+Receita;Venda de Recicláveis;Cobre;Cobre Sujo
+Receita;Venda de Recicláveis;Ferroso;Ferro fundido
+Receita;Venda de Recicláveis;Outro Metal;Outro Metal
+Receita;Venda de Recicláveis;ÓLEO DE COZINHA ;Óleo de cozinha
+Receita;Venda de Recicláveis;Branco;Papel Branco
+Receita;Venda de Recicláveis;Cartonado;Papel Cartonado (tetrapak)
+Receita;Venda de Recicláveis;Cimento;Papel Cimento
+Receita;Venda de Recicláveis;Misto;Papel Misto (Caixa de ovo, livros, revistas, jornais)
+Receita;Venda de Recicláveis;Papelão;Papelão (Tubete de papelão, caixas em geral)
+Receita;Venda de Recicláveis;ABS;ABS Carcaça de eletrodomésticos (TV, monitor, etc)
+Receita;Venda de Recicláveis;BOPP ;BOPP Embalagens de salgadinho metalizada
+Receita;Venda de Recicláveis;OUTRO PLÁSTICO ;OUTRO PLÁSTICO
+Receita;Venda de Recicláveis;PEAD ;PEAD  Embalagens de produtos de limpeza
+Receita;Venda de Recicláveis;PEAD ;PEAD  Filme cristal
+Receita;Venda de Recicláveis;PEAD ;PEAD  Filme stretch
+Receita;Venda de Recicláveis;PEAD ;PEAD  Injeção (caixaria)
+Receita;Venda de Recicláveis;PEBD ;PEBD Filme (sacolinhas, sacos de lixo, lonas)
+Receita;Venda de Recicláveis;PET ;PET  Colorido
+Receita;Venda de Recicláveis;PET ;PET  Cristal
+Receita;Venda de Recicláveis;PET ;PET  Óleo
+Receita;Venda de Recicláveis;PET ;PET  Verde
+Receita;Venda de Recicláveis;PP ;PP  Mineral (copinho de água)
+Receita;Venda de Recicláveis;PP ;PP  Plástico Branco
+Receita;Venda de Recicláveis;PP ;PP  Plástico Colorido
+Receita;Venda de Recicláveis;PP ;PP  Preto
+Receita;Venda de Recicláveis;PP ;PP  Ráfia (sacaria, bigbag)
+Receita;Venda de Recicláveis;PP ;PP  Rígido (balde, bacia)
+Receita;Venda de Recicláveis;PS ;PS  Copos descartáveis
+Receita;Venda de Recicláveis;PVC;PVC Tubulações e forros (canos, forro, etc)
+Receita;Outras Receitas;Transferências entre contas;Transferências entre contas (entrada)
+Receita;Repasses Governamentais;Prestação de serviço à prefeitura;Fundo de Benefícios Sociais e Desenvolvimento Associativo (FBDS)
+Receita;Repasses Governamentais;Prestação de serviço à prefeitura;Valor Fixo (VF)
+Receita;Repasses Governamentais;Prestação de serviço à prefeitura;Valor por Produtividade (VP)
+Receita;Venda de Recicláveis;Caco;Vidro em caco
+Receita;Venda de Recicláveis;Inteiro;Vidro inteiro (Garrafas retornáveis, compota, pingas, garrafão)

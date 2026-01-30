@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Entrada de Estoque - Sistema Recic3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .filter-section { background-color: #e9ecef; border-radius: 8px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #198754; }
+        .label-admin { color: #0d6efd; font-weight: bold; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-7">
+                <div class="card p-4">
+                    <h4 class="mb-4 text-success"><i class="fas fa-boxes"></i> Nova Entrada de EPI</h4>
+                    
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'success' }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    <div class="filter-section">
+                        <small class="text-muted fw-bold d-block mb-2 text-uppercase"><i class="fas fa-filter"></i> 1. Encontre o item no catálogo</small>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <select class="form-select" id="busca_categoria" onchange="atualizarListaEPIs()">
+                                    <option value="">Todas as Categorias</option>
+                                    <option value="Alta Visibilidade / Sinalização">Alta Visibilidade</option>
+                                    <option value="Proteção Auditiva">Proteção Auditiva</option>
+                                    <option value="Proteção das Mãos e Braços">Proteção das Mãos</option>
+                                    <option value="Proteção do Tronco e Corpo">Proteção do Tronco</option>
+                                    <option value="Proteção dos Olhos e Face">Proteção Olhos/Face</option>
+                                    <option value="Proteção dos Pés e Pernas">Proteção Pés/Pernas</option>
+                                    <option value="Proteção Respiratória">Proteção Respiratória</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" id="busca_texto" 
+                                           placeholder="Nome ou C.A..." onkeyup="atualizarListaEPIs()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('entrada_epi') }}">
+                        
+                        {% if usuario and usuario.role == 'admin' %}
+                        <div class="mb-3 p-2 border border-primary rounded bg-light">
+                            <label for="uvr_destino" class="label-admin"><i class="fas fa-user-shield"></i> DESTINO DA ENTRADA (ADMIN)</label>
+                            <select class="form-select form-select-sm" name="uvr_destino" id="uvr_destino">
+                                <option value="UVR 01" {% if usuario.uvr_acesso == 'UVR 01' %}selected{% endif %}>UVR 01</option>
+                                <option value="UVR 02" {% if usuario.uvr_acesso == 'UVR 02' %}selected{% endif %}>UVR 02</option>
+                                <option value="ADM">Administração Central</option>
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label for="id_item" class="form-label fw-bold">Item do Catálogo *</label>
+                            <select class="form-select form-select-lg border-success" name="id_item" id="id_item" required>
+                                <option value="">-- Use os filtros acima --</option>
+                            </select>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="marca" class="form-label">Marca / Fabricante</label>
+                                <input type="text" class="form-control" name="marca" id="marca" placeholder="Ex: Volk, Kalipso...">
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="unidade" class="form-label">Unidade de Medida</label>
+                                <select class="form-select" name="unidade" id="unidade">
+                                    <option value="par">Par</option>
+                                    <option value="un" selected>Unidade (Peça)</option>
+                                    <option value="kit">Kit</option>
+                                    <option value="cx">Caixa</option>
+                                    <option value="pct">Pacote</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ca_epi" class="form-label">C.A. (Certificado de Aprovação)</label>
+                            <input type="text" class="form-control" name="ca_epi" id="ca_epi" placeholder="Ex: 12345">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="quantidade" class="form-label fw-bold">Quantidade Recebida *</label>
+                            <input type="number" class="form-control form-control-lg" name="quantidade" id="quantidade" min="0.001" step="0.001" required placeholder="0">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="observacao" class="form-label">Origem / Observação</label>
+                            <textarea class="form-control" name="observacao" rows="2" placeholder="Ex: Compra NF 123 ou Doação"></textarea>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-plus-circle"></i> Confirmar Entrada no Estoque
+                            </button>
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Voltar ao Menu</a>
+                        </div>
+                    </form>
+
+                    <hr class="my-5">
+
+                    <h5 class="mb-3"><i class="fas fa-history"></i> Entradas Recentes</h5>
+
+                    <div class="card bg-light mb-3 border-0">
+                        <div class="card-body py-3">
+                            <div class="row g-2 align-items-end">
+                                {% if usuario and usuario.role == 'admin' %}
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-primary">Unidade</label>
+                                    <select class="form-select" id="filtroUvrEntradas" onchange="carregarEntradas()">
+                                        <option value="">Todas</option>
+                                        <option value="UVR 01">UVR 01</option>
+                                        <option value="UVR 02">UVR 02</option>
+                                        <option value="GERAL">Geral</option>
+                                    </select>
+                                </div>
+                                {% endif %}
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted">Nome / CA</label>
+                                    <input type="text" class="form-control" id="filtroEntradaTexto" placeholder="Buscar...">
+                                </div>
+                                <div class="col-md-1">
+                                    <button class="btn btn-primary w-100" onclick="carregarEntradas()">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered" id="tabelaEntradasEpi">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Quantidade</th>
+                                    <th>Saldo Atual</th>
+                                    <th>Data</th>
+                                    <th>UVR</th>
+                                    <th>Obs.</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" class="text-center text-muted py-4">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="modal fade" id="modalEditarEntradaEpi" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form id="formEditarEntradaEpi">
+                                    <div class="modal-header bg-success text-white">
+                                        <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Entrada</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <input type="hidden" id="edit_id_movimento" name="id_movimento">
+                                        <div class="mb-3">
+                                            <label for="edit_item_nome" class="form-label">Item</label>
+                                            <input type="text" class="form-control" id="edit_item_nome" readonly>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="edit_quantidade" class="form-label">Quantidade *</label>
+                                            <input type="number" class="form-control" id="edit_quantidade" name="quantidade" step="0.01" min="0.01" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="edit_data_movimento" class="form-label">Data *</label>
+                                            <input type="date" class="form-control" id="edit_data_movimento" name="data_movimento" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="edit_marca" class="form-label">Marca</label>
+                                            <input type="text" class="form-control" id="edit_marca" name="marca">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="edit_observacao" class="form-label">Observação</label>
+                                            <input type="text" class="form-control" id="edit_observacao" name="observacao">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-success" id="btnSalvarEntrada"></button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        function atualizarListaEPIs() {
+            const categoria = document.getElementById('busca_categoria').value;
+            const texto = document.getElementById('busca_texto').value;
+            const selectEpi = document.getElementById('id_item');
+
+            selectEpi.innerHTML = '<option value="">Buscando itens...</option>';
+
+            fetch(`/api/get_epis_filtrados?q=${encodeURIComponent(texto)}&categoria=${encodeURIComponent(categoria)}`)
+                .then(response => response.json())
+                .then(data => {
+                    selectEpi.innerHTML = '<option value="">-- Selecione o item correto --</option>';
+                    
+                    if (data.length === 0) {
+                        selectEpi.innerHTML = '<option value="">Nenhum item encontrado</option>';
+                        return;
+                    }
+
+                    data.forEach(epi => {
+                        const option = document.createElement('option');
+                        option.value = epi.id;
+                        option.dataset.ca = epi.ca || '';
+                        option.textContent = `${epi.nome} (CA: ${epi.ca || 'N/A'})`;
+                        selectEpi.appendChild(option);
+                    });
+                    atualizarCaEpi();
+                })
+                .catch(err => {
+                    console.error("Erro ao buscar EPIs:", err);
+                    selectEpi.innerHTML = '<option value="">Erro ao carregar lista</option>';
+                });
+        }
+
+        function atualizarCaEpi() {
+            const selectEpi = document.getElementById('id_item');
+            const campoCa = document.getElementById('ca_epi');
+            if (!selectEpi || !campoCa) return;
+            const option = selectEpi.options[selectEpi.selectedIndex];
+            campoCa.value = option?.dataset?.ca || '';
+        }
+
+        const usuarioIsAdmin = {% if usuario and usuario.role == 'admin' %}true{% else %}false{% endif %};
+
+        function carregarEntradas() {
+            const termo = document.getElementById('filtroEntradaTexto')?.value || '';
+            const uvr = document.getElementById('filtroUvrEntradas')?.value || '';
+            const url = `/buscar_entradas_epi?q=${encodeURIComponent(termo)}&uvr=${encodeURIComponent(uvr)}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector('#tabelaEntradasEpi tbody');
+                    tbody.innerHTML = '';
+
+                    if (!Array.isArray(data) || data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nenhuma entrada encontrada.</td></tr>';
+                        return;
+                    }
+
+                    data.forEach(item => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td><strong>${item.nome}</strong><br><small class="text-muted">CA: ${item.ca || 'N/A'}</small></td>
+                                <td>${item.quantidade}</td>
+                                <td>${item.saldo_atual}</td>
+                                <td>${item.data_movimento || '-'}</td>
+                                <td>${item.uvr || '-'}</td>
+                                <td>${item.observacao || '-'}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-info text-white me-1" onclick="abrirEdicaoEntrada(${item.id})" title="Editar"><i class="fas fa-pen"></i></button>
+                                    <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoEntrada(${item.id}, '${item.nome.replace(/'/g, "\\'")}')" title="Excluir"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>`;
+                    });
+                })
+                .catch(err => {
+                    console.error("Erro ao buscar entradas:", err);
+                    document.querySelector('#tabelaEntradasEpi tbody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erro ao carregar entradas.</td></tr>';
+                });
+        }
+
+        function abrirEdicaoEntrada(id) {
+            fetch(`/get_entrada_epi_detalhe/${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    document.getElementById('edit_id_movimento').value = data.id;
+                    document.getElementById('edit_item_nome').value = `${data.nome} (CA: ${data.ca || 'N/A'})`;
+                    document.getElementById('edit_quantidade').value = data.quantidade;
+                    document.getElementById('edit_data_movimento').value = data.data_movimento || '';
+                    document.getElementById('edit_marca').value = data.marca || '';
+                    document.getElementById('edit_observacao').value = data.observacao || '';
+                    document.getElementById('btnSalvarEntrada').textContent = usuarioIsAdmin ? 'Salvar Alterações' : 'Solicitar Alteração';
+
+                    const modal = new bootstrap.Modal(document.getElementById('modalEditarEntradaEpi'));
+                    modal.show();
+                })
+                .catch(err => {
+                    console.error("Erro ao carregar entrada:", err);
+                    alert("Erro ao carregar detalhes da entrada.");
+                });
+        }
+
+        document.getElementById('formEditarEntradaEpi').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            fetch('/editar_entrada_epi', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    alert(data.message || 'Solicitação enviada.');
+                    carregarEntradas();
+                    const modalEl = document.getElementById('modalEditarEntradaEpi');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    modal.hide();
+                })
+                .catch(err => {
+                    console.error("Erro ao salvar entrada:", err);
+                    alert("Erro ao salvar alterações.");
+                });
+        });
+
+        function solicitarExclusaoEntrada(id, nome) {
+            const texto = usuarioIsAdmin
+                ? `Deseja realmente excluir a entrada do item "${nome}"?`
+                : `Deseja solicitar a exclusão da entrada do item "${nome}"?
+O administrador precisará aprovar.`;
+
+            if (!confirm(texto)) return;
+
+            fetch(`/excluir_entrada_epi/${id}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    alert(data.message || 'Solicitação enviada.');
+                    carregarEntradas();
+                })
+                .catch(err => {
+                    console.error("Erro ao excluir entrada:", err);
+                    alert("Erro ao processar exclusão.");
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            atualizarListaEPIs();
+            const selectEpi = document.getElementById('id_item');
+            if (selectEpi) selectEpi.addEventListener('change', atualizarCaEpi);
+            carregarEntradas();
+        });
+    </script>
+</body>
+</html>
