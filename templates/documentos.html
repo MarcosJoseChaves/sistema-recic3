@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestão de Documentos - Sistema Recic3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Favicon dummy para evitar erro 404 no console -->
+    <link rel="icon" href="data:,">
+    
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .status-badge { font-size: 0.85em; padding: 6px 12px; border-radius: 50px; font-weight: 600; }
+        .campo-dinamico { transition: all 0.3s ease; }
+        .table thead th { background-color: #212529; color: white; border: none; text-transform: uppercase; font-size: 0.8rem; }
+        .btn-acao { width: 32px; height: 32px; padding: 0; line-height: 32px; text-align: center; border-radius: 6px; display: inline-block; margin-bottom: 2px; border: 1px solid transparent; transition: 0.2s; cursor: pointer; }
+        .btn-acao:hover { opacity: 0.8; transform: scale(1.05); }
+        .filter-section { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #dee2e6; }
+    </style>
+</head>
+<body>
+
+<!-- Garante que a página não quebre se o backend esquecer de enviar a variável filtros -->
+{% set filtros = filtros|default({}) %}
+
+<div class="container">
+    <!-- MENSAGENS DE FEEDBACK -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="fas fa-folder-open text-primary"></i> Central de Documentos</h3>
+        <a href="/" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Dashboard</a>
+    </div>
+
+    <!-- ÁREA DE NOVO UPLOAD -->
+    <div class="card p-4 mb-4 shadow-sm bg-white border-top border-primary border-4">
+        <h5 class="mb-3 text-primary"><i class="fas fa-cloud-upload-alt"></i> Novo Upload</h5>
+        <form action="/documentos" method="POST" enctype="multipart/form-data">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">1. Unidade (UVR)</label>
+                    <select name="uvr" class="form-select" required {% if current_user.role != 'admin' %} style="pointer-events: none; background-color: #e9ecef;" {% endif %}>
+                        {% if current_user.role == 'admin' %}
+                            <option value="">Selecione...</option>
+                            <option value="UVR 01">UVR 01</option>
+                            <option value="UVR 02">UVR 02</option>
+                        {% else %}
+                            <option value="{{ current_user.uvr_acesso }}" selected>{{ current_user.uvr_acesso }}</option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label text-muted fw-bold">2. Periodicidade</label>
+                    <select id="upload_filtro_periodo" class="form-select bg-light" onchange="filtrarOpcoesUpload()">
+                        <option value="">Todas</option>
+                        <option value="Mensal">📅 Mensal</option>
+                        <option value="Geral">📁 Geral</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label text-muted fw-bold">3. Área</label>
+                    <select id="upload_filtro_area" class="form-select bg-light" onchange="filtrarOpcoesUpload()">
+                        <option value="">Todas</option>
+                        <option value="Financeiro">💰 Financeiro</option>
+                        <option value="Fiscal">⚖️ Fiscal</option>
+                        <option value="Trabalhista">👥 Trabalhista</option>
+                        <option value="Operacional">♻️ Operacional</option>
+                        <option value="Institucional">🏢 Institucional</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label text-primary fw-bold">4. Tipo de Documento</label>
+                    <select id="tipo_documento" name="tipo_documento" class="form-select border-primary" onchange="atualizarCamposDinamicos()" required>
+                        <option value="">-- Filtre para selecionar --</option>
+                        {% for tipo in tipos %}
+                            <option value="{{ tipo.id }}" 
+                                    data-categoria="{{ tipo.categoria }}"
+                                    data-validade="{{ 'True' if tipo.exige_validade else 'False' }}"
+                                    data-valor="{{ 'True' if tipo.exige_valor else 'False' }}"
+                                    data-comp="{{ 'True' if tipo.exige_competencia else 'False' }}">
+                                {{ tipo.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-3 campo-dinamico" id="div-competencia" style="display:none;">
+                    <label class="form-label">Competência</label>
+                    <input type="month" name="competencia" class="form-control">
+                </div>
+                <div class="col-md-3 campo-dinamico" id="div-validade" style="display:none;">
+                    <label class="form-label">Validade</label>
+                    <input type="date" name="data_validade" class="form-control">
+                </div>
+                <div class="col-md-3 campo-dinamico" id="div-valor" style="display:none;">
+                    <label class="form-label">Valor (R$)</label>
+                    <input type="text" name="valor" class="form-control money" placeholder="0,00">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label text-muted">Nº Referência</label>
+                    <input type="text" name="numero_referencia" class="form-control" placeholder="Ex: NF-123">
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Anexar Arquivo</label>
+                    <input type="file" name="arquivo_upload" class="form-control" required>
+                </div>
+
+                <div class="col-12 mt-3 text-end">
+                    <button type="submit" class="btn btn-primary btn-lg px-5 shadow-sm"><i class="fas fa-save"></i> Enviar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- SEÇÃO DE FILTROS (Posicionada acima da listagem) -->
+    <div class="filter-section shadow-sm">
+        <form action="/documentos" method="GET" class="row g-3">
+            <h6 class="text-secondary fw-bold mb-0"><i class="fas fa-filter"></i> Filtrar Histórico</h6>
+            
+            {% if current_user.role == 'admin' %}
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Unidade (UVR)</label>
+                <select name="filtro_uvr" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="UVR 01" {{ 'selected' if filtros.uvr == 'UVR 01' }}>UVR 01</option>
+                    <option value="UVR 02" {{ 'selected' if filtros.uvr == 'UVR 02' }}>UVR 02</option>
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Ref. Inicial</label>
+                <input type="month" name="mes_inicio" class="form-control form-control-sm" value="{{ filtros.mes_inicio }}">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Ref. Final</label>
+                <input type="month" name="mes_fim" class="form-control form-control-sm" value="{{ filtros.mes_fim }}">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Tipo</label>
+                <select name="tipo_documento" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for t in tipos %}
+                    <option value="{{ t.id }}" {{ 'selected' if filtros.tipo == t.id|string }}>{{ t.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="Pendente" {{ 'selected' if filtros.status == 'Pendente' }}>Pendente</option>
+                    <option value="Aprovado" {{ 'selected' if filtros.status == 'Aprovado' }}>Aprovado</option>
+                    <option value="Reprovado" {{ 'selected' if filtros.status == 'Reprovado' }}>Reprovado</option>
+                </select>
+            </div>
+
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i></button>
+                <a href="/documentos" class="btn btn-outline-secondary btn-sm w-100" title="Limpar"><i class="fas fa-eraser"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <!-- LISTA DE DOCUMENTOS -->
+    <div class="table-responsive">
+        <table class="table table-hover bg-white rounded shadow-sm align-middle border">
+            <thead>
+                <tr>
+                    <th class="ps-3">Envio</th>
+                    <th>Unidade</th>
+                    <th>Documento</th>
+                    <th>Informações</th>
+                    <th>Status Auditoria</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documentos %}
+                <tr>
+                    <td class="ps-3"><small class="fw-bold">{{ doc.data_envio.strftime('%d/%m/%Y') if doc.data_envio else '-' }}</small></td>
+                    <td><span class="badge bg-secondary">{{ doc.uvr }}</span></td>
+                    <td>
+                        <div class="fw-bold text-dark">{{ doc.nome_tipo }}</div>
+                        <div class="text-muted text-uppercase" style="font-size: 0.65rem;">{{ doc.categoria }}</div>
+                    </td>
+                    <td style="font-size: 0.85rem;">
+                        {% if doc.competencia %} <div class="text-muted">Ref: {{ doc.competencia }}</div> {% endif %}
+                        {% if doc.valor %} <div class="text-success fw-bold">R$ {{ doc.valor }}</div> {% endif %}
+                        {% if doc.numero_referencia %} <div class="text-muted">Nº {{ doc.numero_referencia }}</div> {% endif %}
+                    </td>
+                    <td>
+                        {% if doc.status == 'Pendente' %}
+                            <span class="status-badge bg-warning text-dark"><i class="fas fa-clock"></i> AGUARDANDO</span>
+                        {% elif doc.status == 'Aprovado' %}
+                            <span class="status-badge bg-success text-white"><i class="fas fa-check-circle"></i> OK</span>
+                        {% elif doc.status == 'Reprovado' %}
+                            <span class="status-badge bg-danger text-white"><i class="fas fa-times-circle"></i> CORRIGIR</span>
+                            {% if doc.motivo_rejeicao %}
+                                <div class="mt-1 small text-danger" style="font-size: 0.7rem;">{{ doc.motivo_rejeicao }}</div>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="text-center" style="white-space: nowrap;">
+                        <!-- Ver Arquivo -->
+                        {% if doc.caminho_arquivo %}
+                        {% set doc_url = doc.url_visualizacao or doc.caminho_arquivo %}
+                        {% if not doc_url.startswith('http') %}
+                        {% set doc_url = '/uploads/' ~ doc_url %}
+                        {% endif %}
+                        <a href="{{ doc_url }}" target="_blank" class="btn btn-acao btn-outline-primary" title="Ver Arquivo"><i class="fas fa-eye"></i></a>
+                        {% endif %}
+                        
+                        <!-- Auditoria (Admin) -->
+                        {% if current_user.role == 'admin' and doc.status == 'Pendente' %}
+                            <a href="/aprovar_documento_direto/{{ doc.id }}" class="btn btn-acao btn-success" title="Aprovar"><i class="fas fa-check"></i></a>
+                            <button type="button" class="btn btn-acao btn-danger btn-reprovar-doc" data-id="{{ doc.id }}" title="Reprovar"><i class="fas fa-exclamation-circle"></i></button>
+                        {% endif %}
+
+                        <!-- Editar -->
+                        <button type="button" class="btn btn-acao btn-outline-warning btn-editar-doc" 
+                                data-doc="{{ doc|tojson|forceescape }}" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+
+                        <!-- Excluir (Recuperado) -->
+                        <a href="/excluir_documento/{{ doc.id }}" class="btn btn-acao btn-outline-danger" 
+                           onclick="return confirm('Deseja realmente solicitar a EXCLUSÃO?')" title="Excluir">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center p-5 text-muted">Nenhum documento encontrado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- MODAL EDITAR -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title fw-bold">Editar Documento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/editar_documento" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" name="id_documento" id="edit_id">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Competência</label>
+                            <input type="month" name="competencia" id="edit_competencia" class="form-control">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Validade</label>
+                            <input type="date" name="data_validade" id="edit_validade" class="form-control">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Valor (R$)</label>
+                            <input type="text" name="valor" id="edit_valor" class="form-control money">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Nº Referência</label>
+                            <input type="text" name="numero_referencia" id="edit_numero" class="form-control">
+                        </div>
+                        <div class="col-12 bg-light p-3 rounded border">
+                            <label class="form-label small fw-bold text-primary">Substituir Arquivo (Opcional)</label>
+                            <input type="file" name="arquivo_upload" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Observações</label>
+                            <textarea name="observacoes" id="edit_observacoes" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning fw-bold px-4">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL REPROVAR -->
+<div class="modal fade" id="modalReprovar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white border-0">
+                <h5 class="modal-title fw-bold">Solicitar Correção</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/reprovar_documento_com_obs" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="id_documento" id="reprovar_id">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">O que deve ser corrigido?</label>
+                        <textarea name="motivo_rejeicao" class="form-control" rows="4" required placeholder="Explique o motivo da reprovação..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Voltar</button>
+                    <button type="submit" class="btn btn-danger fw-bold px-4">Enviar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    function abrirModalEditar(doc) {
+        if (!doc) return;
+        document.getElementById('edit_id').value = doc.id || '';
+        if (doc.competencia) {
+            document.getElementById('edit_competencia').value = String(doc.competencia).substring(0, 7);
+        } else {
+            document.getElementById('edit_competencia').value = '';
+        }
+        if (doc.data_validade) {
+            document.getElementById('edit_validade').value = String(doc.data_validade).substring(0, 10);
+        } else {
+            document.getElementById('edit_validade').value = '';
+        }
+        document.getElementById('edit_valor').value = doc.valor || '';
+        document.getElementById('edit_numero').value = doc.numero_referencia || '';
+        document.getElementById('edit_observacoes').value = doc.observacoes || '';
+        var editModal = new bootstrap.Modal(document.getElementById('modalEditar'));
+        editModal.show();
+    }
+
+    function abrirModalReprovar(id) {
+        document.getElementById('reprovar_id').value = id;
+        var reprovarModal = new bootstrap.Modal(document.getElementById('modalReprovar'));
+        reprovarModal.show();
+    }
+
+    function filtrarOpcoesUpload() {
+        var periodo = $('#upload_filtro_periodo').val();
+        var area = $('#upload_filtro_area').val();
+        var select = $('#tipo_documento');
+        var options = select.data('options');
+        if (!options) return;
+        select.empty().append('<option value="">Selecione...</option>');
+        options.each(function() {
+            var cat = $(this).attr('data-categoria');
+            if (!cat) return;
+            if ((!periodo || cat.includes(periodo)) && (!area || cat.includes(area))) {
+                select.append($(this));
+            }
+        });
+        atualizarCamposDinamicos();
+    }
+
+    function atualizarCamposDinamicos() {
+        var option = $('#tipo_documento option:selected');
+        if (!option.val()) {
+            $('.campo-dinamico').fadeOut();
+            return;
+        }
+        $('#div-validade').toggle(option.attr("data-validade") === "True");
+        $('#div-valor').toggle(option.attr("data-valor") === "True");
+        $('#div-competencia').toggle(option.attr("data-comp") === "True");
+    }
+
+    $(document).ready(function(){
+        $('.money').mask('#.##0,00', {reverse: true});
+        var $selectType = $('#tipo_documento');
+        $selectType.data('options', $selectType.find('option').clone());
+        filtrarOpcoesUpload();
+        $(document).on('click', '.btn-editar-doc', function(e) {
+            e.preventDefault();
+            var docData = $(this).data('doc');
+            abrirModalEditar(docData);
+        });
+        $(document).on('click', '.btn-reprovar-doc', function(e) {
+            e.preventDefault();
+            var docId = $(this).data('id');
+            abrirModalReprovar(docId);
+        });
+    });
+</script>
+</body>
+</html>
