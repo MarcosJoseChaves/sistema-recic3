@@ -221,11 +221,15 @@
                     <td class="text-center" style="white-space: nowrap;">
                         <!-- Ver Arquivo -->
                         {% if doc.caminho_arquivo %}
+<<<<<<< HEAD
                         {% set doc_url = doc.url_visualizacao or doc.caminho_arquivo %}
                         {% if not doc_url.startswith('http') %}
                         {% set doc_url = '/uploads/' ~ doc_url %}
                         {% endif %}
                         <a href="{{ doc_url }}" target="_blank" class="btn btn-acao btn-outline-primary" title="Ver Arquivo"><i class="fas fa-eye"></i></a>
+=======
+                        <a href="/uploads/{{ doc.caminho_arquivo }}" target="_blank" class="btn btn-acao btn-outline-primary" title="Ver Arquivo"><i class="fas fa-eye"></i></a>
+>>>>>>> 77e4d685e59de7ba044e90f8d267474a6dd9476b
                         {% endif %}
                         
                         <!-- Auditoria (Admin) -->

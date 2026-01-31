@@ -5962,7 +5962,11 @@ function visualizarAssociado(id) {
         // 4. Lógica da Foto
         if (data.foto_base64 && data.foto_base64.length > 50) {
             let src = data.foto_base64;
+<<<<<<< HEAD
             if (!src.startsWith('data:image') && !src.startsWith('http')) src = 'data:image/jpeg;base64,' + src;
+=======
+            if (!src.startsWith('data:image')) src = 'data:image/jpeg;base64,' + src;
+>>>>>>> 77e4d685e59de7ba044e90f8d267474a6dd9476b
             $('#verAssocFoto').attr('src', src).show();
             $('#verAssocIcone').hide();
         } else {
@@ -6029,7 +6033,11 @@ function iniciarEdicaoAssociado(id) {
         // Carrega Foto
         if (data.foto_base64 && data.foto_base64.length > 50) {
             let src = data.foto_base64;
+<<<<<<< HEAD
             if (!src.startsWith('data:image') && !src.startsWith('http')) src = 'data:image/jpeg;base64,' + src;
+=======
+            if (!src.startsWith('data:image')) src = 'data:image/jpeg;base64,' + src;
+>>>>>>> 77e4d685e59de7ba044e90f8d267474a6dd9476b
             $('#previewFoto').attr('src', src).show();
             $('#iconSemFotoAssociado').hide();
             $('#fotoBase64').val(src);

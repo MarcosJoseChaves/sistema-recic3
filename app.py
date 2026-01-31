@@ -841,6 +841,9 @@ def cadastrar_associado():
                 foto_processada,
                 folder="associados",
             ) or foto_processada
+
+            foto_final = foto_processada
+
         
         # 2. Backup: Se o JS falhar e enviar arquivo bruto
         elif 'foto' in request.files:
