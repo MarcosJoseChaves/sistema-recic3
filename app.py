@@ -502,9 +502,15 @@ def criar_tabelas_se_nao_existir():
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, id_tipo INTEGER REFERENCES tipos_documentos(id),
                 caminho_arquivo VARCHAR(255), nome_original VARCHAR(255), competencia DATE, data_validade DATE,
                 valor DECIMAL(12, 2), numero_referencia VARCHAR(100), observacoes TEXT, enviado_por VARCHAR(100),
-                data_envio TIMESTAMP DEFAULT NOW(), status VARCHAR(20) DEFAULT 'Pendente'
+                data_envio TIMESTAMP DEFAULT NOW(), status VARCHAR(20) DEFAULT 'Pendente', motivo_rejeicao TEXT
             )
         """)
+
+        try:
+            cur.execute("ALTER TABLE documentos ADD COLUMN IF NOT EXISTS motivo_rejeicao TEXT;")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
 
         conn.commit()
     except psycopg2.Error as e:
@@ -558,6 +564,20 @@ def migrar_dados_antigos_produtos():
         app.logger.error(f"Erro na migração de produtos: {e}")
     finally:
         if conn: conn.close()
+
+_estrutura_db_garantida = False
+
+@app.before_request
+def garantir_estrutura_documentos():
+    global _estrutura_db_garantida
+    if _estrutura_db_garantida:
+        return
+
+    try:
+        criar_tabelas_se_nao_existir()
+        _estrutura_db_garantida = True
+    except Exception as e:
+        app.logger.error(f"Erro ao garantir estrutura do banco: {e}")
 
 # CHAMADA DA MIGRAÇÃO (Cole isso logo após a definição da função acima)
 migrar_dados_antigos_produtos()
