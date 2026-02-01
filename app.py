@@ -687,7 +687,48 @@ def alterar_senha():
 def index():
     """Renderiza a página principal com os formulários."""
     # Passamos o 'current_user' para o HTML saber quem está logado
-    return render_template("cadastro.html", usuario=current_user)
+    status_resumo = None
+    conn = conectar_banco()
+    cursor = conn.cursor()
+    try:
+        if current_user.role != 'admin':
+            cursor.execute("""
+                SELECT status, COUNT(*) 
+                FROM documentos
+                WHERE uvr = %s AND status IN ('Aprovado', 'Reprovado')
+                GROUP BY status
+            """, (current_user.uvr_acesso,))
+            resultados = cursor.fetchall()
+            aprovados = 0
+            reprovados = 0
+            for status, total in resultados:
+                if status == 'Aprovado':
+                    aprovados = total
+                elif status == 'Reprovado':
+                    reprovados = total
+            if aprovados or reprovados:
+                status_resumo = {
+                    "aprovados": aprovados,
+                    "reprovados": reprovados,
+                }
+        else:
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM documentos
+                WHERE status = 'Pendente'
+            """)
+            pendentes = cursor.fetchone()[0]
+            if pendentes:
+                status_resumo = {
+                    "pendentes": pendentes,
+                }
+    except Exception as e:
+        app.logger.error(f"Erro ao buscar resumo de documentos: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template("cadastro.html", usuario=current_user, status_resumo=status_resumo)
 
 # Substitua sua função buscar_cep por esta
 @app.route("/buscar_cep/<string:cep_numeros>", methods=["GET"])
@@ -6088,6 +6129,22 @@ def documentos():
         cursor.execute(sql, tuple(params))
         documentos = cursor.fetchall()
 
+        status_resumo = None
+        if current_user.role != 'admin':
+            aprovados = sum(1 for doc in documentos if doc.get('status') == 'Aprovado')
+            reprovados = sum(1 for doc in documentos if doc.get('status') == 'Reprovado')
+            if aprovados or reprovados:
+                status_resumo = {
+                    "aprovados": aprovados,
+                    "reprovados": reprovados,
+                }
+        else:
+            pendentes = sum(1 for doc in documentos if doc.get('status') == 'Pendente')
+            if pendentes:
+                status_resumo = {
+                    "pendentes": pendentes,
+                }
+
         # Dicionário para persistência dos campos no Canvas
         filtros_template = {
             "uvr": f_uvr,
@@ -6116,6 +6173,7 @@ def documentos():
             documentos=documentos,
             tipos=tipos_documentos,
             filtros=filtros_template, # Essencial para manter os filtros na tela
+            status_resumo=status_resumo,
             now=date.today()
         )
 

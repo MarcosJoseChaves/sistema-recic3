@@ -89,6 +89,27 @@
         </div>
     </div>
 
+    {% if status_resumo %}
+      {% if current_user.role != 'admin' %}
+        {% if status_resumo.aprovados %}
+          <div class="alert alert-success shadow-sm" role="alert">
+            Você tem {{ status_resumo.aprovados }} documento(s) aprovado(s). Confira a lista em Documentos.
+          </div>
+        {% endif %}
+        {% if status_resumo.reprovados %}
+          <div class="alert alert-warning shadow-sm" role="alert">
+            Você tem {{ status_resumo.reprovados }} documento(s) com correções pendentes. Veja o motivo em Documentos.
+          </div>
+        {% endif %}
+      {% else %}
+        {% if status_resumo.pendentes %}
+          <div class="alert alert-info shadow-sm" role="alert">
+            Existem {{ status_resumo.pendentes }} documento(s) aguardando conferência dos usuários.
+          </div>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
     <div class="d-flex flex-wrap gap-2 mb-4">
         
         <button class="btn btn-primary" onclick="mostrarFormulario('associadoForm')">
