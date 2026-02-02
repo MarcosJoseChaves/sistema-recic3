@@ -199,6 +199,16 @@ def validar_cnpj(cnpj):
 def validar_cep(cep):
     return len(re.sub(r'[^0-9]', '', cep)) == 8
 
+def validar_cnpj(cnpj):
+    digito1 = (11 - (soma % 11)) % 10 if (soma % 11) > 1 else 0
+    if int(cnpj[12]) != digito1: return False
+    soma = sum(int(cnpj[i]) * ([6,5,4,3,2,9,8,7,6,5,4,3,2][i]) for i in range(13))
+    digito2 = (11 - (soma % 11)) % 10 if (soma % 11) > 1 else 0
+    return int(cnpj[13]) == digito2
+
+def validar_cep(cep):
+    return len(re.sub(r'[^0-9]', '', cep)) == 8
+
 def validar_cpf(cpf):
     cpf = re.sub(r'[^0-9]', '', cpf)
     if len(cpf) != 11 or cpf == cpf[0] * 11: return False
@@ -215,7 +225,8 @@ def criar_tabelas_se_nao_existir():
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        
+
+       
         # 1. Tabelas Base (Cadastros)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS cadastros (
@@ -2191,49 +2202,19 @@ def editar_transacao():
                 """, (id_transacao, item['descricao'], item['unidade'], item['quantidade'], item['valor_unitario'], item['valor_total_item']))
 
             if anexar_documento:
-                data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
-                nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
-                competencia = date(data_documento.year, data_documento.month, 1)
-                numero_referencia = cabecalho.get("numero_documento", "")
-
-                cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
-                tipo_doc = cur.fetchone()
-                if not tipo_doc:
-                    raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
-                id_tipo_documento = tipo_doc[0]
-
-                nome_original = arquivo_nf.filename
-                import time
-                timestamp = int(time.time())
-                extensao = os.path.splitext(nome_original)[1]
-                nome_arquivo_salvo = f"nf_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
-                file_format = extensao.lstrip('.') if extensao else None
-
-                url_cloud = _upload_file_to_cloudinary(
-                    arquivo_nf,
-                    folder="documentos",
-                    public_id=f"nf_transacao_{cabecalho['uvr']}_{timestamp}",
-                    resource_type="raw",
-                    file_format=file_format,
+                anexo = _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total_novo, id_transacao, cur)
+                _substituir_documento_transacao(
+                    cur,
+                    cabecalho["uvr"],
+                    anexo["id_tipo_documento"],
+                    anexo["caminho_arquivo"],
+                    anexo["nome_original"],
+                    datetime.strptime(anexo["competencia"], '%Y-%m-%d').date(),
+                    anexo["valor"],
+                    anexo["numero_referencia"],
+                    anexo["enviado_por"],
+                    anexo["observacoes"],
                 )
-                if url_cloud:
-                    nome_arquivo_salvo = url_cloud
-                else:
-                    os.makedirs('uploads', exist_ok=True)
-                    arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
-
-                observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}."
-                cur.execute("""
-                    INSERT INTO documentos
-                    (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
-                     data_validade, valor, numero_referencia, observacoes,
-                     enviado_por, status)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
-                """, (
-                    cabecalho["uvr"], id_tipo_documento, nome_arquivo_salvo, nome_original,
-                    competencia, None, valor_total_novo,
-                    numero_referencia, observacoes_doc, current_user.username
-                ))
             
             conn.commit()
             return redirect(url_for("sucesso_transacao")) # Reutiliza página de sucesso
@@ -2243,57 +2224,18 @@ def editar_transacao():
             cabecalho['itens'] = itens_processados
             cabecalho['descricao_visual'] = f"Edição NF {cabecalho['numero_documento']} - {cabecalho['nome_origem']}"
             
+            if anexar_documento:
+                cabecalho["documento_anexo"] = _preparar_documento_anexo(
+                    arquivo_nf, cabecalho, valor_total_novo, id_transacao, cur
+                )
+            
             cur.execute("""
                 INSERT INTO solicitacoes_alteracao 
                 (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
                 VALUES (%s, %s, %s, %s, %s)
             """, ('transacoes_financeiras', id_transacao, 'EDICAO', json.dumps(cabecalho), current_user.username))
 
-            if anexar_documento:
-                data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
-                nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
-                competencia = date(data_documento.year, data_documento.month, 1)
-                numero_referencia = cabecalho.get("numero_documento", "")
-
-                cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
-                tipo_doc = cur.fetchone()
-                if not tipo_doc:
-                    raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
-                id_tipo_documento = tipo_doc[0]
-
-                nome_original = arquivo_nf.filename
-                import time
-                timestamp = int(time.time())
-                extensao = os.path.splitext(nome_original)[1]
-                nome_arquivo_salvo = f"nf_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
-                file_format = extensao.lstrip('.') if extensao else None
-
-                url_cloud = _upload_file_to_cloudinary(
-                    arquivo_nf,
-                    folder="documentos",
-                    public_id=f"nf_transacao_{cabecalho['uvr']}_{timestamp}",
-                    resource_type="raw",
-                    file_format=file_format,
-                )
-                if url_cloud:
-                    nome_arquivo_salvo = url_cloud
-                else:
-                    os.makedirs('uploads', exist_ok=True)
-                    arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
-
-                observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}."
-                cur.execute("""
-                    INSERT INTO documentos
-                    (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
-                     data_validade, valor, numero_referencia, observacoes,
-                     enviado_por, status)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
-                """, (
-                    cabecalho["uvr"], id_tipo_documento, nome_arquivo_salvo, nome_original,
-                    competencia, None, valor_total_novo,
-                    numero_referencia, observacoes_doc, current_user.username
-                ))
-            
+         
             conn.commit()
             return pagina_sucesso_base("Solicitação Enviada", "A edição da transação foi enviada para aprovação.")
 
@@ -3110,6 +3052,104 @@ def _format_decimal_quantidade(value_str):
         return '{:,.3f}'.format(dec_val).replace(',', 'v').replace('.', ',').replace('v', '.')
     except InvalidOperation:
         return value_str
+
+def _substituir_documento_transacao(cur, uvr, id_tipo_documento, caminho_arquivo, nome_original, competencia,
+                                    valor, numero_referencia, enviado_por, observacoes):
+    cur.execute("""
+        SELECT id, caminho_arquivo
+        FROM documentos
+        WHERE uvr = %s AND id_tipo = %s AND numero_referencia = %s
+        ORDER BY id DESC
+        LIMIT 1
+    """, (uvr, id_tipo_documento, numero_referencia))
+    existente = cur.fetchone()
+
+    if existente:
+        doc_id, caminho_antigo = existente
+        if caminho_antigo:
+            if str(caminho_antigo).startswith("http"):
+                _delete_cloudinary_asset(
+                    caminho_antigo,
+                    resource_type=_detect_cloudinary_resource_type(caminho_antigo),
+                )
+            else:
+                caminho_local = os.path.join('uploads', caminho_antigo)
+                if os.path.exists(caminho_local):
+                    os.remove(caminho_local)
+
+        cur.execute("""
+            UPDATE documentos SET
+                caminho_arquivo=%s,
+                nome_original=%s,
+                competencia=%s,
+                data_validade=%s,
+                valor=%s,
+                numero_referencia=%s,
+                observacoes=%s,
+                enviado_por=%s,
+                status='Pendente',
+                motivo_rejeicao=NULL
+            WHERE id=%s
+        """, (
+            caminho_arquivo, nome_original, competencia, None, valor,
+            numero_referencia, observacoes, enviado_por, doc_id
+        ))
+    else:
+        cur.execute("""
+            INSERT INTO documentos
+            (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+             data_validade, valor, numero_referencia, observacoes,
+             enviado_por, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+        """, (
+            uvr, id_tipo_documento, caminho_arquivo, nome_original,
+            competencia, None, valor, numero_referencia,
+            observacoes, enviado_por
+        ))
+
+def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, cur):
+    data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
+    nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
+    competencia = date(data_documento.year, data_documento.month, 1)
+    numero_referencia = cabecalho.get("numero_documento", "")
+
+    cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
+    tipo_doc = cur.fetchone()
+    if not tipo_doc:
+        raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
+    id_tipo_documento = tipo_doc[0]
+
+    nome_original = arquivo_nf.filename
+    import time
+    timestamp = int(time.time())
+    extensao = os.path.splitext(nome_original)[1]
+    nome_arquivo_salvo = f"nf_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
+    file_format = extensao.lstrip('.') if extensao else None
+
+    url_cloud = _upload_file_to_cloudinary(
+        arquivo_nf,
+        folder="documentos",
+        public_id=f"nf_transacao_{cabecalho['uvr']}_{timestamp}",
+        resource_type="raw",
+        file_format=file_format,
+    )
+    if url_cloud:
+        nome_arquivo_salvo = url_cloud
+    else:
+        os.makedirs('uploads', exist_ok=True)
+        arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
+
+    observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}."
+    return {
+        "id_tipo_documento": id_tipo_documento,
+        "caminho_arquivo": nome_arquivo_salvo,
+        "nome_original": nome_original,
+        "competencia": competencia.isoformat(),
+        "valor": float(valor_total),
+        "numero_referencia": numero_referencia,
+        "observacoes": observacoes_doc,
+        "enviado_por": current_user.username,
+    }
 
 def _create_pdf_header_footer(canvas, doc, title, subtitle=""):
     canvas.saveState()
@@ -4072,6 +4112,24 @@ def responder_solicitacao():
                             INSERT INTO itens_transacao (id_transacao, descricao, unidade, quantidade, valor_unitario, valor_total_item)
                             VALUES (%s, %s, %s, %s, %s, %s)
                         """, (id_reg, item['descricao'], item['unidade'], item['quantidade'], item['valor_unitario'], item['valor_total_item']))
+
+                    documento_anexo = d.get("documento_anexo")
+                    if documento_anexo:
+                        competencia = documento_anexo.get("competencia")
+                        if competencia:
+                            competencia = datetime.strptime(competencia, '%Y-%m-%d').date()
+                        _substituir_documento_transacao(
+                            cur,
+                            d["uvr"],
+                            documento_anexo["id_tipo_documento"],
+                            documento_anexo["caminho_arquivo"],
+                            documento_anexo["nome_original"],
+                            competencia,
+                            Decimal(str(documento_anexo["valor"])),
+                            documento_anexo.get("numero_referencia", ""),
+                            documento_anexo.get("enviado_por", current_user.username),
+                            documento_anexo.get("observacoes", ""),
+                        )
 
                 # --- LÓGICA PARA PATRIMÔNIO ---
                 elif tabela == 'patrimonio':
