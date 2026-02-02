@@ -193,6 +193,11 @@
                 </select>
             </div>
 
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Fornecedor/Cliente/Associado</label>
+                <input type="text" name="filtro_nome" class="form-control form-control-sm" value="{{ filtros.nome }}" placeholder="Nome ou CPF/CNPJ">
+            </div>
+
             <div class="col-md-2 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i></button>
                 <a href="/documentos" class="btn btn-outline-secondary btn-sm w-100" title="Limpar"><i class="fas fa-eraser"></i></a>
@@ -208,6 +213,7 @@
                     <th class="ps-3">Envio</th>
                     <th>Unidade</th>
                     <th>Documento</th>
+                    <th>Origem/Destino</th>
                     <th>Informações</th>
                     <th>Status Auditoria</th>
                     <th class="text-center">Ações</th>
@@ -221,6 +227,12 @@
                     <td>
                         <div class="fw-bold text-dark">{{ doc.nome_tipo }}</div>
                         <div class="text-muted text-uppercase" style="font-size: 0.65rem;">{{ doc.categoria }}</div>
+                    </td>
+                    <td style="font-size: 0.85rem;">
+                        <div class="text-muted">{{ doc.origem_destino or '-' }}</div>
+                        {% if doc.origem_documento %}
+                            <div class="text-muted">{{ doc.origem_documento }}</div>
+                        {% endif %}
                     </td>
                     <td style="font-size: 0.85rem;">
                         {% if doc.competencia %} <div class="text-muted">Ref: {{ doc.competencia }}</div> {% endif %}

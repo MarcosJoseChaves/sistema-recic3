@@ -1928,7 +1928,10 @@ def registrar_transacao_financeira():
             return "A nota fiscal deve ser enviada em PDF ou imagem (JPG/PNG).", 400
 
         tipo_transacao = dados["tipo_transacao"]
-        nome_tipo_documento = "Notas Fiscais de Receitas" if tipo_transacao == "Receita" else "Notas Fiscais de Despesas"
+        if dados.get("tipo_atividade_transacao") == "Rateio dos Associados":
+            nome_tipo_documento = "Recibos de Rateio"
+        else:
+            nome_tipo_documento = "Notas Fiscais de Receitas" if tipo_transacao == "Receita" else "Notas Fiscais de Despesas"
         competencia = date(data_documento.year, data_documento.month, 1)
         numero_referencia = dados.get("numero_documento_transacao", "")
         enviado_por = current_user.username if current_user.is_authenticated else "sistema"
@@ -1994,7 +1997,7 @@ def registrar_transacao_financeira():
             os.makedirs('uploads', exist_ok=True)
             arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
 
-        observacoes_doc = f"Gerado automaticamente da transação #{id_transacao_criada}."
+        observacoes_doc = f"Gerado automaticamente da transação #{id_transacao_criada}. Origem: {nome_final_origem}."
         cur.execute("""
             INSERT INTO documentos
             (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
@@ -3109,7 +3112,10 @@ def _substituir_documento_transacao(cur, uvr, id_tipo_documento, caminho_arquivo
 
 def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, cur):
     data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
-    nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
+    if cabecalho.get("tipo_atividade") == "Rateio dos Associados":
+        nome_tipo_documento = "Recibos de Rateio"
+    else:
+        nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
     competencia = date(data_documento.year, data_documento.month, 1)
     numero_referencia = cabecalho.get("numero_documento", "")
 
@@ -3139,7 +3145,7 @@ def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, 
         os.makedirs('uploads', exist_ok=True)
         arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
 
-    observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}."
+    observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}. Origem: {cabecalho.get('nome_origem', '')}."
     return {
         "id_tipo_documento": id_tipo_documento,
         "caminho_arquivo": nome_arquivo_salvo,
@@ -6341,12 +6347,20 @@ def documentos():
         f_mes_fim = request.args.get('mes_fim', '')       # YYYY-MM
         f_tipo = request.args.get('tipo_documento', '')
         f_status = request.args.get('status', '')
+        f_nome = request.args.get('filtro_nome', '').strip()
 
         # --- CONSTRUÇÃO DINÂMICA DA QUERY ---
         sql = """
-            SELECT d.*, t.nome AS nome_tipo, t.categoria
+            SELECT DISTINCT d.*, t.nome AS nome_tipo, t.categoria,
+                COALESCE(tf.nome_cadastro_origem, c.razao_social, a.nome) AS origem_destino,
+                COALESCE(c.cnpj, a.cpf) AS origem_documento
             FROM documentos d
             JOIN tipos_documentos t ON d.id_tipo = t.id
+            LEFT JOIN transacoes_financeiras tf
+                ON tf.uvr = d.uvr
+               AND tf.numero_documento = d.numero_referencia
+            LEFT JOIN cadastros c ON tf.id_cadastro_origem = c.id
+            LEFT JOIN associados a ON tf.id_cadastro_origem = a.id
             WHERE 1=1
         """
         params = []
@@ -6368,6 +6382,26 @@ def documentos():
         if f_status:
             sql += " AND d.status = %s"
             params.append(f_status)
+
+        if f_nome:
+            sql += """
+                AND (
+                    d.observacoes ILIKE %s
+                    OR d.numero_referencia ILIKE %s
+                    OR d.nome_original ILIKE %s
+                    OR d.enviado_por ILIKE %s
+                    OR tf.nome_cadastro_origem ILIKE %s
+                    OR c.razao_social ILIKE %s
+                    OR c.cnpj ILIKE %s
+                    OR a.nome ILIKE %s
+                    OR a.cpf ILIKE %s
+                )
+            """
+            filtro_nome = f"%{f_nome}%"
+            params.extend([
+                filtro_nome, filtro_nome, filtro_nome, filtro_nome,
+                filtro_nome, filtro_nome, filtro_nome, filtro_nome, filtro_nome
+            ])
 
         # Filtro de Período (Competência)
         if f_mes_inicio:
@@ -6405,7 +6439,8 @@ def documentos():
             "mes_inicio": f_mes_inicio,
             "mes_fim": f_mes_fim,
             "tipo": f_tipo,
-            "status": f_status
+            "status": f_status,
+            "nome": f_nome
         }
 
         # Conversão de datas para exibição formatada na tabela
