@@ -605,7 +605,7 @@
 
     <div id="receitaDespesaForm" class="form-container">
     <h2><i class="fas fa-file-invoice-dollar"></i> Registro de Transação (NF/Recibo)</h2>
-    <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm">
+    <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm" enctype="multipart/form-data">
         
         <input type="hidden" id="dataHoraCadastroTransacao" name="data_hora_cadastro_transacao">
         
@@ -772,6 +772,12 @@
                 <label class="form-label fw-bold">TOTAL (R$)</label>
                 <input type="text" class="form-control form-control-lg text-end fw-bold text-primary" name="valor_total_documento" id="valorTotalDocumentoCalculado" readonly>
             </div>
+        </div>
+
+        <div class="mb-3 mt-3">
+            <label class="form-label required-field" id="labelNotaFiscalTransacao">Anexar Nota Fiscal</label>
+            <input type="file" class="form-control" name="nota_fiscal_upload" id="notaFiscalTransacaoUpload" accept="application/pdf,image/jpeg,image/png" required>
+            <small class="text-muted">Anexe a nota fiscal em PDF ou imagem (JPG/PNG).</small>
         </div>
         
         <input type="hidden" name="id_transacao" id="idTransacaoHidden">
@@ -2554,6 +2560,26 @@ function atualizarPatrimonioTransacao() {
     }
 }
 
+function atualizarLabelNotaFiscalTransacao() {
+    const tipoTransacao = $('#tipoTransacaoSelect').val();
+    const label = $('#labelNotaFiscalTransacao');
+    const input = $('#notaFiscalTransacaoUpload');
+    let textoLabel = 'Anexar Nota Fiscal';
+
+    if (tipoTransacao === 'Despesa') {
+        textoLabel = 'Anexar Nota Fiscal de Despesa';
+    } else if (tipoTransacao === 'Receita') {
+        textoLabel = 'Anexar Nota Fiscal de Receita';
+    }
+
+    label.text(textoLabel);
+    const isCadastro = $('#transacaoForm').attr('action') === '/registrar_transacao_financeira';
+    input.prop('required', Boolean(tipoTransacao) && isCadastro);
+    if (!tipoTransacao) {
+        input.val('');
+    }
+}
+
 $('#btnBuscarPatrimonioTransacao').click(function() {
     carregarPatrimonioTransacao();
 });
@@ -2623,7 +2649,8 @@ $('#fornecedorPrestadorTransacaoSelect').change(function() {
         }
     }
         
-        $('#tipoTransacaoSelect').change(function(){ atualizarAtividadesTransacao(); atualizarPatrimonioTransacao(); });
+        $('#tipoTransacaoSelect').change(function(){ atualizarAtividadesTransacao(); atualizarPatrimonioTransacao(); atualizarLabelNotaFiscalTransacao(); });
+        atualizarLabelNotaFiscalTransacao();
 
         $('#tipoAtividadeTransacaoSelect').change(function() { 
             carregarOrigemTransacao(); 

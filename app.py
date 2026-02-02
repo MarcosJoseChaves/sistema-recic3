@@ -567,6 +567,39 @@ def migrar_dados_antigos_produtos():
 
 _estrutura_db_garantida = False
 
+def garantir_tipos_documentos_padrao():
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO tipos_documentos (nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
+            SELECT * FROM (VALUES
+                ('Nota Fiscal de Serviço', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe autorização se necessário'),
+                ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
+                ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
+                ('Medição Mensal', 'Mensal – Financeiro', TRUE, FALSE, FALSE, FALSE, 'Deve estar atestada pelo fiscal'),
+                ('Relatório de Associados', 'Mensal – Trabalhista', TRUE, FALSE, FALSE, FALSE, 'Lista de ativos, baixados e novos'),
+                ('Recibos de Rateio', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, TRUE, 'Comprovantes de pagamento aos associados'),
+                ('GPS – INSS', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, FALSE, 'Guia e comprovante de pagamento'),
+                ('Extrato Bancário – Associação', 'Mensal – Financeiro', TRUE, FALSE, FALSE, TRUE, 'Conta principal da associação'),
+                ('MTR – Manifesto de Transporte', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Documento de transporte de resíduos'),
+                ('Certidão Regularidade Municipal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
+                ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão')
+            ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM tipos_documentos existentes WHERE existentes.nome = novos.nome
+            )
+        """)
+        conn.commit()
+    except psycopg2.Error as e:
+        app.logger.error(f"Erro ao garantir tipos de documentos padrão: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            conn.close()
+
 @app.before_request
 def garantir_estrutura_documentos():
     global _estrutura_db_garantida
@@ -575,6 +608,7 @@ def garantir_estrutura_documentos():
 
     try:
         criar_tabelas_se_nao_existir()
+        garantir_tipos_documentos_padrao()
         _estrutura_db_garantida = True
     except Exception as e:
         app.logger.error(f"Erro ao garantir estrutura do banco: {e}")
@@ -1874,6 +1908,20 @@ def registrar_transacao_financeira():
         except ValueError as e:
             return f"Formato de data inválido: {e}", 400
 
+        arquivo_nf = request.files.get('nota_fiscal_upload')
+        if not arquivo_nf or not arquivo_nf.filename:
+            return "Anexe a nota fiscal em PDF ou imagem (JPG/PNG).", 400
+        extensao_nf = os.path.splitext(arquivo_nf.filename)[1].lower()
+        formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
+        if extensao_nf not in formatos_permitidos:
+            return "A nota fiscal deve ser enviada em PDF ou imagem (JPG/PNG).", 400
+
+        tipo_transacao = dados["tipo_transacao"]
+        nome_tipo_documento = "Notas Fiscais de Receitas" if tipo_transacao == "Receita" else "Notas Fiscais de Despesas"
+        competencia = date(data_documento.year, data_documento.month, 1)
+        numero_referencia = dados.get("numero_documento_transacao", "")
+        enviado_por = current_user.username if current_user.is_authenticated else "sistema"
+
         # --- CORREÇÃO AQUI: USANDO O NOME CERTO DA FUNÇÃO ---
         conn = conectar_banco() 
         # ----------------------------------------------------
@@ -1908,6 +1956,45 @@ def registrar_transacao_financeira():
                 id_transacao_criada, item_data['descricao'], item_data['unidade'],
                 item_data['quantidade'], item_data['valor_unitario'], item_data['valor_total_item']
             ))
+
+        cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
+        tipo_doc = cur.fetchone()
+        if not tipo_doc:
+            raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
+        id_tipo_documento = tipo_doc[0]
+
+        nome_original = arquivo_nf.filename
+        import time
+        timestamp = int(time.time())
+        extensao = os.path.splitext(nome_original)[1]
+        nome_arquivo_salvo = f"nf_transacao_{dados['uvr_transacao']}_{timestamp}{extensao}"
+        file_format = extensao.lstrip('.') if extensao else None
+
+        url_cloud = _upload_file_to_cloudinary(
+            arquivo_nf,
+            folder="documentos",
+            public_id=f"nf_transacao_{dados['uvr_transacao']}_{timestamp}",
+            resource_type="raw",
+            file_format=file_format,
+        )
+        if url_cloud:
+            nome_arquivo_salvo = url_cloud
+        else:
+            os.makedirs('uploads', exist_ok=True)
+            arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
+
+        observacoes_doc = f"Gerado automaticamente da transação #{id_transacao_criada}."
+        cur.execute("""
+            INSERT INTO documentos
+            (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+             data_validade, valor, numero_referencia, observacoes,
+             enviado_por, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+        """, (
+            dados["uvr_transacao"], id_tipo_documento, nome_arquivo_salvo, nome_original,
+            competencia, None, valor_total_documento_calculado,
+            numero_referencia, observacoes_doc, enviado_por
+        ))
         conn.commit()
         return redirect(url_for("sucesso_transacao"))
     except psycopg2.Error as e:
@@ -2000,6 +2087,14 @@ def editar_transacao():
             "proxima_revisao_data": dados.get("proxima_revisao_data_transacao"),
             "valor_total": float(valor_total_novo)
         }
+
+        arquivo_nf = request.files.get('nota_fiscal_upload')
+        anexar_documento = bool(arquivo_nf and arquivo_nf.filename)
+        if anexar_documento:
+            extensao_nf = os.path.splitext(arquivo_nf.filename)[1].lower()
+            formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
+            if extensao_nf not in formatos_permitidos:
+                return "A nota fiscal deve ser enviada em PDF ou imagem (JPG/PNG).", 400
 
         conn = conectar_banco()
         cur = conn.cursor()
@@ -2094,6 +2189,51 @@ def editar_transacao():
                     INSERT INTO itens_transacao (id_transacao, descricao, unidade, quantidade, valor_unitario, valor_total_item)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """, (id_transacao, item['descricao'], item['unidade'], item['quantidade'], item['valor_unitario'], item['valor_total_item']))
+
+            if anexar_documento:
+                data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
+                nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
+                competencia = date(data_documento.year, data_documento.month, 1)
+                numero_referencia = cabecalho.get("numero_documento", "")
+
+                cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
+                tipo_doc = cur.fetchone()
+                if not tipo_doc:
+                    raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
+                id_tipo_documento = tipo_doc[0]
+
+                nome_original = arquivo_nf.filename
+                import time
+                timestamp = int(time.time())
+                extensao = os.path.splitext(nome_original)[1]
+                nome_arquivo_salvo = f"nf_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
+                file_format = extensao.lstrip('.') if extensao else None
+
+                url_cloud = _upload_file_to_cloudinary(
+                    arquivo_nf,
+                    folder="documentos",
+                    public_id=f"nf_transacao_{cabecalho['uvr']}_{timestamp}",
+                    resource_type="raw",
+                    file_format=file_format,
+                )
+                if url_cloud:
+                    nome_arquivo_salvo = url_cloud
+                else:
+                    os.makedirs('uploads', exist_ok=True)
+                    arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
+
+                observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}."
+                cur.execute("""
+                    INSERT INTO documentos
+                    (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+                     data_validade, valor, numero_referencia, observacoes,
+                     enviado_por, status)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+                """, (
+                    cabecalho["uvr"], id_tipo_documento, nome_arquivo_salvo, nome_original,
+                    competencia, None, valor_total_novo,
+                    numero_referencia, observacoes_doc, current_user.username
+                ))
             
             conn.commit()
             return redirect(url_for("sucesso_transacao")) # Reutiliza página de sucesso
@@ -2108,6 +2248,51 @@ def editar_transacao():
                 (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
                 VALUES (%s, %s, %s, %s, %s)
             """, ('transacoes_financeiras', id_transacao, 'EDICAO', json.dumps(cabecalho), current_user.username))
+
+            if anexar_documento:
+                data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
+                nome_tipo_documento = "Notas Fiscais de Receitas" if cabecalho["tipo_transacao"] == "Receita" else "Notas Fiscais de Despesas"
+                competencia = date(data_documento.year, data_documento.month, 1)
+                numero_referencia = cabecalho.get("numero_documento", "")
+
+                cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
+                tipo_doc = cur.fetchone()
+                if not tipo_doc:
+                    raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
+                id_tipo_documento = tipo_doc[0]
+
+                nome_original = arquivo_nf.filename
+                import time
+                timestamp = int(time.time())
+                extensao = os.path.splitext(nome_original)[1]
+                nome_arquivo_salvo = f"nf_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
+                file_format = extensao.lstrip('.') if extensao else None
+
+                url_cloud = _upload_file_to_cloudinary(
+                    arquivo_nf,
+                    folder="documentos",
+                    public_id=f"nf_transacao_{cabecalho['uvr']}_{timestamp}",
+                    resource_type="raw",
+                    file_format=file_format,
+                )
+                if url_cloud:
+                    nome_arquivo_salvo = url_cloud
+                else:
+                    os.makedirs('uploads', exist_ok=True)
+                    arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
+
+                observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}."
+                cur.execute("""
+                    INSERT INTO documentos
+                    (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+                     data_validade, valor, numero_referencia, observacoes,
+                     enviado_por, status)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+                """, (
+                    cabecalho["uvr"], id_tipo_documento, nome_arquivo_salvo, nome_original,
+                    competencia, None, valor_total_novo,
+                    numero_referencia, observacoes_doc, current_user.username
+                ))
             
             conn.commit()
             return pagina_sucesso_base("Solicitação Enviada", "A edição da transação foi enviada para aprovação.")
@@ -5869,7 +6054,8 @@ def baixar_relatorio_financeiro():
         y -= 20
         p.line(30, y+15, 550, y+15)
 
-        total = 0
+        total_receitas = 0.0
+        total_despesas = 0.0
         for row in dados:
             if y < 50: # Nova página se acabar o espaço
                 p.showPage()
@@ -5878,7 +6064,10 @@ def baixar_relatorio_financeiro():
             
             data_fmt = row['data_documento'].strftime('%d/%m/%Y') if row['data_documento'] else '-'
             valor = float(row['valor_total_item']) if row['valor_total_item'] else 0.0
-            total += valor
+            if row['tipo_transacao'] == 'Receita':
+                total_receitas += valor
+            elif row['tipo_transacao'] == 'Despesa':
+                total_despesas += valor
             
             p.drawString(30, y, data_fmt)
             p.drawString(85, y, (row['tipo_transacao'] or '')[:10])
@@ -5892,8 +6081,15 @@ def baixar_relatorio_financeiro():
         y -= 10
         p.line(30, y+15, 550, y+15)
         p.setFont("Helvetica-Bold", 12)
-        p.drawString(350, y, "TOTAL:")
-        p.drawRightString(550, y, f"R$ {total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        saldo_periodo = total_receitas - total_despesas
+        p.drawString(350, y, "TOTAL RECEITAS:")
+        p.drawRightString(550, y, f"R$ {total_receitas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        y -= 18
+        p.drawString(350, y, "TOTAL DESPESAS:")
+        p.drawRightString(550, y, f"R$ {total_despesas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        y -= 18
+        p.drawString(350, y, "SALDO DO PERÍODO:")
+        p.drawRightString(550, y, f"R$ {saldo_periodo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
         p.showPage()
         p.save()
@@ -6507,6 +6703,8 @@ def setup_banco():
             cursor.execute("""
                 INSERT INTO tipos_documentos (nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda) VALUES
                 ('Nota Fiscal de Serviço', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe autorização se necessário'),
+                ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
+                ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
                 ('Medição Mensal', 'Mensal – Financeiro', TRUE, FALSE, FALSE, FALSE, 'Deve estar atestada pelo fiscal'),
                 ('Relatório de Associados', 'Mensal – Trabalhista', TRUE, FALSE, FALSE, FALSE, 'Lista de ativos, baixados e novos'),
                 ('Recibos de Rateio', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, TRUE, 'Comprovantes de pagamento aos associados'),
@@ -6519,7 +6717,18 @@ def setup_banco():
             conn.commit()
             msg = "Tabelas criadas e Tipos inseridos com sucesso!"
         else:
-            msg = "Tabelas já existiam. Nenhuma alteração feita."
+            cursor.execute("""
+                INSERT INTO tipos_documentos (nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
+                SELECT * FROM (VALUES
+                    ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
+                    ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa')
+                ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM tipos_documentos existentes WHERE existentes.nome = novos.nome
+                )
+            """)
+            conn.commit()
+            msg = "Tabelas já existiam. Tipos novos garantidos."
             
         conn.close()
         return f"<h1>Tudo certo!</h1><p>{msg}</p><a href='/documentos'>Ir para Documentos</a>"
