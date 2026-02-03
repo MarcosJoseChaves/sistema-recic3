@@ -820,6 +820,11 @@
             <input type="file" class="form-control" name="mtr_upload" id="mtrTransacaoUpload" accept="application/pdf,image/jpeg,image/png">
             <small class="text-muted">Anexe o MTR em PDF ou imagem (JPG/PNG).</small>
         </div>
+        <div class="mb-3" id="relatorioFotograficoTransacaoUploadContainer" style="display:none;">
+            <label class="form-label required-field" id="labelRelatorioFotograficoTransacao">Anexar relatório fotográfico da carga</label>
+            <input type="file" class="form-control" name="relatorio_fotografico_upload" id="relatorioFotograficoTransacaoUpload" accept="application/pdf,image/jpeg,image/png">
+            <small class="text-muted">Anexe o relatório fotográfico em PDF ou imagem (JPG/PNG).</small>
+        </div>
         
         <input type="hidden" name="id_transacao" id="idTransacaoHidden">
         
@@ -2629,16 +2634,23 @@ function atualizarVisibilidadeMtrTransacao() {
     const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val();
     const container = $('#mtrTransacaoUploadContainer');
     const input = $('#mtrTransacaoUpload');
+    const relatorioContainer = $('#relatorioFotograficoTransacaoUploadContainer');
+    const relatorioInput = $('#relatorioFotograficoTransacaoUpload');
     const isCadastro = $('#transacaoForm').attr('action') === '/registrar_transacao_financeira';
     const deveExibir = tipoTransacao === 'Receita' && tipoAtividade === 'Comercialização de Materiais Recicláveis';
 
     if (deveExibir) {
         container.show();
         input.prop('required', isCadastro);
+        relatorioContainer.show();
+        relatorioInput.prop('required', isCadastro);
     } else {
         container.hide();
         input.prop('required', false);
         input.val('');
+        relatorioContainer.hide();
+        relatorioInput.prop('required', false);
+        relatorioInput.val('');
     }
 }
 

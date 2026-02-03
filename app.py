@@ -596,6 +596,7 @@ def garantir_tipos_documentos_padrao():
                 ('GPS – INSS', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, FALSE, 'Guia e comprovante de pagamento'),
                 ('Extrato Bancário – Associação', 'Mensal – Financeiro', TRUE, FALSE, FALSE, TRUE, 'Conta principal da associação'),
                 ('MTR – Manifesto de Transporte', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Documento de transporte de resíduos'),
+                ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada'),
                 ('Certidão Regularidade Municipal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
                 ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão')
             ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
@@ -1941,6 +1942,14 @@ def registrar_transacao_financeira():
             extensao_mtr = os.path.splitext(arquivo_mtr.filename)[1].lower()
             if extensao_mtr not in formatos_permitidos:
                 return "O MTR deve ser enviado em PDF ou imagem (JPG/PNG).", 400
+        arquivo_relatorio_fotografico = request.files.get('relatorio_fotografico_upload')
+        exige_relatorio_fotografico = exige_mtr
+        if exige_relatorio_fotografico and (not arquivo_relatorio_fotografico or not arquivo_relatorio_fotografico.filename):
+            return "Anexe o relatório fotográfico da carga em PDF ou imagem (JPG/PNG).", 400
+        if arquivo_relatorio_fotografico and arquivo_relatorio_fotografico.filename:
+            extensao_relatorio = os.path.splitext(arquivo_relatorio_fotografico.filename)[1].lower()
+            if extensao_relatorio not in formatos_permitidos:
+                return "O relatório fotográfico da carga deve ser enviado em PDF ou imagem (JPG/PNG).", 400
 
         tipo_transacao = dados["tipo_transacao"]
         if dados.get("tipo_atividade_transacao") == "Rateio dos Associados":
@@ -2082,6 +2091,37 @@ def registrar_transacao_financeira():
                 mtr_anexo["observacoes"],
                 mtr_anexo["enviado_por"],
             ))
+
+        if arquivo_relatorio_fotografico and arquivo_relatorio_fotografico.filename:
+            relatorio_anexo = _preparar_relatorio_fotografico_anexo(
+                arquivo_relatorio_fotografico,
+                {
+                    "uvr": dados["uvr_transacao"],
+                    "data_documento": dados["data_documento_transacao"],
+                    "numero_documento": numero_referencia,
+                    "nome_origem": nome_final_origem,
+                },
+                id_transacao_criada,
+                cur
+            )
+            cur.execute("""
+                INSERT INTO documentos
+                (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+                 data_validade, valor, numero_referencia, observacoes,
+                 enviado_por, status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+            """, (
+                dados["uvr_transacao"],
+                relatorio_anexo["id_tipo_documento"],
+                relatorio_anexo["caminho_arquivo"],
+                relatorio_anexo["nome_original"],
+                datetime.strptime(relatorio_anexo["competencia"], '%Y-%m-%d').date(),
+                None,
+                relatorio_anexo["valor"],
+                relatorio_anexo["numero_referencia"],
+                relatorio_anexo["observacoes"],
+                relatorio_anexo["enviado_por"],
+            ))
         conn.commit()
         return redirect(url_for("sucesso_transacao"))
     except psycopg2.Error as e:
@@ -2196,6 +2236,13 @@ def editar_transacao():
             formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
             if extensao_mtr not in formatos_permitidos:
                 return "O MTR deve ser enviado em PDF ou imagem (JPG/PNG).", 400
+        arquivo_relatorio_fotografico = request.files.get('relatorio_fotografico_upload')
+        anexar_relatorio_fotografico = bool(arquivo_relatorio_fotografico and arquivo_relatorio_fotografico.filename)
+        if anexar_relatorio_fotografico:
+            extensao_relatorio = os.path.splitext(arquivo_relatorio_fotografico.filename)[1].lower()
+            formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
+            if extensao_relatorio not in formatos_permitidos:
+                return "O relatório fotográfico da carga deve ser enviado em PDF ou imagem (JPG/PNG).", 400
 
         conn = conectar_banco()
         cur = conn.cursor()
@@ -2337,6 +2384,23 @@ def editar_transacao():
                     mtr_anexo["enviado_por"],
                     mtr_anexo["observacoes"],
                 )
+
+            if anexar_relatorio_fotografico:
+                relatorio_anexo = _preparar_relatorio_fotografico_anexo(
+                    arquivo_relatorio_fotografico, cabecalho, id_transacao, cur
+                )
+                _substituir_documento_transacao(
+                    cur,
+                    cabecalho["uvr"],
+                    relatorio_anexo["id_tipo_documento"],
+                    relatorio_anexo["caminho_arquivo"],
+                    relatorio_anexo["nome_original"],
+                    datetime.strptime(relatorio_anexo["competencia"], '%Y-%m-%d').date(),
+                    relatorio_anexo["valor"],
+                    relatorio_anexo["numero_referencia"],
+                    relatorio_anexo["enviado_por"],
+                    relatorio_anexo["observacoes"],
+                )
             
             conn.commit()
             return redirect(url_for("sucesso_transacao")) # Reutiliza página de sucesso
@@ -2358,6 +2422,11 @@ def editar_transacao():
 
             if anexar_mtr:
                 cabecalho["mtr_anexo"] = _preparar_mtr_anexo(arquivo_mtr, cabecalho, id_transacao, cur)
+
+            if anexar_relatorio_fotografico:
+                cabecalho["relatorio_fotografico_anexo"] = _preparar_relatorio_fotografico_anexo(
+                    arquivo_relatorio_fotografico, cabecalho, id_transacao, cur
+                )
             
             
             cur.execute("""
@@ -3319,6 +3388,53 @@ def _preparar_mtr_anexo(arquivo_mtr, cabecalho, id_transacao, cur):
 
     observacoes_doc = (
         f"MTR anexado automaticamente da transação #{id_transacao}. "
+        f"Origem: {cabecalho.get('nome_origem', '')}."
+    )
+    return {
+        "id_tipo_documento": id_tipo_documento,
+        "caminho_arquivo": nome_arquivo_salvo,
+        "nome_original": nome_original,
+        "competencia": competencia.isoformat(),
+        "valor": None,
+        "numero_referencia": numero_referencia,
+        "observacoes": observacoes_doc,
+        "enviado_por": current_user.username,
+    }
+
+def _preparar_relatorio_fotografico_anexo(arquivo_relatorio, cabecalho, id_transacao, cur):
+    data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
+    nome_tipo_documento = "Relatório fotográfico da carga"
+    competencia = date(data_documento.year, data_documento.month, 1)
+    numero_referencia = cabecalho.get("numero_documento", "")
+
+    cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
+    tipo_doc = cur.fetchone()
+    if not tipo_doc:
+        raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
+    id_tipo_documento = tipo_doc[0]
+
+    nome_original = arquivo_relatorio.filename
+    import time
+    timestamp = int(time.time())
+    extensao = os.path.splitext(nome_original)[1]
+    nome_arquivo_salvo = f"relatorio_fotografico_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
+    file_format = extensao.lstrip('.') if extensao else None
+
+    url_cloud = _upload_file_to_cloudinary(
+        arquivo_relatorio,
+        folder="documentos",
+        public_id=f"relatorio_fotografico_transacao_{cabecalho['uvr']}_{timestamp}",
+        resource_type="raw",
+        file_format=file_format,
+    )
+    if url_cloud:
+        nome_arquivo_salvo = url_cloud
+    else:
+        os.makedirs('uploads', exist_ok=True)
+        arquivo_relatorio.save(os.path.join('uploads', nome_arquivo_salvo))
+
+    observacoes_doc = (
+        f"Relatório fotográfico anexado automaticamente da transação #{id_transacao}. "
         f"Origem: {cabecalho.get('nome_origem', '')}."
     )
     return {
@@ -4396,6 +4512,27 @@ def responder_solicitacao():
                             mtr_anexo.get("numero_referencia", ""),
                             mtr_anexo.get("enviado_por", current_user.username),
                             mtr_anexo.get("observacoes", ""),
+                        )
+
+                    relatorio_anexo = d.get("relatorio_fotografico_anexo")
+                    if relatorio_anexo:
+                        competencia = relatorio_anexo.get("competencia")
+                        if competencia:
+                            competencia = datetime.strptime(competencia, '%Y-%m-%d').date()
+                        valor_doc = relatorio_anexo.get("valor")
+                        if valor_doc is not None:
+                            valor_doc = Decimal(str(valor_doc))
+                        _substituir_documento_transacao(
+                            cur,
+                            d["uvr"],
+                            relatorio_anexo["id_tipo_documento"],
+                            relatorio_anexo["caminho_arquivo"],
+                            relatorio_anexo["nome_original"],
+                            competencia,
+                            valor_doc,
+                            relatorio_anexo.get("numero_referencia", ""),
+                            relatorio_anexo.get("enviado_por", current_user.username),
+                            relatorio_anexo.get("observacoes", ""),
                         )
 
                 # --- LÓGICA PARA PATRIMÔNIO ---
@@ -6498,6 +6635,7 @@ TIPOS_DOCUMENTOS = {
     # --- AMBIENTAL ---
     'MTR - Manifesto':        {'cat': 'Ambiental', 'validade': False, 'valor': False, 'comp': True, 'num': True},
     'CDF - Certificado':      {'cat': 'Ambiental', 'validade': False, 'valor': False, 'comp': True, 'num': True},
+    'Relatório fotográfico da carga': {'cat': 'Operacional', 'validade': False, 'valor': False, 'comp': True, 'num': False},
     
     # --- CERTIDÕES (GERAL) ---
     'Certidão Municipal':     {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
@@ -7088,6 +7226,7 @@ def setup_banco():
                 ('GPS – INSS', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, FALSE, 'Guia e comprovante de pagamento'),
                 ('Extrato Bancário – Associação', 'Mensal – Financeiro', TRUE, FALSE, FALSE, TRUE, 'Conta principal da associação'),
                 ('MTR – Manifesto de Transporte', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Documento de transporte de resíduos'),
+                ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada'),
                 ('Certidão Regularidade Municipal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
                 ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão');
             """)
@@ -7099,7 +7238,8 @@ def setup_banco():
                 SELECT * FROM (VALUES
                     ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
                     ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
-                    ('Comprovante de Pagamento', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Comprovante de pagamento das transações financeiras')
+                    ('Comprovante de Pagamento', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Comprovante de pagamento das transações financeiras'),
+                    ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada')
                 ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
                 WHERE NOT EXISTS (
                     SELECT 1 FROM tipos_documentos existentes WHERE existentes.nome = novos.nome
