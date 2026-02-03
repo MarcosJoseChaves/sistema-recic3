@@ -33,6 +33,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.lib import colors
 from reportlab.lib.units import inch, cm
 from reportlab.lib.utils import ImageReader
+from pypdf import PdfReader, PdfWriter
 
 # --- FIM DOS IMPORTS ---
 
@@ -6645,6 +6646,185 @@ TIPOS_DOCUMENTOS = {
     'FGTS':                   {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True}
 }
 
+def _montar_consulta_documentos(args, usuario):
+    f_uvr = args.get('filtro_uvr', '')
+    f_mes_inicio = args.get('mes_inicio', '')
+    f_mes_fim = args.get('mes_fim', '')
+    f_tipo = args.get('tipo_documento', '')
+    f_status = args.get('status', '')
+    f_nome = args.get('filtro_nome', '').strip()
+
+    sql = """
+        SELECT DISTINCT d.*, t.nome AS nome_tipo, t.categoria,
+            COALESCE(tf.nome_cadastro_origem, c.razao_social, a.nome) AS origem_destino,
+            COALESCE(c.cnpj, a.cpf) AS origem_documento
+        FROM documentos d
+        JOIN tipos_documentos t ON d.id_tipo = t.id
+        LEFT JOIN transacoes_financeiras tf
+            ON tf.uvr = d.uvr
+           AND tf.numero_documento = d.numero_referencia
+        LEFT JOIN cadastros c ON tf.id_cadastro_origem = c.id
+        LEFT JOIN associados a ON tf.id_cadastro_origem = a.id
+        WHERE 1=1
+    """
+    params = []
+
+    if usuario.role != 'admin':
+        sql += " AND d.uvr = %s"
+        params.append(usuario.uvr_acesso)
+    elif f_uvr:
+        sql += " AND d.uvr = %s"
+        params.append(f_uvr)
+
+    if f_tipo:
+        sql += " AND d.id_tipo = %s"
+        params.append(f_tipo)
+
+    if f_status:
+        sql += " AND d.status = %s"
+        params.append(f_status)
+
+    if f_nome:
+        sql += """
+            AND (
+                d.observacoes ILIKE %s
+                OR d.numero_referencia ILIKE %s
+                OR d.nome_original ILIKE %s
+                OR d.enviado_por ILIKE %s
+                OR tf.nome_cadastro_origem ILIKE %s
+                OR c.razao_social ILIKE %s
+                OR c.cnpj ILIKE %s
+                OR a.nome ILIKE %s
+                OR a.cpf ILIKE %s
+            )
+        """
+        filtro_nome = f"%{f_nome}%"
+        params.extend([
+            filtro_nome, filtro_nome, filtro_nome, filtro_nome,
+            filtro_nome, filtro_nome, filtro_nome, filtro_nome, filtro_nome
+        ])
+
+    filtro_inicio = None
+    filtro_fim = None
+    if f_mes_inicio:
+        try:
+            filtro_inicio = datetime.strptime(f_mes_inicio, "%Y-%m").date()
+        except ValueError:
+            filtro_inicio = None
+    if f_mes_fim:
+        try:
+            mes_fim_data = datetime.strptime(f_mes_fim, "%Y-%m").date()
+            ultimo_dia = calendar.monthrange(mes_fim_data.year, mes_fim_data.month)[1]
+            filtro_fim = mes_fim_data.replace(day=ultimo_dia)
+        except ValueError:
+            filtro_fim = None
+
+    if filtro_inicio:
+        sql += " AND COALESCE(d.competencia, d.data_envio::date) >= %s"
+        params.append(filtro_inicio)
+
+    if filtro_fim:
+        sql += " AND COALESCE(d.competencia, d.data_envio::date) <= %s"
+        params.append(filtro_fim)
+
+    filtros_template = {
+        "uvr": f_uvr,
+        "mes_inicio": f_mes_inicio,
+        "mes_fim": f_mes_fim,
+        "tipo": f_tipo,
+        "status": f_status,
+        "nome": f_nome
+    }
+
+    return sql, params, filtros_template
+
+def _formatar_data_documento(valor, formato="%d/%m/%Y"):
+    if not valor:
+        return "-"
+    if isinstance(valor, (datetime, date)):
+        return valor.strftime(formato)
+    return str(valor)
+
+def _formatar_competencia_documento(valor):
+    if not valor:
+        return "-"
+    if isinstance(valor, (datetime, date)):
+        return valor.strftime("%m/%Y")
+    return str(valor)
+
+def _formatar_valor_documento(valor):
+    if valor is None or valor == "":
+        return "-"
+    try:
+        valor_float = float(valor)
+    except (TypeError, ValueError):
+        return str(valor)
+    valor_formatado = f"{valor_float:,.2f}"
+    return f"R$ {valor_formatado.replace(',', 'X').replace('.', ',').replace('X', '.')}"
+
+def _criar_pdf_cabecalho_documento(doc):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(40, altura - 50, "Identificação do Documento")
+    c.setStrokeColor(colors.HexColor("#cccccc"))
+    c.line(40, altura - 58, largura - 40, altura - 58)
+
+    c.setFont("Helvetica", 10)
+    campos = [
+        ("Documento", doc.get("nome_tipo")),
+        ("Categoria", doc.get("categoria")),
+        ("Unidade (UVR)", doc.get("uvr")),
+        ("Enviado em", _formatar_data_documento(doc.get("data_envio"))),
+        ("Competência", _formatar_competencia_documento(doc.get("competencia"))),
+        ("Validade", _formatar_data_documento(doc.get("data_validade"))),
+        ("Valor", _formatar_valor_documento(doc.get("valor"))),
+        ("Nº Referência", doc.get("numero_referencia") or "-"),
+        ("Origem/Destino", doc.get("origem_destino") or "-"),
+        ("Origem Documento", doc.get("origem_documento") or "-"),
+        ("Status", doc.get("status") or "-"),
+    ]
+
+    y = altura - 90
+    for titulo, valor in campos:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(40, y, f"{titulo}:")
+        c.setFont("Helvetica", 10)
+        c.drawString(160, y, str(valor))
+        y -= 16
+        if y < 80:
+            c.showPage()
+            y = altura - 60
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+def _criar_pdf_imagem_documento(image_bytes):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+    margem = 40
+    max_largura = largura - 2 * margem
+    max_altura = altura - 2 * margem
+
+    imagem = ImageReader(io.BytesIO(image_bytes))
+    img_largura, img_altura = imagem.getSize()
+    escala = min(max_largura / img_largura, max_altura / img_altura)
+    nova_largura = img_largura * escala
+    nova_altura = img_altura * escala
+    x = (largura - nova_largura) / 2
+    y = (altura - nova_altura) / 2
+
+    c.drawImage(imagem, x, y, width=nova_largura, height=nova_altura, preserveAspectRatio=True, mask='auto')
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 @app.route("/documentos", methods=['GET', 'POST'])
 @login_required
 def documentos():
@@ -6747,92 +6927,7 @@ def documentos():
         cursor.execute("SELECT * FROM tipos_documentos ORDER BY categoria, nome")
         tipos_documentos = cursor.fetchall()
 
-        # --- CAPTURA DOS FILTROS (Sincronizados com os nomes no Canvas) ---
-        f_uvr = request.args.get('filtro_uvr', '')
-        f_mes_inicio = request.args.get('mes_inicio', '') # YYYY-MM
-        f_mes_fim = request.args.get('mes_fim', '')       # YYYY-MM
-        f_tipo = request.args.get('tipo_documento', '')
-        f_status = request.args.get('status', '')
-        f_nome = request.args.get('filtro_nome', '').strip()
-
-        # --- CONSTRUÇÃO DINÂMICA DA QUERY ---
-        sql = """
-            SELECT DISTINCT d.*, t.nome AS nome_tipo, t.categoria,
-                COALESCE(tf.nome_cadastro_origem, c.razao_social, a.nome) AS origem_destino,
-                COALESCE(c.cnpj, a.cpf) AS origem_documento
-            FROM documentos d
-            JOIN tipos_documentos t ON d.id_tipo = t.id
-            LEFT JOIN transacoes_financeiras tf
-                ON tf.uvr = d.uvr
-               AND tf.numero_documento = d.numero_referencia
-            LEFT JOIN cadastros c ON tf.id_cadastro_origem = c.id
-            LEFT JOIN associados a ON tf.id_cadastro_origem = a.id
-            WHERE 1=1
-        """
-        params = []
-
-        # Isolamento por UVR
-        if current_user.role != 'admin':
-            sql += " AND d.uvr = %s"
-            params.append(current_user.uvr_acesso)
-        elif f_uvr:
-            sql += " AND d.uvr = %s"
-            params.append(f_uvr)
-
-        # Filtro de Tipo
-        if f_tipo:
-            sql += " AND d.id_tipo = %s"
-            params.append(f_tipo)
-
-        # Filtro de Status
-        if f_status:
-            sql += " AND d.status = %s"
-            params.append(f_status)
-
-        if f_nome:
-            sql += """
-                AND (
-                    d.observacoes ILIKE %s
-                    OR d.numero_referencia ILIKE %s
-                    OR d.nome_original ILIKE %s
-                    OR d.enviado_por ILIKE %s
-                    OR tf.nome_cadastro_origem ILIKE %s
-                    OR c.razao_social ILIKE %s
-                    OR c.cnpj ILIKE %s
-                    OR a.nome ILIKE %s
-                    OR a.cpf ILIKE %s
-                )
-            """
-            filtro_nome = f"%{f_nome}%"
-            params.extend([
-                filtro_nome, filtro_nome, filtro_nome, filtro_nome,
-                filtro_nome, filtro_nome, filtro_nome, filtro_nome, filtro_nome
-            ])
-
-        # Filtro de Período (Competência/Data de envio)
-        filtro_inicio = None
-        filtro_fim = None
-        if f_mes_inicio:
-            try:
-                filtro_inicio = datetime.strptime(f_mes_inicio, "%Y-%m").date()
-            except ValueError:
-                filtro_inicio = None
-        if f_mes_fim:
-            try:
-                mes_fim_data = datetime.strptime(f_mes_fim, "%Y-%m").date()
-                ultimo_dia = calendar.monthrange(mes_fim_data.year, mes_fim_data.month)[1]
-                filtro_fim = mes_fim_data.replace(day=ultimo_dia)
-            except ValueError:
-                filtro_fim = None
-
-        if filtro_inicio:
-            sql += " AND COALESCE(d.competencia, d.data_envio::date) >= %s"
-            params.append(filtro_inicio)
-
-        if filtro_fim:
-            sql += " AND COALESCE(d.competencia, d.data_envio::date) <= %s"
-            params.append(filtro_fim)
-
+        sql, params, filtros_template = _montar_consulta_documentos(request.args, current_user)
         sql += " ORDER BY d.data_envio DESC LIMIT 200"
 
         cursor.execute(sql, tuple(params))
@@ -6853,16 +6948,6 @@ def documentos():
                 status_resumo = {
                     "pendentes": pendentes,
                 }
-
-        # Dicionário para persistência dos campos no Canvas
-        filtros_template = {
-            "uvr": f_uvr,
-            "mes_inicio": f_mes_inicio,
-            "mes_fim": f_mes_fim,
-            "tipo": f_tipo,
-            "status": f_status,
-            "nome": f_nome
-        }
 
         # Conversão de datas para exibição formatada na tabela
         for doc in documentos:
@@ -6892,6 +6977,123 @@ def documentos():
         flash('Erro ao carregar lista de documentos.', 'danger')
         return redirect(url_for('index'))
 
+    finally:
+        if not cursor.closed:
+            cursor.close()
+        if not conn.closed:
+            conn.close()
+
+@app.route("/documentos/gerar_pdf_unico", methods=["POST"])
+@login_required
+def gerar_pdf_unico_documentos():
+    conn = conectar_banco()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    def obter_bytes_documento(doc):
+        caminho = doc.get("caminho_arquivo")
+        if not caminho:
+            return None, None
+        if str(caminho).startswith("http"):
+            url = _build_cloudinary_delivery_url(caminho)
+            resposta = requests.get(url, timeout=30)
+            resposta.raise_for_status()
+            return resposta.content, caminho
+        caminho_local = caminho
+        if not os.path.isabs(caminho_local):
+            caminho_local = os.path.join("uploads", caminho_local)
+        if not os.path.exists(caminho_local):
+            return None, caminho_local
+        with open(caminho_local, "rb") as arquivo_local:
+            return arquivo_local.read(), caminho_local
+
+    def obter_extensao_documento(doc, referencia):
+        candidatos = [
+            doc.get("nome_original"),
+            referencia,
+            doc.get("caminho_arquivo")
+        ]
+        for item in candidatos:
+            if not item:
+                continue
+            caminho_sem_query = str(item).split("?", 1)[0]
+            ext = os.path.splitext(caminho_sem_query)[1].lower()
+            if ext:
+                return ext
+        return ""
+
+    try:
+        sql, params, filtros_template = _montar_consulta_documentos(request.form, current_user)
+        sql += " ORDER BY d.data_envio DESC"
+        cursor.execute(sql, tuple(params))
+        documentos = cursor.fetchall()
+
+        if not documentos:
+            flash("Nenhum documento encontrado para gerar o PDF.", "warning")
+            return redirect(url_for("documentos", **filtros_template))
+
+        writer = PdfWriter()
+        documentos_processados = 0
+
+        for doc in documentos:
+            if isinstance(doc.get('data_envio'), str):
+                try:
+                    dt_str = doc['data_envio'].split('.')[0]
+                    doc['data_envio'] = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    pass
+
+            try:
+                bytes_doc, referencia = obter_bytes_documento(doc)
+            except Exception as exc:
+                app.logger.error(f"Erro ao baixar documento {doc.get('id')}: {exc}")
+                continue
+
+            if not bytes_doc:
+                app.logger.warning(f"Documento sem arquivo disponível: {doc.get('id')}")
+                continue
+
+            extensao = obter_extensao_documento(doc, referencia)
+
+            header_buffer = _criar_pdf_cabecalho_documento(doc)
+            header_reader = PdfReader(header_buffer)
+            for pagina in header_reader.pages:
+                writer.add_page(pagina)
+
+            if extensao == ".pdf":
+                try:
+                    reader = PdfReader(io.BytesIO(bytes_doc))
+                    for pagina in reader.pages:
+                        writer.add_page(pagina)
+                except Exception as exc:
+                    app.logger.error(f"Erro ao ler PDF do documento {doc.get('id')}: {exc}")
+                    continue
+            else:
+                try:
+                    image_pdf = _criar_pdf_imagem_documento(bytes_doc)
+                    reader = PdfReader(image_pdf)
+                    for pagina in reader.pages:
+                        writer.add_page(pagina)
+                except Exception as exc:
+                    app.logger.error(f"Erro ao converter imagem do documento {doc.get('id')}: {exc}")
+                    continue
+
+            documentos_processados += 1
+
+        if documentos_processados == 0:
+            flash("Nenhum anexo válido foi encontrado para gerar o PDF.", "warning")
+            return redirect(url_for("documentos", **filtros_template))
+
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        buffer.seek(0)
+
+        nome_arquivo = f"documentos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        return send_file(buffer, as_attachment=True, download_name=nome_arquivo, mimetype="application/pdf")
+
+    except Exception as e:
+        app.logger.error(f"Erro ao gerar PDF único de documentos: {e}", exc_info=True)
+        flash("Erro ao gerar PDF único. Tente novamente.", "danger")
+        return redirect(url_for("documentos"))
     finally:
         if not cursor.closed:
             cursor.close()

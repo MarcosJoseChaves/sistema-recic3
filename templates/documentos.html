@@ -226,8 +226,11 @@
                 <input type="text" name="filtro_nome" class="form-control form-control-sm" value="{{ filtros.nome }}" placeholder="Nome ou CPF/CNPJ">
             </div>
 
-            <div class="col-md-2 d-flex align-items-end gap-2">
-                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i></button>
+            <div class="col-md-2 d-flex align-items-end gap-2 flex-wrap">
+                <button type="submit" class="btn btn-primary btn-sm w-100" title="Pesquisar"><i class="fas fa-search"></i></button>
+                <button type="submit" class="btn btn-danger btn-sm w-100" formaction="/documentos/gerar_pdf_unico" formmethod="POST" title="Gerar PDF único">
+                    <i class="fas fa-file-pdf"></i> PDF Único
+                </button>
                 <a href="/documentos" class="btn btn-outline-secondary btn-sm w-100" title="Limpar"><i class="fas fa-eraser"></i></a>
             </div>
         </form>
