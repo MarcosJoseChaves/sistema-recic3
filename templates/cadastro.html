@@ -815,6 +815,11 @@
             <input type="file" class="form-control" name="comprovante_pagamento_upload" id="comprovantePagamentoTransacaoUpload" accept="application/pdf,image/jpeg,image/png" required>
             <small class="text-muted">Anexe o comprovante de pagamento em PDF ou imagem (JPG/PNG).</small>
         </div>
+        <div class="mb-3" id="mtrTransacaoUploadContainer" style="display:none;">
+            <label class="form-label required-field" id="labelMtrTransacao">Anexar MTR</label>
+            <input type="file" class="form-control" name="mtr_upload" id="mtrTransacaoUpload" accept="application/pdf,image/jpeg,image/png">
+            <small class="text-muted">Anexe o MTR em PDF ou imagem (JPG/PNG).</small>
+        </div>
         
         <input type="hidden" name="id_transacao" id="idTransacaoHidden">
         
@@ -2619,6 +2624,24 @@ function atualizarLabelNotaFiscalTransacao() {
     }
 }
 
+function atualizarVisibilidadeMtrTransacao() {
+    const tipoTransacao = $('#tipoTransacaoSelect').val();
+    const tipoAtividade = $('#tipoAtividadeTransacaoSelect').val();
+    const container = $('#mtrTransacaoUploadContainer');
+    const input = $('#mtrTransacaoUpload');
+    const isCadastro = $('#transacaoForm').attr('action') === '/registrar_transacao_financeira';
+    const deveExibir = tipoTransacao === 'Receita' && tipoAtividade === 'Comercialização de Materiais Recicláveis';
+
+    if (deveExibir) {
+        container.show();
+        input.prop('required', isCadastro);
+    } else {
+        container.hide();
+        input.prop('required', false);
+        input.val('');
+    }
+}
+
 $('#btnBuscarPatrimonioTransacao').click(function() {
     carregarPatrimonioTransacao();
 });
@@ -2688,12 +2711,14 @@ $('#fornecedorPrestadorTransacaoSelect').change(function() {
         }
     }
         
-        $('#tipoTransacaoSelect').change(function(){ atualizarAtividadesTransacao(); atualizarPatrimonioTransacao(); atualizarLabelNotaFiscalTransacao(); });
+        $('#tipoTransacaoSelect').change(function(){ atualizarAtividadesTransacao(); atualizarPatrimonioTransacao(); atualizarLabelNotaFiscalTransacao(); atualizarVisibilidadeMtrTransacao(); });
         atualizarLabelNotaFiscalTransacao();
+        atualizarVisibilidadeMtrTransacao();
 
         $('#tipoAtividadeTransacaoSelect').change(function() { 
             carregarOrigemTransacao(); 
             $('#itensDocumentoContainer .item-row').each(function() { populateGrupos($(this)); });
+            atualizarVisibilidadeMtrTransacao();
         });
 
         function populateGrupos(rowElement) {
