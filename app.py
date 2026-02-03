@@ -637,6 +637,19 @@ class User(UserMixin):
         self.role = role
         self.uvr_acesso = uvr_acesso
 
+
+def usuario_visitante(user=None):
+    alvo = user or current_user
+    return getattr(alvo, "role", "").lower() == "visitante"
+
+
+def bloquear_visitante(mensagem="Acesso negado. Usuários visitantes não podem editar ou excluir."):
+    if usuario_visitante():
+        if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/"):
+            return jsonify({"error": mensagem}), 403
+        return mensagem, 403
+    return None
+
 @login_manager.user_loader
 def load_user(user_id):
     conn = conectar_banco()
@@ -659,7 +672,14 @@ def login():
         conn = conectar_banco()
         cur = conn.cursor()
         # Buscamos o usuário pelo nome
-        cur.execute("SELECT id, username, password_hash, role, uvr_acesso FROM usuarios WHERE username = %s AND ativo = TRUE", (username,))
+        cur.execute(
+            """
+            SELECT id, username, password_hash, role, uvr_acesso
+            FROM usuarios
+            WHERE LOWER(username) = LOWER(%s) AND ativo = TRUE
+            """,
+            (username,),
+        )
         user_data = cur.fetchone()
         cur.close()
         conn.close()
@@ -1176,6 +1196,10 @@ def get_associado(id):
 def editar_associado():
     if request.method == "GET":
         return redirect(url_for('index'))
+    
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     
     conn = None
     try:
@@ -2139,6 +2163,9 @@ def registrar_transacao_financeira():
 @app.route("/editar_transacao", methods=["POST"])
 @login_required
 def editar_transacao():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form
@@ -4097,6 +4124,9 @@ def get_solicitacoes_pendentes():
 @app.route("/editar_conta_corrente", methods=["POST"])
 @login_required
 def editar_conta_corrente():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form.to_dict()
@@ -4892,6 +4922,9 @@ def imprimir_ficha_cadastro(id):
 @app.route("/editar_cadastro", methods=["POST"])
 @login_required
 def editar_cadastro():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form.to_dict()
@@ -4942,6 +4975,9 @@ def editar_cadastro():
 @app.route("/excluir_cadastro/<int:id>", methods=["POST"])
 @login_required
 def excluir_cadastro(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         conn = conectar_banco()
@@ -5000,6 +5036,9 @@ def excluir_cadastro(id):
 @app.route("/excluir_associado/<int:id>", methods=["POST"])
 @login_required
 def excluir_associado(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         conn = conectar_banco()
@@ -5110,6 +5149,9 @@ def get_conta_corrente_detalhe(id):
 @app.route("/excluir_conta_corrente/<int:id>", methods=["POST"])
 @login_required
 def excluir_conta_corrente(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     if current_user.role != 'admin':
         return jsonify({"error": "Apenas administradores podem excluir contas."}), 403
         
@@ -5841,6 +5883,10 @@ def get_transacao_detalhes(id):
 @app.route("/api/subgrupos", methods=["GET", "POST"])
 @login_required
 def api_subgrupos():
+    if request.method != "GET":
+        bloqueio = bloquear_visitante()
+        if bloqueio:
+            return bloqueio
     conn = conectar_banco()
     cur = conn.cursor()
     try:
@@ -5904,6 +5950,10 @@ def api_subgrupos():
 @app.route("/api/produtos_crud", methods=["GET", "POST", "DELETE"])
 @login_required
 def api_produtos_crud():
+    if request.method != "GET":
+        bloqueio = bloquear_visitante()
+        if bloqueio:
+            return bloqueio
     conn = conectar_banco()
     cur = conn.cursor()
     try:
@@ -6006,6 +6056,9 @@ def api_produtos_crud():
 @app.route('/excluir_transacao/<int:id>', methods=['POST'])
 @login_required
 def excluir_transacao(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     # Segurança: Apenas Admin pode excluir (opcional, remova o if se quiser liberar)
     if current_user.role != 'admin':
         return jsonify({'error': 'Permissão negada. Apenas administradores podem excluir.'}), 403
@@ -6088,6 +6141,9 @@ def get_movimentacao_detalhes(id):
 @app.route("/excluir_movimentacao/<int:id>", methods=["POST"])
 @login_required
 def excluir_movimentacao(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     if current_user.role != 'admin': 
         return jsonify({"error": "Apenas administradores podem excluir."}), 403
 
@@ -6287,6 +6343,9 @@ def get_patrimonio_detalhes(id):
 @app.route("/editar_patrimonio", methods=["POST"])
 @login_required
 def editar_patrimonio():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form
@@ -6390,6 +6449,9 @@ def editar_patrimonio():
 @app.route("/excluir_patrimonio/<int:id>", methods=["POST"])
 @login_required
 def excluir_patrimonio(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         conn = conectar_banco()
@@ -7103,6 +7165,9 @@ def gerar_pdf_unico_documentos():
 @app.route('/editar_documento', methods=['POST'])
 @login_required
 def editar_documento():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     id_doc = request.form.get('id_documento')
 
     if not id_doc:
@@ -7318,6 +7383,9 @@ def processar_solicitacao_doc():
 @app.route('/excluir_documento/<int:id_doc>')
 @login_required
 def excluir_documento(id_doc):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = conectar_banco()
     cursor = conn.cursor()
     try:
@@ -7656,6 +7724,9 @@ def imprimir_ficha_cliente(id):
 @app.route('/editar_cliente', methods=['POST'])
 @login_required
 def editar_cliente():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form.to_dict()
@@ -7844,6 +7915,9 @@ def get_epi_detalhe(id):
 @app.route("/editar_epi", methods=["POST"])
 @login_required
 def editar_epi():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form.to_dict()
@@ -7933,6 +8007,9 @@ def editar_epi():
 @app.route("/excluir_epi/<int:id>", methods=["POST"])
 @login_required
 def excluir_epi(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         conn = conectar_banco()
@@ -8190,6 +8267,9 @@ def get_entrada_epi_detalhe(id):
 @app.route("/editar_entrada_epi", methods=["POST"])
 @login_required
 def editar_entrada_epi():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form.to_dict()
@@ -8923,6 +9003,9 @@ def editar_entrega_epi():
 @app.route("/excluir_entrega_epi/<int:id>", methods=["POST"])
 @login_required
 def excluir_entrega_epi(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         conn = conectar_banco()
@@ -9119,6 +9202,9 @@ def get_estoque_epi_detalhe(id):
 @app.route("/editar_estoque_epi", methods=["POST"])
 @login_required
 def editar_estoque_epi():
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         dados = request.form.to_dict()
@@ -9202,6 +9288,9 @@ def editar_estoque_epi():
 @app.route("/excluir_estoque_epi/<int:id>", methods=["POST"])
 @login_required
 def excluir_estoque_epi(id):
+    bloqueio = bloquear_visitante()
+    if bloqueio:
+        return bloqueio
     conn = None
     try:
         conn = conectar_banco()
