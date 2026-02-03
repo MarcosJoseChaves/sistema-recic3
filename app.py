@@ -4364,9 +4364,16 @@ def buscar_cadastros():
             sql += " AND (LOWER(razao_social) LIKE %s OR cnpj LIKE %s)"
             params.extend([f"%{termo}%", f"%{termo}%"])
         
-        if tipo and tipo != "Todos": 
-            sql += " AND tipo_cadastro = %s"
-            params.append(tipo)
+        if tipo and tipo != "Todos":
+            if tipo in ("Cliente", "Comprador"):
+                sql += " AND (tipo_cadastro LIKE %s OR tipo_cadastro LIKE %s OR tipo_cadastro = 'Ambos')"
+                params.extend(["Cliente%", "Comprador%"])
+            elif tipo == "Fornecedor":
+                sql += " AND (tipo_cadastro LIKE %s OR tipo_cadastro = 'Ambos')"
+                params.append("Fornecedor%")
+            else:
+                sql += " AND tipo_cadastro = %s"
+                params.append(tipo)
             
         sql += " ORDER BY razao_social ASC LIMIT 50"
         
@@ -6403,14 +6410,29 @@ def documentos():
                 filtro_nome, filtro_nome, filtro_nome, filtro_nome, filtro_nome
             ])
 
-        # Filtro de Período (Competência)
+        # Filtro de Período (Competência/Data de envio)
+        filtro_inicio = None
+        filtro_fim = None
         if f_mes_inicio:
-            sql += " AND d.competencia >= %s"
-            params.append(f_mes_inicio)
-
+            try:
+                filtro_inicio = datetime.strptime(f_mes_inicio, "%Y-%m").date()
+            except ValueError:
+                filtro_inicio = None
         if f_mes_fim:
-            sql += " AND d.competencia <= %s"
-            params.append(f_mes_fim)
+            try:
+                mes_fim_data = datetime.strptime(f_mes_fim, "%Y-%m").date()
+                ultimo_dia = calendar.monthrange(mes_fim_data.year, mes_fim_data.month)[1]
+                filtro_fim = mes_fim_data.replace(day=ultimo_dia)
+            except ValueError:
+                filtro_fim = None
+
+        if filtro_inicio:
+            sql += " AND COALESCE(d.competencia, d.data_envio::date) >= %s"
+            params.append(filtro_inicio)
+
+        if filtro_fim:
+            sql += " AND COALESCE(d.competencia, d.data_envio::date) <= %s"
+            params.append(filtro_fim)
 
         sql += " ORDER BY d.data_envio DESC LIMIT 200"
 
