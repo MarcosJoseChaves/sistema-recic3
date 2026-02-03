@@ -74,6 +74,7 @@
         .valor-monetario { font-weight: bold; color: #2980b9; }
         .tabela-container { overflow-x: auto; margin-top: 20px; }
         #tabelaRelatorio th { white-space: nowrap; }
+        .status-alert { cursor: pointer; }
     </style>
 </head>
 <body>
@@ -90,25 +91,55 @@
     </div>
 
     {% if status_resumo %}
-      {% if current_user.role != 'admin' %}
+        {% if current_user.role != 'admin' %}
         {% if status_resumo.aprovados %}
-          <div class="alert alert-success shadow-sm" role="alert">
+          <div class="alert alert-success shadow-sm status-alert" role="alert" data-alert-key="status-aprovados">
             Você tem {{ status_resumo.aprovados }} documento(s) aprovado(s). Confira a lista em Documentos.
           </div>
         {% endif %}
         {% if status_resumo.reprovados %}
-          <div class="alert alert-warning shadow-sm" role="alert">
+          <div class="alert alert-warning shadow-sm status-alert" role="alert" data-alert-key="status-reprovados">
             Você tem {{ status_resumo.reprovados }} documento(s) com correções pendentes. Veja o motivo em Documentos.
           </div>
         {% endif %}
       {% else %}
         {% if status_resumo.pendentes %}
-          <div class="alert alert-info shadow-sm" role="alert">
+          <div class="alert alert-info shadow-sm status-alert" role="alert" data-alert-key="status-pendentes">
             Existem {{ status_resumo.pendentes }} documento(s) aguardando conferência dos usuários.
           </div>
         {% endif %}
       {% endif %}
     {% endif %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.status-alert[data-alert-key]');
+            let storageAvailable = false;
+
+            try {
+                const testKey = '__status_alert_test__';
+                localStorage.setItem(testKey, '1');
+                localStorage.removeItem(testKey);
+                storageAvailable = true;
+            } catch (error) {
+                storageAvailable = false;
+            }
+
+            alerts.forEach(function(alertEl) {
+                const key = alertEl.dataset.alertKey;
+                if (storageAvailable && localStorage.getItem(key) === 'dismissed') {
+                    alertEl.remove();
+                    return;
+                }
+
+                alertEl.addEventListener('click', function() {
+                    if (storageAvailable) {
+                        localStorage.setItem(key, 'dismissed');
+                    }
+                    alertEl.remove();
+                });
+            });
+        });
+    </script>
 
     <div class="d-flex flex-wrap gap-2 mb-4">
         
@@ -6234,6 +6265,7 @@ $(document).ready(function() {
 
     // 3. Inicializa Busca de CEP do Associado
     setupBuscaCepAssociado();
+
 });
 </script>
 </body>

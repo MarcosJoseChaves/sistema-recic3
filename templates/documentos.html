@@ -31,7 +31,7 @@
         {% for category, message in messages %}
           <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
             {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <button type="button" class="btn-close js-alert-close" aria-label="Fechar"></button>
           </div>
         {% endfor %}
       {% endif %}
@@ -40,19 +40,22 @@
     {% if status_resumo %}
       {% if current_user.role != 'admin' %}
         {% if status_resumo.aprovados %}
-          <div class="alert alert-success shadow-sm" role="alert">
+          <div class="alert alert-success fade show shadow-sm js-status-alert d-flex align-items-center justify-content-between gap-2" role="alert" data-alert-key="aprovados-{{ status_resumo.aprovados }}">
             Você tem {{ status_resumo.aprovados }} documento(s) aprovado(s). Confira a lista para detalhes.
+            <button type="button" class="js-alert-close btn btn-sm btn-light border" aria-label="Fechar">✕</button>
           </div>
         {% endif %}
         {% if status_resumo.reprovados %}
-          <div class="alert alert-warning shadow-sm" role="alert">
+          <div class="alert alert-warning fade show shadow-sm js-status-alert d-flex align-items-center justify-content-between gap-2" role="alert" data-alert-key="reprovados-{{ status_resumo.reprovados }}">
             Você tem {{ status_resumo.reprovados }} documento(s) com correções pendentes. Veja o motivo na tabela.
+            <button type="button" class="js-alert-close btn btn-sm btn-light border" aria-label="Fechar">✕</button>
           </div>
         {% endif %}
       {% else %}
         {% if status_resumo.pendentes %}
-          <div class="alert alert-info shadow-sm" role="alert">
+          <div class="alert alert-info fade show shadow-sm js-status-alert d-flex align-items-center justify-content-between gap-2" role="alert" data-alert-key="pendentes-{{ status_resumo.pendentes }}">
             Existem {{ status_resumo.pendentes }} documento(s) aguardando conferência dos usuários.
+            <button type="button" class="js-alert-close btn btn-sm btn-light border" aria-label="Fechar">✕</button>
           </div>
         {% endif %}
       {% endif %}
@@ -62,6 +65,31 @@
         <h3><i class="fas fa-folder-open text-primary"></i> Central de Documentos</h3>
         <a href="/" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Dashboard</a>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const alerts = document.querySelectorAll('.js-status-alert');
+            alerts.forEach((alert) => {
+                const key = alert.getAttribute('data-alert-key');
+                if (!key) return;
+                if (localStorage.getItem(`documentos_alert_${key}`) === 'dismissed') {
+                    alert.classList.remove('show');
+                    alert.classList.add('d-none');
+                }
+
+                const closeButton = alert.querySelector('.js-alert-close');
+                if (closeButton) {
+                    closeButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        localStorage.setItem(`documentos_alert_${key}`, 'dismissed');
+                        alert.classList.remove('show');
+                        alert.classList.add('d-none');
+                    });
+                }
+            });
+        });
+    </script>
 
     <!-- ÁREA DE NOVO UPLOAD -->
     <div class="card p-4 mb-4 shadow-sm bg-white border-top border-primary border-4">
@@ -439,3 +467,6 @@
 </script>
 </body>
 </html>
+
+
+
