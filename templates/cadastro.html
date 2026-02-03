@@ -810,6 +810,11 @@
             <input type="file" class="form-control" name="nota_fiscal_upload" id="notaFiscalTransacaoUpload" accept="application/pdf,image/jpeg,image/png" required>
             <small class="text-muted">Anexe a nota fiscal em PDF ou imagem (JPG/PNG).</small>
         </div>
+        <div class="mb-3">
+            <label class="form-label required-field" id="labelComprovantePagamentoTransacao">Anexar comprovante de pagamento</label>
+            <input type="file" class="form-control" name="comprovante_pagamento_upload" id="comprovantePagamentoTransacaoUpload" accept="application/pdf,image/jpeg,image/png" required>
+            <small class="text-muted">Anexe o comprovante de pagamento em PDF ou imagem (JPG/PNG).</small>
+        </div>
         
         <input type="hidden" name="id_transacao" id="idTransacaoHidden">
         
@@ -2595,6 +2600,7 @@ function atualizarLabelNotaFiscalTransacao() {
     const tipoTransacao = $('#tipoTransacaoSelect').val();
     const label = $('#labelNotaFiscalTransacao');
     const input = $('#notaFiscalTransacaoUpload');
+    const comprovanteInput = $('#comprovantePagamentoTransacaoUpload');
     let textoLabel = 'Anexar Nota Fiscal';
 
     if (tipoTransacao === 'Despesa') {
@@ -2606,8 +2612,10 @@ function atualizarLabelNotaFiscalTransacao() {
     label.text(textoLabel);
     const isCadastro = $('#transacaoForm').attr('action') === '/registrar_transacao_financeira';
     input.prop('required', Boolean(tipoTransacao) && isCadastro);
+    comprovanteInput.prop('required', Boolean(tipoTransacao) && isCadastro);
     if (!tipoTransacao) {
         input.val('');
+        comprovanteInput.val('');
     }
 }
 

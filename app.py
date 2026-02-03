@@ -589,6 +589,7 @@ def garantir_tipos_documentos_padrao():
                 ('Nota Fiscal de Serviço', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe autorização se necessário'),
                 ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
                 ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
+                ('Comprovante de Pagamento', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Comprovante de pagamento das transações financeiras'),
                 ('Medição Mensal', 'Mensal – Financeiro', TRUE, FALSE, FALSE, FALSE, 'Deve estar atestada pelo fiscal'),
                 ('Relatório de Associados', 'Mensal – Trabalhista', TRUE, FALSE, FALSE, FALSE, 'Lista de ativos, baixados e novos'),
                 ('Recibos de Rateio', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, TRUE, 'Comprovantes de pagamento aos associados'),
@@ -1926,6 +1927,12 @@ def registrar_transacao_financeira():
         formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
         if extensao_nf not in formatos_permitidos:
             return "A nota fiscal deve ser enviada em PDF ou imagem (JPG/PNG).", 400
+        arquivo_comprovante = request.files.get('comprovante_pagamento_upload')
+        if not arquivo_comprovante or not arquivo_comprovante.filename:
+            return "Anexe o comprovante de pagamento em PDF ou imagem (JPG/PNG).", 400
+        extensao_comprovante = os.path.splitext(arquivo_comprovante.filename)[1].lower()
+        if extensao_comprovante not in formatos_permitidos:
+            return "O comprovante de pagamento deve ser enviado em PDF ou imagem (JPG/PNG).", 400
 
         tipo_transacao = dados["tipo_transacao"]
         if dados.get("tipo_atividade_transacao") == "Rateio dos Associados":
@@ -2008,6 +2015,33 @@ def registrar_transacao_financeira():
             dados["uvr_transacao"], id_tipo_documento, nome_arquivo_salvo, nome_original,
             competencia, None, valor_total_documento_calculado,
             numero_referencia, observacoes_doc, enviado_por
+        ))
+
+        comprovante_anexo = _preparar_comprovante_pagamento_anexo(
+            arquivo_comprovante, {
+                "uvr": dados["uvr_transacao"],
+                "data_documento": dados["data_documento_transacao"],
+                "numero_documento": numero_referencia,
+                "nome_origem": nome_final_origem,
+            }, valor_total_documento_calculado, id_transacao_criada, cur
+        )
+        cur.execute("""
+            INSERT INTO documentos
+            (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+             data_validade, valor, numero_referencia, observacoes,
+             enviado_por, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+        """, (
+            dados["uvr_transacao"],
+            comprovante_anexo["id_tipo_documento"],
+            comprovante_anexo["caminho_arquivo"],
+            comprovante_anexo["nome_original"],
+            datetime.strptime(comprovante_anexo["competencia"], '%Y-%m-%d').date(),
+            None,
+            Decimal(str(comprovante_anexo["valor"])),
+            comprovante_anexo["numero_referencia"],
+            comprovante_anexo["observacoes"],
+            comprovante_anexo["enviado_por"],
         ))
         conn.commit()
         return redirect(url_for("sucesso_transacao"))
@@ -2109,6 +2143,13 @@ def editar_transacao():
             formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
             if extensao_nf not in formatos_permitidos:
                 return "A nota fiscal deve ser enviada em PDF ou imagem (JPG/PNG).", 400
+        arquivo_comprovante = request.files.get('comprovante_pagamento_upload')
+        anexar_comprovante = bool(arquivo_comprovante and arquivo_comprovante.filename)
+        if anexar_comprovante:
+            extensao_comprovante = os.path.splitext(arquivo_comprovante.filename)[1].lower()
+            formatos_permitidos = {'.pdf', '.jpg', '.jpeg', '.png'}
+            if extensao_comprovante not in formatos_permitidos:
+                return "O comprovante de pagamento deve ser enviado em PDF ou imagem (JPG/PNG).", 400
 
         conn = conectar_banco()
         cur = conn.cursor()
@@ -2218,6 +2259,23 @@ def editar_transacao():
                     anexo["enviado_por"],
                     anexo["observacoes"],
                 )
+
+            if anexar_comprovante:
+                comprovante_anexo = _preparar_comprovante_pagamento_anexo(
+                    arquivo_comprovante, cabecalho, valor_total_novo, id_transacao, cur
+                )
+                _substituir_documento_transacao(
+                    cur,
+                    cabecalho["uvr"],
+                    comprovante_anexo["id_tipo_documento"],
+                    comprovante_anexo["caminho_arquivo"],
+                    comprovante_anexo["nome_original"],
+                    datetime.strptime(comprovante_anexo["competencia"], '%Y-%m-%d').date(),
+                    comprovante_anexo["valor"],
+                    comprovante_anexo["numero_referencia"],
+                    comprovante_anexo["enviado_por"],
+                    comprovante_anexo["observacoes"],
+                )
             
             conn.commit()
             return redirect(url_for("sucesso_transacao")) # Reutiliza página de sucesso
@@ -2231,6 +2289,12 @@ def editar_transacao():
                 cabecalho["documento_anexo"] = _preparar_documento_anexo(
                     arquivo_nf, cabecalho, valor_total_novo, id_transacao, cur
                 )
+
+            if anexar_comprovante:
+                cabecalho["comprovante_pagamento_anexo"] = _preparar_comprovante_pagamento_anexo(
+                    arquivo_comprovante, cabecalho, valor_total_novo, id_transacao, cur
+                )
+            
             
             cur.execute("""
                 INSERT INTO solicitacoes_alteracao 
@@ -3146,6 +3210,53 @@ def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, 
         arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
 
     observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}. Origem: {cabecalho.get('nome_origem', '')}."
+    return {
+        "id_tipo_documento": id_tipo_documento,
+        "caminho_arquivo": nome_arquivo_salvo,
+        "nome_original": nome_original,
+        "competencia": competencia.isoformat(),
+        "valor": float(valor_total),
+        "numero_referencia": numero_referencia,
+        "observacoes": observacoes_doc,
+        "enviado_por": current_user.username,
+    }
+
+def _preparar_comprovante_pagamento_anexo(arquivo_comprovante, cabecalho, valor_total, id_transacao, cur):
+    data_documento = datetime.strptime(cabecalho["data_documento"], '%Y-%m-%d').date()
+    nome_tipo_documento = "Comprovante de Pagamento"
+    competencia = date(data_documento.year, data_documento.month, 1)
+    numero_referencia = cabecalho.get("numero_documento", "")
+
+    cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
+    tipo_doc = cur.fetchone()
+    if not tipo_doc:
+        raise ValueError(f"Tipo de documento '{nome_tipo_documento}' não encontrado.")
+    id_tipo_documento = tipo_doc[0]
+
+    nome_original = arquivo_comprovante.filename
+    import time
+    timestamp = int(time.time())
+    extensao = os.path.splitext(nome_original)[1]
+    nome_arquivo_salvo = f"comprovante_pagamento_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
+    file_format = extensao.lstrip('.') if extensao else None
+
+    url_cloud = _upload_file_to_cloudinary(
+        arquivo_comprovante,
+        folder="documentos",
+        public_id=f"comprovante_pagamento_transacao_{cabecalho['uvr']}_{timestamp}",
+        resource_type="raw",
+        file_format=file_format,
+    )
+    if url_cloud:
+        nome_arquivo_salvo = url_cloud
+    else:
+        os.makedirs('uploads', exist_ok=True)
+        arquivo_comprovante.save(os.path.join('uploads', nome_arquivo_salvo))
+
+    observacoes_doc = (
+        f"Gerado automaticamente do comprovante de pagamento da transação #{id_transacao}. "
+        f"Origem: {cabecalho.get('nome_origem', '')}."
+    )
     return {
         "id_tipo_documento": id_tipo_documento,
         "caminho_arquivo": nome_arquivo_salvo,
@@ -4135,6 +4246,24 @@ def responder_solicitacao():
                             documento_anexo.get("numero_referencia", ""),
                             documento_anexo.get("enviado_por", current_user.username),
                             documento_anexo.get("observacoes", ""),
+                        )
+
+                    comprovante_anexo = d.get("comprovante_pagamento_anexo")
+                    if comprovante_anexo:
+                        competencia = comprovante_anexo.get("competencia")
+                        if competencia:
+                            competencia = datetime.strptime(competencia, '%Y-%m-%d').date()
+                        _substituir_documento_transacao(
+                            cur,
+                            d["uvr"],
+                            comprovante_anexo["id_tipo_documento"],
+                            comprovante_anexo["caminho_arquivo"],
+                            comprovante_anexo["nome_original"],
+                            competencia,
+                            Decimal(str(comprovante_anexo["valor"])),
+                            comprovante_anexo.get("numero_referencia", ""),
+                            comprovante_anexo.get("enviado_por", current_user.username),
+                            comprovante_anexo.get("observacoes", ""),
                         )
 
                 # --- LÓGICA PARA PATRIMÔNIO ---
@@ -6820,6 +6949,7 @@ def setup_banco():
                 ('Nota Fiscal de Serviço', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe autorização se necessário'),
                 ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
                 ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
+                ('Comprovante de Pagamento', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Comprovante de pagamento das transações financeiras'),
                 ('Medição Mensal', 'Mensal – Financeiro', TRUE, FALSE, FALSE, FALSE, 'Deve estar atestada pelo fiscal'),
                 ('Relatório de Associados', 'Mensal – Trabalhista', TRUE, FALSE, FALSE, FALSE, 'Lista de ativos, baixados e novos'),
                 ('Recibos de Rateio', 'Mensal – Trabalhista', TRUE, FALSE, TRUE, TRUE, 'Comprovantes de pagamento aos associados'),
@@ -6836,7 +6966,8 @@ def setup_banco():
                 INSERT INTO tipos_documentos (nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
                 SELECT * FROM (VALUES
                     ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
-                    ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa')
+                    ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
+                    ('Comprovante de Pagamento', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Comprovante de pagamento das transações financeiras')
                 ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
                 WHERE NOT EXISTS (
                     SELECT 1 FROM tipos_documentos existentes WHERE existentes.nome = novos.nome
