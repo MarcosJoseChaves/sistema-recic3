@@ -7,10 +7,13 @@ import requests
 import os
 import psycopg2
 import calendar
+import secrets
+import smtplib
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
 from urllib.parse import unquote
+from email.message import EmailMessage
 import cloudinary
 import cloudinary.uploader
 from cloudinary.utils import cloudinary_url
@@ -19,10 +22,11 @@ from cloudinary.utils import cloudinary_url
 from psycopg2.extras import RealDictCursor
 
 # --- FLASK IMPORTS ---
-from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file, make_response, flash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file, make_response, flash, render_template_string
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_from_directory
+from jinja2 import TemplateNotFound
 
 # --- REPORTLAB IMPORTS ---
 from reportlab.pdfgen import canvas 
@@ -423,10 +427,17 @@ def criar_tabelas_se_nao_existir():
         cur.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL,
-                nome_completo VARCHAR(100), role VARCHAR(20) NOT NULL, uvr_acesso VARCHAR(50), ativo BOOLEAN DEFAULT TRUE
+                nome_completo VARCHAR(100), role VARCHAR(20) NOT NULL, uvr_acesso VARCHAR(50), ativo BOOLEAN DEFAULT TRUE,
+                email VARCHAR(255), reset_token VARCHAR(255), reset_token_expira TIMESTAMP
             )
         """)
-        
+        try:
+            cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(255);")
+            cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255);")
+            cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_token_expira TIMESTAMP;")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()        
         cur.execute("""
             CREATE TABLE IF NOT EXISTS solicitacoes_alteracao (
                 id SERIAL PRIMARY KEY, tabela_alvo VARCHAR(50) NOT NULL, id_registro INTEGER NOT NULL,
@@ -650,6 +661,101 @@ def bloquear_visitante(mensagem="Acesso negado. Usuários visitantes não podem 
         return mensagem, 403
     return None
 
+
+def exigir_admin():
+    if getattr(current_user, "role", "").lower() != "admin":
+        if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/"):
+            return jsonify({"error": "Acesso restrito ao administrador."}), 403
+        return "Acesso restrito ao administrador.", 403
+    return None
+
+
+def enviar_email_recuperacao(destinatario, assunto, corpo):
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+    smtp_use_tls = os.getenv("SMTP_USE_TLS", "false").lower() == "true"
+
+    faltantes = []
+    if not smtp_host:
+        faltantes.append("SMTP_HOST")
+    if not smtp_user:
+        faltantes.append("SMTP_USER")
+    if not smtp_password:
+        faltantes.append("SMTP_PASSWORD")
+    if not smtp_from:
+        faltantes.append("SMTP_FROM")
+
+    if faltantes:
+        app.logger.warning(
+            "Configuração SMTP incompleta. Variáveis ausentes: %s",
+            ", ".join(faltantes),
+        )
+        return False, (
+            "Configuração de e-mail incompleta. Variáveis SMTP ausentes: "
+            + ", ".join(faltantes)
+            + "."
+        )
+
+    mensagem = EmailMessage()
+    mensagem["Subject"] = assunto
+    mensagem["From"] = smtp_from
+    mensagem["To"] = destinatario
+    mensagem.set_content(corpo)
+
+    try:
+        if smtp_use_tls:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(mensagem)
+        else:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(mensagem)
+    except Exception as exc:
+        return False, f"Erro ao enviar e-mail: {exc}"
+
+    return True, "E-mail enviado com sucesso."
+
+
+def renderizar_template_com_fallback(template_name, **contexto):
+    try:
+        return render_template(template_name, **contexto)
+    except TemplateNotFound:
+        conteudo = (
+            "<h1>Template não encontrado</h1>"
+            f"<p>Não foi possível localizar o arquivo {template_name}. "
+            "Verifique se ele existe dentro da pasta templates.</p>"
+        )
+        return render_template_string(conteudo), 500
+
+
+def obter_uvrs_existentes():
+    conn = conectar_banco()
+    cur = conn.cursor()
+    uvrs = []
+    try:
+        cur.execute(
+            """
+            SELECT DISTINCT uvr FROM cadastros WHERE uvr IS NOT NULL AND uvr <> ''
+            UNION
+            SELECT DISTINCT uvr_acesso FROM usuarios WHERE uvr_acesso IS NOT NULL AND uvr_acesso <> ''
+            ORDER BY uvr
+            """
+        )
+        uvrs = [linha[0] for linha in cur.fetchall() if linha[0]]
+    except Exception:
+        uvrs = []
+    finally:
+        cur.close()
+        conn.close()
+    if not uvrs:
+        uvrs = ["UVR 01", "UVR 02", "UVR 03"]
+    return uvrs
+
 @login_manager.user_loader
 def load_user(user_id):
     conn = conectar_banco()
@@ -698,6 +804,128 @@ def login():
             return render_template('login.html', erro="Usuário não encontrado.")
             
     return render_template('login.html')
+
+
+@app.route('/recuperar_senha', methods=['GET', 'POST'])
+def recuperar_senha():
+    mensagem = None
+    erro = None
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        if not email:
+            erro = "Informe o e-mail cadastrado."
+            return render_template('recuperar_senha.html', erro=erro, mensagem=mensagem)
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, username, email
+            FROM usuarios
+            WHERE LOWER(email) = LOWER(%s) AND ativo = TRUE
+            """,
+            (email,),
+        )
+        user_data = cur.fetchone()
+
+        if user_data:
+            token = secrets.token_urlsafe(32)
+            expira_em = datetime.utcnow() + timedelta(hours=1)
+            cur.execute(
+                """
+                UPDATE usuarios
+                SET reset_token = %s, reset_token_expira = %s
+                WHERE id = %s
+                """,
+                (token, expira_em, user_data[0]),
+            )
+            conn.commit()
+
+            base_url = os.getenv("APP_BASE_URL", request.url_root).rstrip("/")
+            link = f"{base_url}{url_for('redefinir_senha', token=token)}"
+            corpo = (
+                f"Olá, {user_data[1]}!\n\n"
+                "Recebemos uma solicitação para redefinir sua senha. "
+                "Clique no link abaixo para criar uma nova senha:\n\n"
+                f"{link}\n\n"
+                "Se você não solicitou esta recuperação, ignore este e-mail."
+            )
+            ok, retorno = enviar_email_recuperacao(
+                destinatario=user_data[2],
+                assunto="Recuperação de senha - Sistema Recic3",
+                corpo=corpo,
+            )
+            if ok:
+                mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
+            else:
+                mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
+                if "Configuração de e-mail incompleta" not in retorno:
+                    erro = retorno
+        else:
+            mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
+
+        cur.close()
+        conn.close()
+
+    return render_template('recuperar_senha.html', erro=erro, mensagem=mensagem)
+
+
+@app.route('/redefinir_senha/<token>', methods=['GET', 'POST'])
+def redefinir_senha(token):
+    conn = conectar_banco()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, username, reset_token_expira
+        FROM usuarios
+        WHERE reset_token = %s
+        """,
+        (token,),
+    )
+    user_data = cur.fetchone()
+
+    if not user_data or not user_data[2] or user_data[2] < datetime.utcnow():
+        cur.close()
+        conn.close()
+        return render_template('redefinir_senha.html', erro="Token inválido ou expirado.")
+
+    if request.method == 'POST':
+        nova_senha = request.form.get('nova_senha')
+        confirmar_senha = request.form.get('confirmar_senha')
+
+        if not nova_senha or not confirmar_senha:
+            cur.close()
+            conn.close()
+            return render_template('redefinir_senha.html', erro="Preencha todos os campos.")
+
+        if nova_senha != confirmar_senha:
+            cur.close()
+            conn.close()
+            return render_template('redefinir_senha.html', erro="As senhas não conferem.")
+
+        if len(nova_senha) < 6:
+            cur.close()
+            conn.close()
+            return render_template('redefinir_senha.html', erro="A senha deve ter pelo menos 6 caracteres.")
+
+        novo_hash = generate_password_hash(nova_senha)
+        cur.execute(
+            """
+            UPDATE usuarios
+            SET password_hash = %s, reset_token = NULL, reset_token_expira = NULL
+            WHERE id = %s
+            """,
+            (novo_hash, user_data[0]),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return render_template('redefinir_senha.html', sucesso="Senha redefinida com sucesso! Faça login.")
+
+    cur.close()
+    conn.close()
+    return render_template('redefinir_senha.html')
 
 @app.route('/logout')
 @login_required
@@ -749,6 +977,167 @@ def alterar_senha():
             conn.close()
 
     return render_template('alterar_senha.html')
+
+
+@app.route('/admin/usuarios', methods=['GET', 'POST'])
+@login_required
+def admin_usuarios():
+    bloqueio = exigir_admin()
+    if bloqueio:
+        return bloqueio
+
+    mensagem = None
+    erro = None
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        nome_completo = request.form.get('nome_completo', '').strip()
+        email = request.form.get('email', '').strip()
+        role = request.form.get('role', '').strip().lower()
+        uvr_acesso = request.form.get('uvr_acesso', '').strip()
+        senha = request.form.get('senha', '').strip()
+
+        if not username or not senha or not role:
+            erro = "Usuário, senha e tipo são obrigatórios."
+        elif role not in {"uvr", "visitante"}:
+            erro = "Tipo de usuário inválido."
+        elif role == "uvr" and not uvr_acesso:
+            erro = "Informe a UVR de acesso."
+        elif not email:
+            erro = "Informe o e-mail para recuperação."
+        else:
+            conn = conectar_banco()
+            cur = conn.cursor()
+            try:
+                senha_hash = generate_password_hash(senha)
+                cur.execute(
+                    """
+                    INSERT INTO usuarios (username, password_hash, nome_completo, role, uvr_acesso, ativo, email)
+                    VALUES (%s, %s, %s, %s, %s, TRUE, %s)
+                    """,
+                    (username, senha_hash, nome_completo, role, uvr_acesso or None, email),
+                )
+                conn.commit()
+                mensagem = "Usuário criado com sucesso."
+            except psycopg2.Error as e:
+                conn.rollback()
+                erro = f"Erro ao criar usuário: {e.pgerror or e}"
+            finally:
+                cur.close()
+                conn.close()
+
+    uvrs = obter_uvrs_existentes()
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT id, username, nome_completo, role, uvr_acesso, ativo, email
+        FROM usuarios
+        ORDER BY id
+        """
+    )
+    usuarios = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return renderizar_template_com_fallback(
+        'admin_usuarios.html',
+        usuarios=usuarios,
+        uvrs=uvrs,
+        mensagem=mensagem,
+        erro=erro,
+    )
+
+
+@app.route('/admin/usuarios/<int:user_id>/editar', methods=['GET', 'POST'])
+@login_required
+def admin_editar_usuario(user_id):
+    bloqueio = exigir_admin()
+    if bloqueio:
+        return bloqueio
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    uvrs = obter_uvrs_existentes()
+    cur.execute(
+        """
+        SELECT id, username, nome_completo, role, uvr_acesso, ativo, email
+        FROM usuarios
+        WHERE id = %s
+        """,
+        (user_id,),
+    )
+    usuario = cur.fetchone()
+
+    if not usuario:
+        cur.close()
+        conn.close()
+        return "Usuário não encontrado.", 404
+
+    mensagem = None
+    erro = None
+
+    if request.method == 'POST':
+        nome_completo = request.form.get('nome_completo', '').strip()
+        email = request.form.get('email', '').strip()
+        role = request.form.get('role', '').strip().lower()
+        uvr_acesso = request.form.get('uvr_acesso', '').strip()
+        senha = request.form.get('senha', '').strip()
+        ativo = request.form.get('ativo') == 'on'
+
+        if role not in {"admin", "uvr", "visitante"}:
+            erro = "Tipo de usuário inválido."
+        elif role == "uvr" and not uvr_acesso:
+            erro = "Informe a UVR de acesso."
+        elif not email:
+            erro = "Informe o e-mail para recuperação."
+        else:
+            try:
+                if senha:
+                    senha_hash = generate_password_hash(senha)
+                    cur.execute(
+                        """
+                        UPDATE usuarios
+                        SET nome_completo = %s, role = %s, uvr_acesso = %s, ativo = %s, email = %s, password_hash = %s
+                        WHERE id = %s
+                        """,
+                        (nome_completo, role, uvr_acesso or None, ativo, email, senha_hash, user_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE usuarios
+                        SET nome_completo = %s, role = %s, uvr_acesso = %s, ativo = %s, email = %s
+                        WHERE id = %s
+                        """,
+                        (nome_completo, role, uvr_acesso or None, ativo, email, user_id),
+                    )
+                conn.commit()
+                mensagem = "Usuário atualizado com sucesso."
+                cur.execute(
+                    """
+                    SELECT id, username, nome_completo, role, uvr_acesso, ativo, email
+                    FROM usuarios
+                    WHERE id = %s
+                    """,
+                    (user_id,),
+                )
+                usuario = cur.fetchone()
+            except psycopg2.Error as e:
+                conn.rollback()
+                erro = f"Erro ao atualizar usuário: {e.pgerror or e}"
+
+    cur.close()
+    conn.close()
+
+    return renderizar_template_com_fallback(
+        'admin_usuario_editar.html',
+        usuario=usuario,
+        uvrs=uvrs,
+        mensagem=mensagem,
+        erro=erro,
+    )
 
 @app.route("/", methods=["GET"])
 @login_required  # <--- ADICIONE ISSO: Protege a rota
