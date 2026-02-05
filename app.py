@@ -2768,6 +2768,7 @@ def editar_transacao():
                     anexo["numero_referencia"],
                     anexo["enviado_por"],
                     anexo["observacoes"],
+                    id_transacao=id_transacao,
                 )
 
             if anexar_comprovante:
@@ -2785,6 +2786,7 @@ def editar_transacao():
                     comprovante_anexo["numero_referencia"],
                     comprovante_anexo["enviado_por"],
                     comprovante_anexo["observacoes"],
+                    id_transacao=id_transacao,
                 )
 
             if anexar_mtr:
@@ -2800,6 +2802,7 @@ def editar_transacao():
                     mtr_anexo["numero_referencia"],
                     mtr_anexo["enviado_por"],
                     mtr_anexo["observacoes"],
+                    id_transacao=id_transacao,
                 )
 
             if anexar_relatorio_fotografico:
@@ -2817,6 +2820,7 @@ def editar_transacao():
                     relatorio_anexo["numero_referencia"],
                     relatorio_anexo["enviado_por"],
                     relatorio_anexo["observacoes"],
+                    id_transacao=id_transacao,
                 )
             
             conn.commit()
@@ -3671,14 +3675,25 @@ def _format_decimal_quantidade(value_str):
         return value_str
 
 def _substituir_documento_transacao(cur, uvr, id_tipo_documento, caminho_arquivo, nome_original, competencia,
-                                    valor, numero_referencia, enviado_por, observacoes):
-    cur.execute("""
-        SELECT id, caminho_arquivo
-        FROM documentos
-        WHERE uvr = %s AND id_tipo = %s AND numero_referencia = %s
-        ORDER BY id DESC
-        LIMIT 1
-    """, (uvr, id_tipo_documento, numero_referencia))
+                                    valor, numero_referencia, enviado_por, observacoes, id_transacao=None):
+    if id_transacao:
+        cur.execute("""
+            SELECT id, caminho_arquivo
+            FROM documentos
+            WHERE uvr = %s
+              AND id_tipo = %s
+              AND observacoes LIKE %s
+            ORDER BY id DESC
+            LIMIT 1
+        """, (uvr, id_tipo_documento, f"%transação #{id_transacao}%"))
+    else:
+        cur.execute("""
+            SELECT id, caminho_arquivo
+            FROM documentos
+            WHERE uvr = %s AND id_tipo = %s AND numero_referencia = %s
+            ORDER BY id DESC
+            LIMIT 1
+        """, (uvr, id_tipo_documento, numero_referencia))
     existente = cur.fetchone()
 
     if existente:
@@ -4893,6 +4908,7 @@ def responder_solicitacao():
                             documento_anexo.get("numero_referencia", ""),
                             documento_anexo.get("enviado_por", current_user.username),
                             documento_anexo.get("observacoes", ""),
+                            id_transacao=id_reg,
                         )
 
                     comprovante_anexo = d.get("comprovante_pagamento_anexo")
@@ -4911,6 +4927,7 @@ def responder_solicitacao():
                             comprovante_anexo.get("numero_referencia", ""),
                             comprovante_anexo.get("enviado_por", current_user.username),
                             comprovante_anexo.get("observacoes", ""),
+                            id_transacao=id_reg,
                         )
 
                     mtr_anexo = d.get("mtr_anexo")
@@ -4932,6 +4949,7 @@ def responder_solicitacao():
                             mtr_anexo.get("numero_referencia", ""),
                             mtr_anexo.get("enviado_por", current_user.username),
                             mtr_anexo.get("observacoes", ""),
+                            id_transacao=id_reg,
                         )
 
                     relatorio_anexo = d.get("relatorio_fotografico_anexo")
@@ -4953,6 +4971,7 @@ def responder_solicitacao():
                             relatorio_anexo.get("numero_referencia", ""),
                             relatorio_anexo.get("enviado_por", current_user.username),
                             relatorio_anexo.get("observacoes", ""),
+                            id_transacao=id_reg,
                         )
 
                 # --- LÓGICA PARA PATRIMÔNIO ---
