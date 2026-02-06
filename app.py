@@ -60,6 +60,13 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite de 64MB
 app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
 
+
+UPLOAD_DIR = os.getenv('UPLOAD_DIR', os.path.join(app.root_path, 'uploads'))
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+def _local_upload_path(filename):
+    return os.path.join(UPLOAD_DIR, filename)
+
 cloudinary_configured = False
 if os.getenv("CLOUDINARY_URL"):
     cloudinary.config(secure=True)
@@ -2432,8 +2439,8 @@ def registrar_transacao_financeira():
         if url_cloud:
             nome_arquivo_salvo = url_cloud
         else:
-            os.makedirs('uploads', exist_ok=True)
-            arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
+            os.makedirs(UPLOAD_DIR, exist_ok=True)
+            arquivo_nf.save(_local_upload_path(nome_arquivo_salvo))
 
         observacoes_doc = f"Gerado automaticamente da transação #{id_transacao_criada}. Origem: {nome_final_origem}."
         cur.execute("""
@@ -3705,7 +3712,7 @@ def _substituir_documento_transacao(cur, uvr, id_tipo_documento, caminho_arquivo
                     resource_type=_detect_cloudinary_resource_type(caminho_antigo),
                 )
             else:
-                caminho_local = os.path.join('uploads', caminho_antigo)
+                caminho_local = _local_upload_path(caminho_antigo)
                 if os.path.exists(caminho_local):
                     os.remove(caminho_local)
 
@@ -3771,8 +3778,8 @@ def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, 
     if url_cloud:
         nome_arquivo_salvo = url_cloud
     else:
-        os.makedirs('uploads', exist_ok=True)
-        arquivo_nf.save(os.path.join('uploads', nome_arquivo_salvo))
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        arquivo_nf.save(_local_upload_path(nome_arquivo_salvo))
 
     observacoes_doc = f"Gerado automaticamente da edição da transação #{id_transacao}. Origem: {cabecalho.get('nome_origem', '')}."
     return {
@@ -3815,8 +3822,8 @@ def _preparar_mtr_anexo(arquivo_mtr, cabecalho, id_transacao, cur):
     if url_cloud:
         nome_arquivo_salvo = url_cloud
     else:
-        os.makedirs('uploads', exist_ok=True)
-        arquivo_mtr.save(os.path.join('uploads', nome_arquivo_salvo))
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        arquivo_mtr.save(_local_upload_path(nome_arquivo_salvo))
 
     observacoes_doc = (
         f"MTR anexado automaticamente da transação #{id_transacao}. "
@@ -3862,8 +3869,8 @@ def _preparar_relatorio_fotografico_anexo(arquivo_relatorio, cabecalho, id_trans
     if url_cloud:
         nome_arquivo_salvo = url_cloud
     else:
-        os.makedirs('uploads', exist_ok=True)
-        arquivo_relatorio.save(os.path.join('uploads', nome_arquivo_salvo))
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        arquivo_relatorio.save(_local_upload_path(nome_arquivo_salvo))
 
     observacoes_doc = (
         f"Relatório fotográfico anexado automaticamente da transação #{id_transacao}. "
@@ -3909,8 +3916,8 @@ def _preparar_comprovante_pagamento_anexo(arquivo_comprovante, cabecalho, valor_
     if url_cloud:
         nome_arquivo_salvo = url_cloud
     else:
-        os.makedirs('uploads', exist_ok=True)
-        arquivo_comprovante.save(os.path.join('uploads', nome_arquivo_salvo))
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        arquivo_comprovante.save(_local_upload_path(nome_arquivo_salvo))
 
     observacoes_doc = (
         f"Gerado automaticamente do comprovante de pagamento da transação #{id_transacao}. "
@@ -6546,6 +6553,95 @@ def get_movimentacao_detalhes(id):
     finally:
         conn.close()
 
+@app.route('/fluxo_caixa/comprovante_pdf/<int:id_mov>', methods=['GET'])
+@login_required
+def gerar_comprovante_movimentacao_fluxo(id_mov):
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("""
+            SELECT fc.id, fc.uvr, fc.associacao, fc.tipo_movimentacao, fc.valor_efetivo,
+                   fc.nome_cadastro_cf, fc.numero_documento_bancario, fc.data_efetiva,
+                   fc.observacoes, cc.banco_nome, cc.agencia, cc.conta_corrente, cc.descricao_conta
+            FROM fluxo_caixa fc
+            LEFT JOIN contas_correntes cc ON cc.id = fc.id_conta_corrente
+            WHERE fc.id = %s
+        """, (id_mov,))
+        movimentacao = cur.fetchone()
+
+        if not movimentacao:
+            return "Movimentação não encontrada.", 404
+
+        if current_user.role != 'admin' and movimentacao.get('uvr') != current_user.uvr_acesso:
+            return "Acesso negado.", 403
+
+        conta_display = ""
+        if movimentacao.get('banco_nome') or movimentacao.get('agencia') or movimentacao.get('conta_corrente'):
+            conta_display = (
+                f"{movimentacao.get('descricao_conta') or movimentacao.get('banco_nome') or ''} "
+                f"Ag: {movimentacao.get('agencia') or '-'} C/C: {movimentacao.get('conta_corrente') or '-'}"
+            ).strip()
+        movimentacao['conta_display'] = conta_display
+
+        cur.execute("""
+            SELECT tf.id, tf.tipo_transacao, tf.numero_documento, tf.valor_total_documento
+            FROM fluxo_caixa_transacoes_link fctl
+            JOIN transacoes_financeiras tf ON tf.id = fctl.id_transacao_financeira
+            WHERE fctl.id_fluxo_caixa = %s
+            ORDER BY tf.id
+        """, (id_mov,))
+        transacoes = cur.fetchall()
+
+        anexos = []
+        for transacao in transacoes:
+            id_transacao = transacao.get('id')
+            cur.execute("""
+                SELECT d.id, d.nome_original, d.caminho_arquivo, td.nome AS nome_tipo
+                FROM documentos d
+                JOIN tipos_documentos td ON td.id = d.id_tipo
+                WHERE d.observacoes ILIKE %s
+                  AND td.nome IN ('Notas Fiscais de Receitas', 'Notas Fiscais de Despesas', 'Comprovante de Pagamento')
+                ORDER BY d.id DESC
+            """, (f"%transação #{id_transacao}%",))
+            anexos.extend(cur.fetchall())
+
+        anexos_unicos = []
+        vistos = set()
+        for anexo in anexos:
+            if anexo['id'] in vistos:
+                continue
+            vistos.add(anexo['id'])
+            anexos_unicos.append(anexo)
+
+        writer = PdfWriter()
+        header = _criar_pdf_cabecalho_movimentacao_fluxo(movimentacao, transacoes, len(anexos_unicos))
+        for pagina in PdfReader(header).pages:
+            writer.add_page(pagina)
+
+        anexos_adicionados = 0
+        for anexo in anexos_unicos:
+            if _adicionar_anexo_ao_writer(writer, anexo):
+                anexos_adicionados += 1
+
+        if anexos_unicos and anexos_adicionados == 0:
+            flash('Nenhum anexo válido foi encontrado para esta movimentação.', 'warning')
+
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        buffer.seek(0)
+
+        nome_arquivo = f"comprovante_fluxo_{id_mov}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        return send_file(buffer, as_attachment=True, download_name=nome_arquivo, mimetype='application/pdf')
+
+    except Exception as e:
+        app.logger.error(f"Erro ao gerar comprovante único da movimentação {id_mov}: {e}", exc_info=True)
+        return "Erro ao gerar comprovante da movimentação.", 500
+    finally:
+        if conn:
+            conn.close()
+
 @app.route("/excluir_movimentacao/<int:id>", methods=["POST"])
 @login_required
 def excluir_movimentacao(id):
@@ -7295,6 +7391,141 @@ def _criar_pdf_imagem_documento(image_bytes):
     buffer.seek(0)
     return buffer
 
+
+def _obter_bytes_documento(doc):
+    caminho = doc.get("caminho_arquivo")
+    if not caminho:
+        return None, None
+    if str(caminho).startswith("http"):
+        url = _build_cloudinary_delivery_url(caminho)
+        resposta = requests.get(url, timeout=30)
+        resposta.raise_for_status()
+        return resposta.content, caminho
+    caminho_local = caminho
+    if not os.path.isabs(caminho_local):
+        caminho_local = _local_upload_path(caminho_local)
+    if not os.path.exists(caminho_local):
+        return None, caminho_local
+    with open(caminho_local, "rb") as arquivo_local:
+        return arquivo_local.read(), caminho_local
+
+
+def _obter_extensao_documento(doc, referencia=None):
+    candidatos = [
+        doc.get("nome_original"),
+        referencia,
+        doc.get("caminho_arquivo")
+    ]
+    for item in candidatos:
+        if not item:
+            continue
+        caminho_sem_query = str(item).split("?", 1)[0]
+        ext = os.path.splitext(caminho_sem_query)[1].lower()
+        if ext:
+            return ext
+    return ""
+
+
+def _adicionar_anexo_ao_writer(writer, doc, header_buffer=None):
+    try:
+        bytes_doc, referencia = _obter_bytes_documento(doc)
+    except Exception as exc:
+        app.logger.error(f"Erro ao baixar documento {doc.get('id')}: {exc}")
+        return False
+
+    if not bytes_doc:
+        app.logger.warning(f"Documento sem arquivo disponível: {doc.get('id')}")
+        return False
+
+    if header_buffer:
+        header_reader = PdfReader(header_buffer)
+        for pagina in header_reader.pages:
+            writer.add_page(pagina)
+
+    extensao = _obter_extensao_documento(doc, referencia)
+    if extensao == ".pdf":
+        try:
+            reader = PdfReader(io.BytesIO(bytes_doc))
+            for pagina in reader.pages:
+                writer.add_page(pagina)
+        except Exception as exc:
+            app.logger.error(f"Erro ao ler PDF do documento {doc.get('id')}: {exc}")
+            return False
+    else:
+        try:
+            image_pdf = _criar_pdf_imagem_documento(bytes_doc)
+            reader = PdfReader(image_pdf)
+            for pagina in reader.pages:
+                writer.add_page(pagina)
+        except Exception as exc:
+            app.logger.error(f"Erro ao converter imagem do documento {doc.get('id')}: {exc}")
+            return False
+
+    return True
+
+
+def _criar_pdf_cabecalho_movimentacao_fluxo(movimentacao, transacoes, total_anexos):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(40, altura - 50, "Comprovante de Movimentação de Fluxo de Caixa")
+
+    c.setFont("Helvetica", 10)
+    y = altura - 80
+    campos = [
+        ("ID da Movimentação", movimentacao.get("id")),
+        ("UVR", movimentacao.get("uvr") or "-"),
+        ("Associação", movimentacao.get("associacao") or "-"),
+        ("Tipo", movimentacao.get("tipo_movimentacao") or "-"),
+        ("Data Efetiva", movimentacao.get("data_efetiva").strftime("%d/%m/%Y") if movimentacao.get("data_efetiva") else "-"),
+        ("Valor Efetivo", f"R$ {float(movimentacao.get('valor_efetivo') or 0):,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")),
+        ("Entidade", movimentacao.get("nome_cadastro_cf") or "-"),
+        ("Documento Bancário", movimentacao.get("numero_documento_bancario") or "-"),
+        ("Conta Corrente", movimentacao.get("conta_display") or "-"),
+        ("Qtd. de Anexos", total_anexos),
+    ]
+
+    for titulo, valor in campos:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(40, y, f"{titulo}:")
+        c.setFont("Helvetica", 10)
+        c.drawString(180, y, str(valor))
+        y -= 16
+
+    observacoes = movimentacao.get("observacoes")
+    if observacoes:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(40, y, "Observações:")
+        y -= 14
+        c.setFont("Helvetica", 10)
+        for linha in str(observacoes)[:600].splitlines() or [""]:
+            c.drawString(50, y, linha[:100])
+            y -= 14
+
+    y -= 6
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(40, y, "Transações vinculadas:")
+    y -= 14
+    c.setFont("Helvetica", 9)
+    if transacoes:
+        for t in transacoes:
+            texto = f"#{t.get('id')} | {t.get('tipo_transacao','-')} | Doc: {t.get('numero_documento') or '-'} | Valor: R$ {float(t.get('valor_total_documento') or 0):,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            c.drawString(50, y, texto[:115])
+            y -= 12
+            if y < 60:
+                c.showPage()
+                y = altura - 50
+                c.setFont("Helvetica", 9)
+    else:
+        c.drawString(50, y, "Sem transações vinculadas.")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 @app.route("/documentos", methods=['GET', 'POST'])
 @login_required
 def documentos():
@@ -7359,7 +7590,7 @@ def documentos():
                 if url_cloud:
                     nome_arquivo_salvo = url_cloud
                 else:
-                    pasta = 'uploads'
+                    pasta = UPLOAD_DIR
                     os.makedirs(pasta, exist_ok=True)
                     arquivo.save(os.path.join(pasta, nome_arquivo_salvo))
 
@@ -7459,38 +7690,6 @@ def gerar_pdf_unico_documentos():
     conn = conectar_banco()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-    def obter_bytes_documento(doc):
-        caminho = doc.get("caminho_arquivo")
-        if not caminho:
-            return None, None
-        if str(caminho).startswith("http"):
-            url = _build_cloudinary_delivery_url(caminho)
-            resposta = requests.get(url, timeout=30)
-            resposta.raise_for_status()
-            return resposta.content, caminho
-        caminho_local = caminho
-        if not os.path.isabs(caminho_local):
-            caminho_local = os.path.join("uploads", caminho_local)
-        if not os.path.exists(caminho_local):
-            return None, caminho_local
-        with open(caminho_local, "rb") as arquivo_local:
-            return arquivo_local.read(), caminho_local
-
-    def obter_extensao_documento(doc, referencia):
-        candidatos = [
-            doc.get("nome_original"),
-            referencia,
-            doc.get("caminho_arquivo")
-        ]
-        for item in candidatos:
-            if not item:
-                continue
-            caminho_sem_query = str(item).split("?", 1)[0]
-            ext = os.path.splitext(caminho_sem_query)[1].lower()
-            if ext:
-                return ext
-        return ""
-
     try:
         sql, params, filtros_template = _montar_consulta_documentos(request.form, current_user)
         sql += " ORDER BY d.data_envio DESC"
@@ -7512,42 +7711,10 @@ def gerar_pdf_unico_documentos():
                 except Exception:
                     pass
 
-            try:
-                bytes_doc, referencia = obter_bytes_documento(doc)
-            except Exception as exc:
-                app.logger.error(f"Erro ao baixar documento {doc.get('id')}: {exc}")
-                continue
-
-            if not bytes_doc:
-                app.logger.warning(f"Documento sem arquivo disponível: {doc.get('id')}")
-                continue
-
-            extensao = obter_extensao_documento(doc, referencia)
 
             header_buffer = _criar_pdf_cabecalho_documento(doc)
-            header_reader = PdfReader(header_buffer)
-            for pagina in header_reader.pages:
-                writer.add_page(pagina)
-
-            if extensao == ".pdf":
-                try:
-                    reader = PdfReader(io.BytesIO(bytes_doc))
-                    for pagina in reader.pages:
-                        writer.add_page(pagina)
-                except Exception as exc:
-                    app.logger.error(f"Erro ao ler PDF do documento {doc.get('id')}: {exc}")
-                    continue
-            else:
-                try:
-                    image_pdf = _criar_pdf_imagem_documento(bytes_doc)
-                    reader = PdfReader(image_pdf)
-                    for pagina in reader.pages:
-                        writer.add_page(pagina)
-                except Exception as exc:
-                    app.logger.error(f"Erro ao converter imagem do documento {doc.get('id')}: {exc}")
-                    continue
-
-            documentos_processados += 1
+            if _adicionar_anexo_ao_writer(writer, doc, header_buffer=header_buffer):
+                documentos_processados += 1
 
         if documentos_processados == 0:
             flash("Nenhum anexo válido foi encontrado para gerar o PDF.", "warning")
@@ -7618,10 +7785,9 @@ def editar_documento():
                             resource_type=_detect_cloudinary_resource_type(doc['caminho_arquivo']),
                         )
                     else:
-                        if not os.path.exists('uploads'):
-                            os.makedirs('uploads')
+                        os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-                        antigo = os.path.join('uploads', doc['caminho_arquivo'])
+                        antigo = _local_upload_path(doc['caminho_arquivo'])
                         if os.path.exists(antigo):
                             os.remove(antigo)
 
@@ -7638,9 +7804,8 @@ def editar_documento():
                 if url_cloud:
                     novo_arquivo = url_cloud
                 else:
-                    if not os.path.exists('uploads'):
-                        os.makedirs('uploads')
-                    arquivo.save(os.path.join('uploads', novo_arquivo))
+                    os.makedirs(UPLOAD_DIR, exist_ok=True)
+                    arquivo.save(_local_upload_path(novo_arquivo))
 
         if novo_arquivo:
             cursor.execute("""
@@ -7754,7 +7919,7 @@ def processar_solicitacao_doc():
                                     pass
                             else:
                                 try:
-                                    os.remove(os.path.join('uploads', arq['caminho_arquivo']))
+                                    os.remove(_local_upload_path(arq['caminho_arquivo']))
                                 except Exception:
                                     pass
                         cursor.execute("DELETE FROM documentos WHERE id=%s", (id_doc,))
@@ -7937,8 +8102,8 @@ def setup_banco():
 @app.route('/uploads/<path:filename>')
 @login_required
 def uploaded_file(filename):
-    # O primeiro argumento é o nome da pasta física no seu computador ('uploads')
-    return send_from_directory('uploads', filename)
+    # Usa a pasta de upload configurada via UPLOAD_DIR
+    return send_from_directory(UPLOAD_DIR, filename)
 
 @app.route('/aprovar_documento_direto/<int:id_doc>')
 @login_required

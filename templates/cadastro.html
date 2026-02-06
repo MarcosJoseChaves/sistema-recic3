@@ -3688,6 +3688,9 @@ $('#fornecedorPrestadorTransacaoSelect').change(function() {
                                     <button class="btn btn-sm btn-info me-1 text-white" onclick="visualizarMovimentacao(${mov.id})" title="Ver Detalhes">
                                         <i class="fas fa-eye"></i>
                                     </button>
+                                    <button class="btn btn-sm btn-danger me-1" onclick="baixarComprovanteMovimentacao(${mov.id})" title="Comprovante em PDF único">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </button>
                                     <button class="btn btn-sm btn-danger" onclick="excluirMovimentacao(${mov.id}, '${descSegura}')" title="Excluir/Estornar">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -5053,6 +5056,10 @@ function visualizarMovimentacao(id) {
 
             new bootstrap.Modal(document.getElementById('modalVisualizarCaixa')).show();
         });
+    }
+
+    function baixarComprovanteMovimentacao(id) {
+        window.open(`/fluxo_caixa/comprovante_pdf/${id}`, '_blank');
     }
 
     function excluirMovimentacao(id, desc) {
