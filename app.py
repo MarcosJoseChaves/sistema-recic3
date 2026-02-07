@@ -123,23 +123,8 @@ def _upload_file_to_cloudinary(file_storage, folder, public_id=None, resource_ty
         options["public_id"] = public_id
     if file_format:
         options["format"] = file_format
-    try:
-        if hasattr(file_storage, "stream"):
-            file_storage.stream.seek(0)
-        result = cloudinary.uploader.upload(file_storage, **options)
-        return result.get("secure_url")
-    except Exception as e:
-        app.logger.error(f"Falha no upload para Cloudinary ({folder}/{public_id}): {e}")
-        return None
-    finally:
-        if hasattr(file_storage, "stream"):
-            file_storage.stream.seek(0)
-
-
-def _gerar_nome_unico_documento(prefixo, uvr):
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    sufixo = secrets.token_hex(4)
-    return f"{prefixo}_{uvr}_{timestamp}_{sufixo}"
+    result = cloudinary.uploader.upload(file_storage, **options)
+    return result.get("secure_url")
 
 def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
     if not cloudinary_configured or not data_url:
@@ -2438,15 +2423,16 @@ def registrar_transacao_financeira():
         id_tipo_documento = tipo_doc[0]
 
         nome_original = arquivo_nf.filename
+        import time
+        timestamp = int(time.time())
         extensao = os.path.splitext(nome_original)[1]
-        public_id = _gerar_nome_unico_documento("nf_transacao", dados['uvr_transacao'])
-        nome_arquivo_salvo = f"{public_id}{extensao}"
+        nome_arquivo_salvo = f"nf_transacao_{dados['uvr_transacao']}_{timestamp}{extensao}"
         file_format = extensao.lstrip('.') if extensao else None
 
         url_cloud = _upload_file_to_cloudinary(
             arquivo_nf,
             folder="documentos",
-            public_id=public_id,
+            public_id=f"nf_transacao_{dados['uvr_transacao']}_{timestamp}",
             resource_type="raw",
             file_format=file_format,
         )
@@ -3776,15 +3762,16 @@ def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, 
     id_tipo_documento = tipo_doc[0]
 
     nome_original = arquivo_nf.filename
+    import time
+    timestamp = int(time.time())
     extensao = os.path.splitext(nome_original)[1]
-    public_id = _gerar_nome_unico_documento("nf_transacao", cabecalho['uvr'])
-    nome_arquivo_salvo = f"{public_id}{extensao}"
+    nome_arquivo_salvo = f"nf_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
     file_format = extensao.lstrip('.') if extensao else None
 
     url_cloud = _upload_file_to_cloudinary(
         arquivo_nf,
         folder="documentos",
-        public_id=public_id,
+        public_id=f"nf_transacao_{cabecalho['uvr']}_{timestamp}",
         resource_type="raw",
         file_format=file_format,
     )
@@ -3819,15 +3806,16 @@ def _preparar_mtr_anexo(arquivo_mtr, cabecalho, id_transacao, cur):
     id_tipo_documento = tipo_doc[0]
 
     nome_original = arquivo_mtr.filename
+    import time
+    timestamp = int(time.time())
     extensao = os.path.splitext(nome_original)[1]
-    public_id = _gerar_nome_unico_documento("mtr_transacao", cabecalho['uvr'])
-    nome_arquivo_salvo = f"{public_id}{extensao}"
+    nome_arquivo_salvo = f"mtr_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
     file_format = extensao.lstrip('.') if extensao else None
 
     url_cloud = _upload_file_to_cloudinary(
         arquivo_mtr,
         folder="documentos",
-        public_id=public_id,
+        public_id=f"mtr_transacao_{cabecalho['uvr']}_{timestamp}",
         resource_type="raw",
         file_format=file_format,
     )
@@ -3865,15 +3853,16 @@ def _preparar_relatorio_fotografico_anexo(arquivo_relatorio, cabecalho, id_trans
     id_tipo_documento = tipo_doc[0]
 
     nome_original = arquivo_relatorio.filename
+    import time
+    timestamp = int(time.time())
     extensao = os.path.splitext(nome_original)[1]
-    public_id = _gerar_nome_unico_documento("relatorio_fotografico_transacao", cabecalho['uvr'])
-    nome_arquivo_salvo = f"{public_id}{extensao}"
+    nome_arquivo_salvo = f"relatorio_fotografico_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
     file_format = extensao.lstrip('.') if extensao else None
 
     url_cloud = _upload_file_to_cloudinary(
         arquivo_relatorio,
         folder="documentos",
-        public_id=public_id,
+        public_id=f"relatorio_fotografico_transacao_{cabecalho['uvr']}_{timestamp}",
         resource_type="raw",
         file_format=file_format,
     )
@@ -3911,15 +3900,16 @@ def _preparar_comprovante_pagamento_anexo(arquivo_comprovante, cabecalho, valor_
     id_tipo_documento = tipo_doc[0]
 
     nome_original = arquivo_comprovante.filename
+    import time
+    timestamp = int(time.time())
     extensao = os.path.splitext(nome_original)[1]
-    public_id = _gerar_nome_unico_documento("comprovante_pagamento_transacao", cabecalho['uvr'])
-    nome_arquivo_salvo = f"{public_id}{extensao}"
+    nome_arquivo_salvo = f"comprovante_pagamento_transacao_{cabecalho['uvr']}_{timestamp}{extensao}"
     file_format = extensao.lstrip('.') if extensao else None
 
     url_cloud = _upload_file_to_cloudinary(
         arquivo_comprovante,
         folder="documentos",
-        public_id=public_id,
+        public_id=f"comprovante_pagamento_transacao_{cabecalho['uvr']}_{timestamp}",
         resource_type="raw",
         file_format=file_format,
     )
@@ -7582,9 +7572,10 @@ def documentos():
 
             if arquivo and arquivo.filename:
                 nome_original = arquivo.filename
+                import time, os
+                timestamp = int(time.time())
                 extensao = os.path.splitext(nome_original)[1]
-                public_id = _gerar_nome_unico_documento("doc", uvr)
-                nome_arquivo_salvo = f"{public_id}{extensao}"
+                nome_arquivo_salvo = f"doc_{uvr}_{timestamp}{extensao}"
 
                 file_format = extensao.lstrip('.') if extensao else None
 
@@ -7592,7 +7583,7 @@ def documentos():
                 url_cloud = _upload_file_to_cloudinary(
                     arquivo,
                     folder="documentos",
-                    public_id=public_id,
+                    public_id=f"doc_{uvr}_{timestamp}",
                     resource_type="raw",
                     file_format=file_format,
                 )
@@ -7801,7 +7792,7 @@ def editar_documento():
                             os.remove(antigo)
 
                 ext = arquivo.filename.rsplit('.', 1)[1]
-                public_id=public_id,
+                novo_arquivo = f"doc_{doc['uvr']}_{int(datetime.now().timestamp())}.{ext}"
 
                 url_cloud = _upload_file_to_cloudinary(
                     arquivo,
