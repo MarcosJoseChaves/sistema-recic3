@@ -12,7 +12,7 @@ import smtplib
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from email.message import EmailMessage
 import cloudinary
 import cloudinary.uploader
@@ -72,6 +72,10 @@ def _read_env(*keys):
     return None
 
 
+def _is_render_env():
+    return bool(_read_env("RENDER", "RENDER_SERVICE_ID"))
+
+
 def _configure_cloudinary():
     """Configura Cloudinary de forma robusta para ambientes locais e Render."""
     cloudinary_url = _read_env("CLOUDINARY_URL", "cloudinary_url")
@@ -81,7 +85,19 @@ def _configure_cloudinary():
 
     try:
         if cloudinary_url:
-            cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
+            parsed = urlparse(cloudinary_url)
+            if parsed.scheme.startswith("cloudinary") and parsed.hostname and parsed.username and parsed.password:
+                cloudinary.config(
+                    cloud_name=parsed.hostname,
+                    api_key=parsed.username,
+                    api_secret=parsed.password,
+                    secure=True,
+                )
+            else:
+                cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
+            cfg = cloudinary.config()
+            if not getattr(cfg, "cloud_name", None):
+                raise ValueError("CLOUDINARY_URL inválida ou incompleta")
             return True
 
         if all([cloud_name, api_key, api_secret]):
@@ -7384,6 +7400,8 @@ def documentos():
                 if url_cloud:
                     nome_arquivo_salvo = url_cloud
                 else:
+                    if _is_render_env():
+                        raise RuntimeError("Upload no Cloudinary falhou no Render. Verifique CLOUDINARY_URL/CLOUDINARY_* no painel.")
                     pasta = 'uploads'
                     os.makedirs(pasta, exist_ok=True)
                     arquivo.save(os.path.join(pasta, nome_arquivo_salvo))
