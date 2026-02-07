@@ -60,22 +60,58 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite de 64MB
 app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
 
-cloudinary_configured = False
-if os.getenv("CLOUDINARY_URL"):
-    cloudinary.config(secure=True)
-    cloudinary_configured = True
-elif all([
-    os.getenv("CLOUDINARY_CLOUD_NAME"),
-    os.getenv("CLOUDINARY_API_KEY"),
-    os.getenv("CLOUDINARY_API_SECRET"),
-]):
-    cloudinary.config(
-        cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-        api_key=os.getenv("CLOUDINARY_API_KEY"),
-        api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-        secure=True,
+def _read_env(*keys):
+    """Retorna o primeiro valor de ambiente não vazio."""
+    for key in keys:
+        value = os.getenv(key)
+        if value is None:
+            continue
+        cleaned = value.strip().strip('"').strip("'")
+        if cleaned:
+            return cleaned
+    return None
+
+
+def _configure_cloudinary():
+    """Configura Cloudinary de forma robusta para ambientes locais e Render."""
+    cloudinary_url = _read_env("CLOUDINARY_URL", "cloudinary_url")
+    cloud_name = _read_env("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_CLOUDNAME")
+    api_key = _read_env("CLOUDINARY_API_KEY")
+    api_secret = _read_env("CLOUDINARY_API_SECRET")
+
+    try:
+        if cloudinary_url:
+            cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
+            return True
+
+        if all([cloud_name, api_key, api_secret]):
+            cloudinary.config(
+                cloud_name=cloud_name,
+                api_key=api_key,
+                api_secret=api_secret,
+                secure=True,
+            )
+            return True
+    except Exception as e:
+        app.logger.error("Falha ao configurar Cloudinary: %s", e)
+        return False
+
+    faltantes = []
+    if not cloudinary_url:
+        if not cloud_name:
+            faltantes.append("CLOUDINARY_CLOUD_NAME")
+        if not api_key:
+            faltantes.append("CLOUDINARY_API_KEY")
+        if not api_secret:
+            faltantes.append("CLOUDINARY_API_SECRET")
+    app.logger.warning(
+        "Cloudinary não configurado. Defina CLOUDINARY_URL ou as variáveis: %s",
+        ", ".join(faltantes) if faltantes else "CLOUDINARY_URL",
     )
-    cloudinary_configured = True
+    return False
+
+
+cloudinary_configured = _configure_cloudinary()
 
 def _extract_cloudinary_public_id(url):
     if not url or "res.cloudinary.com" not in url:
@@ -116,8 +152,12 @@ def _upload_file_to_cloudinary(file_storage, folder, public_id=None, resource_ty
         options["public_id"] = public_id
     if file_format:
         options["format"] = file_format
-    result = cloudinary.uploader.upload(file_storage, **options)
-    return result.get("secure_url")
+    try:
+        result = cloudinary.uploader.upload(file_storage, **options)
+        return result.get("secure_url")
+    except Exception as e:
+        app.logger.error("Falha no upload para Cloudinary (%s): %s", folder, e)
+        return None
 
 def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
     if not cloudinary_configured or not data_url:
@@ -125,8 +165,12 @@ def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
     options = {"folder": folder, "resource_type": "image"}
     if public_id:
         options["public_id"] = public_id
-    result = cloudinary.uploader.upload(data_url, **options)
-    return result.get("secure_url")
+    try:
+        result = cloudinary.uploader.upload(data_url, **options)
+        return result.get("secure_url")
+    except Exception as e:
+        app.logger.error("Falha no upload base64 para Cloudinary (%s): %s", folder, e)
+        return None
 
 def _build_cloudinary_delivery_url(url):
     if not cloudinary_configured or not url or "res.cloudinary.com" not in url:
