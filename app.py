@@ -60,6 +60,9 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite de 64MB
 app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
 
+cloudinary_setup_error = None
+cloudinary_last_error = None
+
 def _read_env(*keys):
     """Retorna o primeiro valor de ambiente não vazio."""
     for key in keys:
@@ -78,6 +81,7 @@ def _is_render_env():
 
 def _configure_cloudinary():
     """Configura Cloudinary de forma robusta para ambientes locais e Render."""
+    global cloudinary_setup_error
     cloudinary_url = _read_env("CLOUDINARY_URL", "cloudinary_url")
     cloud_name = _read_env("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_CLOUDNAME")
     api_key = _read_env("CLOUDINARY_API_KEY")
@@ -95,9 +99,9 @@ def _configure_cloudinary():
                 )
             else:
                 cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
-            cfg = cloudinary.config()
-            if not getattr(cfg, "cloud_name", None):
-                raise ValueError("CLOUDINARY_URL inválida ou incompleta")
+
+                
+            cloudinary_setup_error = None
             return True
 
         if all([cloud_name, api_key, api_secret]):
@@ -107,8 +111,10 @@ def _configure_cloudinary():
                 api_secret=api_secret,
                 secure=True,
             )
+            cloudinary_setup_error = None
             return True
     except Exception as e:
+        cloudinary_setup_error = str(e)
         app.logger.error("Falha ao configurar Cloudinary: %s", e)
         return False
 
@@ -120,6 +126,7 @@ def _configure_cloudinary():
             faltantes.append("CLOUDINARY_API_KEY")
         if not api_secret:
             faltantes.append("CLOUDINARY_API_SECRET")
+    cloudinary_setup_error = f"Variáveis ausentes: {', '.join(faltantes) if faltantes else 'CLOUDINARY_URL'}"
     app.logger.warning(
         "Cloudinary não configurado. Defina CLOUDINARY_URL ou as variáveis: %s",
         ", ".join(faltantes) if faltantes else "CLOUDINARY_URL",
@@ -161,6 +168,7 @@ def _delete_cloudinary_asset(url, resource_type="raw"):
         cloudinary.uploader.destroy(public_id, resource_type=resource_type, invalidate=True)
 
 def _upload_file_to_cloudinary(file_storage, folder, public_id=None, resource_type="auto", file_format=None):
+    global cloudinary_last_error
     if not cloudinary_configured:
         return None
     options = {"folder": folder, "resource_type": resource_type}
@@ -170,12 +178,15 @@ def _upload_file_to_cloudinary(file_storage, folder, public_id=None, resource_ty
         options["format"] = file_format
     try:
         result = cloudinary.uploader.upload(file_storage, **options)
+        cloudinary_last_error = None
         return result.get("secure_url")
     except Exception as e:
+        cloudinary_last_error = str(e)
         app.logger.error("Falha no upload para Cloudinary (%s): %s", folder, e)
         return None
 
 def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
+    global cloudinary_last_error
     if not cloudinary_configured or not data_url:
         return None
     options = {"folder": folder, "resource_type": "image"}
@@ -183,8 +194,10 @@ def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
         options["public_id"] = public_id
     try:
         result = cloudinary.uploader.upload(data_url, **options)
+        cloudinary_last_error = None
         return result.get("secure_url")
     except Exception as e:
+        cloudinary_last_error = str(e)
         app.logger.error("Falha no upload base64 para Cloudinary (%s): %s", folder, e)
         return None
 
