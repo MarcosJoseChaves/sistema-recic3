@@ -64,11 +64,21 @@ cloudinary_setup_error = None
 cloudinary_last_error = None
 
 def _read_env(*keys):
-    """Retorna o primeiro valor de ambiente não vazio."""
+    """Retorna o primeiro valor de ambiente não vazio e LOGA se achou ou não."""
     for key in keys:
+        # Tenta pegar a variável
         value = os.getenv(key)
+        
+        # LOG DE DEBUG (Vai aparecer no painel do Render)
+        if value:
+            # Mostra apenas os primeiros 3 caracteres para segurança
+            print(f"DEBUG: Variável '{key}' ENCONTRADA. Valor começa com: {value[:3]}...")
+        else:
+            print(f"DEBUG: Variável '{key}' NÃO encontrada ou vazia.")
+
         if value is None:
             continue
+        
         cleaned = value.strip().strip('"').strip("'")
         if cleaned:
             return cleaned
@@ -10176,3 +10186,5 @@ if __name__ == "__main__":
     
     app.logger.info("Iniciando o aplicativo Flask...")
     app.run(host='0.0.0.0', port=5000, debug=True)
+    
+    #TESTE
