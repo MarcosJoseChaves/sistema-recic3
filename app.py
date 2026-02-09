@@ -136,6 +136,14 @@ def _configure_cloudinary():
 
 cloudinary_configured = _configure_cloudinary()
 
+
+def _ensure_cloudinary_configured():
+    global cloudinary_configured
+    if cloudinary_configured:
+        return True
+    cloudinary_configured = _configure_cloudinary()
+    return cloudinary_configured
+
 def _extract_cloudinary_public_id(url):
     if not url or "res.cloudinary.com" not in url:
         return None
@@ -169,7 +177,8 @@ def _delete_cloudinary_asset(url, resource_type="raw"):
 
 def _upload_file_to_cloudinary(file_storage, folder, public_id=None, resource_type="auto", file_format=None):
     global cloudinary_last_error
-    if not cloudinary_configured:
+    if not _ensure_cloudinary_configured():
+        cloudinary_last_error = cloudinary_setup_error or "Cloudinary não configurado."
         return None
     options = {"folder": folder, "resource_type": resource_type}
     if public_id:
@@ -187,7 +196,10 @@ def _upload_file_to_cloudinary(file_storage, folder, public_id=None, resource_ty
 
 def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
     global cloudinary_last_error
-    if not cloudinary_configured or not data_url:
+    if not data_url:
+        return None
+    if not _ensure_cloudinary_configured():
+        cloudinary_last_error = cloudinary_setup_error or "Cloudinary não configurado."
         return None
     options = {"folder": folder, "resource_type": "image"}
     if public_id:
@@ -202,23 +214,9 @@ def _upload_base64_to_cloudinary(data_url, folder, public_id=None):
         return None
 
 def _build_cloudinary_delivery_url(url):
-    if not cloudinary_configured or not url or "res.cloudinary.com" not in url:
+    if not url or "res.cloudinary.com" not in url:
         return url
-    public_id = _extract_cloudinary_public_id(url)
-    if not public_id:
-        return url
-
-    ext = url.split("?", 1)[0].rsplit(".", 1)[-1] if "." in url else None
-    is_pdf = ext and ext.lower() == "pdf"
-    resource_type = "raw" if is_pdf else _detect_cloudinary_resource_type(url)
-    delivery_url, _ = cloudinary_url(
-        public_id,
-        resource_type=resource_type,
-        secure=True,
-        sign_url=True,
-        format=ext if ext else None,
-    )
-    return delivery_url
+    return url
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -7407,14 +7405,18 @@ def documentos():
                     arquivo,
                     folder="documentos",
                     public_id=f"doc_{uvr}_{timestamp}",
-                    resource_type="raw",
+                    resource_type="auto",
                     file_format=file_format,
                 )
                 if url_cloud:
                     nome_arquivo_salvo = url_cloud
                 else:
                     if _is_render_env():
-                        raise RuntimeError("Upload no Cloudinary falhou no Render. Verifique CLOUDINARY_URL/CLOUDINARY_* no painel.")
+                        detalhe = cloudinary_last_error or cloudinary_setup_error or "Erro desconhecido."
+                        raise RuntimeError(
+                            "Upload no Cloudinary falhou no Render. "
+                            f"Verifique CLOUDINARY_URL/CLOUDINARY_* no painel. Detalhe: {detalhe}"
+                        )
                     pasta = 'uploads'
                     os.makedirs(pasta, exist_ok=True)
                     arquivo.save(os.path.join(pasta, nome_arquivo_salvo))
