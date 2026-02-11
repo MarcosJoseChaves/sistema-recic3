@@ -839,50 +839,114 @@ def obter_uvrs_existentes():
 
 @login_manager.user_loader
 def load_user(user_id):
-    conn = conectar_banco()
-    cur = conn.cursor()
-    cur.execute("SELECT id, username, role, uvr_acesso FROM usuarios WHERE id = %s", (user_id,))
-    data = cur.fetchone()
-    cur.close()
-    conn.close()
-    if data:
-        return User(id=data[0], username=data[1], role=data[2], uvr_acesso=data[3])
+    conn = None
+    cur = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, role, uvr_acesso FROM usuarios WHERE id = %s", (user_id,))
+        data = cur.fetchone()
+        if data:
+            return User(id=data[0], username=data[1], role=data[2], uvr_acesso=data[3])
+    except Exception as exc:
+        app.logger.error(f"Erro ao carregar usuário da sessão: {exc}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+    return None
+
+
+def buscar_usuario_para_login(cur, username):
+    consultas = [
+        (
+            """
+            SELECT id, username, password_hash, role, uvr_acesso
+            FROM usuarios
+            WHERE LOWER(username) = LOWER(%s) AND ativo = TRUE
+            """,
+            True,
+        ),
+        (
+            """
+            SELECT id, username, password_hash, role, NULL AS uvr_acesso
+            FROM usuarios
+            WHERE LOWER(username) = LOWER(%s) AND ativo = TRUE
+            """,
+            False,
+        ),
+        (
+            """
+            SELECT id, username, password_hash, role, uvr_acesso
+            FROM usuarios
+            WHERE LOWER(username) = LOWER(%s)
+            """,
+            True,
+        ),
+        (
+            """
+            SELECT id, username, password_hash, role, NULL AS uvr_acesso
+            FROM usuarios
+            WHERE LOWER(username) = LOWER(%s)
+            """,
+            False,
+        ),
+    ]
+
+    ultimo_erro = None
+    for sql, _ in consultas:
+        try:
+            cur.execute(sql, (username,))
+            return cur.fetchone()
+        except psycopg2.errors.UndefinedColumn as exc:
+            ultimo_erro = exc
+            cur.connection.rollback()
+            continue
+
+    if ultimo_erro:
+        raise ultimo_erro
     return None
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        
-        conn = conectar_banco()
-        cur = conn.cursor()
-        # Buscamos o usuário pelo nome
-        cur.execute(
-            """
-            SELECT id, username, password_hash, role, uvr_acesso
-            FROM usuarios
-            WHERE LOWER(username) = LOWER(%s) AND ativo = TRUE
-            """,
-            (username,),
-        )
-        user_data = cur.fetchone()
-        cur.close()
-        conn.close()
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        if not username or not password:
+            return render_template('login.html', erro="Usuário e senha são obrigatórios.")
+
+        conn = None
+        cur = None
+        try:
+            conn = conectar_banco()
+            cur = conn.cursor()
+            user_data = buscar_usuario_para_login(cur, username)
+        except Exception as exc:
+            app.logger.error(f"Erro no login para usuário '{username}': {exc}")
+            return render_template(
+                'login.html',
+                erro="Não foi possível acessar o sistema agora. Tente novamente em instantes.",
+            )
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
 
         if user_data:
-            # user_data[2] é o hash da senha
-            # check_password_hash verifica se a senha digitada bate com o hash
+
+
             if check_password_hash(user_data[2], password):
                 user_obj = User(id=user_data[0], username=user_data[1], role=user_data[3], uvr_acesso=user_data[4])
                 login_user(user_obj)
                 app.logger.info(f"Usuário {username} logado com sucesso.")
                 return redirect(url_for('index'))
-            else:
-                return render_template('login.html', erro="Senha incorreta.")
-        else:
-            return render_template('login.html', erro="Usuário não encontrado.")
+            return render_template('login.html', erro="Senha incorreta.")
+
+        return render_template('login.html', erro="Usuário não encontrado.")
             
     return render_template('login.html')
 
