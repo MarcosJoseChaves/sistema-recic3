@@ -293,8 +293,10 @@
                         {% endif %}
                         
                         <!-- Auditoria (Admin) -->
-                        {% if current_user.role == 'admin' and doc.status == 'Pendente' %}
-                            <a href="/aprovar_documento_direto/{{ doc.id }}" class="btn btn-acao btn-success" title="Aprovar"><i class="fas fa-check"></i></a>
+                        {% if current_user.role|lower == 'admin' and doc.status == 'Pendente' %}
+                            <form action="/aprovar_documento_direto/{{ doc.id }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-acao btn-success" title="Aprovar"><i class="fas fa-check"></i></button>
+                            </form>
                             <button type="button" class="btn btn-acao btn-danger btn-reprovar-doc" data-id="{{ doc.id }}" title="Reprovar"><i class="fas fa-exclamation-circle"></i></button>
                         {% endif %}
 
@@ -316,6 +318,8 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
     </div>
 </div>
 

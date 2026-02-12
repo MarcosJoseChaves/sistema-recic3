@@ -727,13 +727,20 @@ class User(UserMixin):
     def __init__(self, id, username, role, uvr_acesso):
         self.id = id
         self.username = username
-        self.role = role
+        username_norm = str(username or "").strip().lower()
+        role_norm = str(role or "").strip().lower()
+
+        # Regra de negócio: contas UVR (ex.: uvr01, uvr02) não devem ter perfil de admin.
+        if username_norm.startswith("uvr"):
+            role_norm = "uvr"
+
+        self.role = role_norm
         self.uvr_acesso = uvr_acesso
 
 
 def usuario_visitante(user=None):
     alvo = user or current_user
-    return getattr(alvo, "role", "").lower() == "visitante"
+    return str(getattr(alvo, "role", "") or "").strip().lower() == "visitante"
 
 
 def bloquear_visitante(mensagem="Acesso negado. Usuários visitantes não podem editar ou excluir."):
@@ -745,7 +752,38 @@ def bloquear_visitante(mensagem="Acesso negado. Usuários visitantes não podem 
 
 
 def exigir_admin():
-    if getattr(current_user, "role", "").lower() != "admin":
+    role_sessao = str(getattr(current_user, "role", "") or "").strip().lower()
+    username_sessao = str(getattr(current_user, "username", "") or "").strip().lower()
+
+    # Regra explícita de negócio: usuários UVR e visitantes nunca aprovam/reprovam documentos.
+    if username_sessao.startswith("uvr") or role_sessao == "visitante":
+        if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/"):
+            return jsonify({"error": "Acesso restrito ao administrador."}), 403
+        return "Acesso restrito ao administrador.", 403
+    if role_sessao != "admin":
+        if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/"):
+            return jsonify({"error": "Acesso restrito ao administrador."}), 403
+        return "Acesso restrito ao administrador.", 403
+
+    # Defesa em profundidade: confirma o papel atual no banco e evita aprovação por sessão inconsistente.
+    conn = None
+    cur = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("SELECT role, username FROM usuarios WHERE id = %s", (current_user.id,))
+        row = cur.fetchone()
+        role_banco = str((row[0] if row else "") or "").strip().lower()
+        username_banco = str((row[1] if row and len(row) > 1 else "") or "").strip().lower()
+    except Exception:
+        role_banco = ""
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    if username_banco.startswith("uvr") or role_banco == "visitante" or role_banco != "admin":
         if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/"):
             return jsonify({"error": "Acesso restrito ao administrador."}), 403
         return "Acesso restrito ao administrador.", 403
@@ -8289,12 +8327,13 @@ def uploaded_file(filename):
     # O primeiro argumento é o nome da pasta física no seu computador ('uploads')
     return send_from_directory('uploads', filename)
 
-@app.route('/aprovar_documento_direto/<int:id_doc>')
+@app.route('/aprovar_documento_direto/<int:id_doc>', methods=['POST'])
 @login_required
 def aprovar_documento_direto(id_doc):
     """Aprovação simples (o 'OK' do Admin) direto na lista de documentos."""
-    if current_user.role != 'admin': 
-        return "Acesso Negado", 403
+    bloqueio = exigir_admin()
+    if bloqueio:
+        return bloqueio
     
     conn = conectar_banco()
     cursor = conn.cursor()
@@ -8303,8 +8342,12 @@ def aprovar_documento_direto(id_doc):
         cursor.execute("""
             UPDATE documentos 
             SET status = 'Aprovado', motivo_rejeicao = NULL 
-            WHERE id = %s
+           WHERE id = %s AND status = 'Pendente'
         """, (id_doc,))
+
+        if cursor.rowcount == 0:
+            flash('Este documento não está pendente para aprovação.', 'warning')
+            return redirect(url_for('documentos'))
         conn.commit()
         flash('Documento conferido e aprovado com sucesso!', 'success')
     except Exception as e:
@@ -8318,8 +8361,9 @@ def aprovar_documento_direto(id_doc):
 @login_required
 def reprovar_documento_com_obs():
     """Reprova o documento e salva a observação de correção para o usuário."""
-    if current_user.role != 'admin': 
-        return "Acesso Negado", 403
+    bloqueio = exigir_admin()
+    if bloqueio:
+        return bloqueio
     
     id_doc = request.form.get('id_documento')
     motivo = request.form.get('motivo_rejeicao')
@@ -8335,8 +8379,12 @@ def reprovar_documento_com_obs():
         cursor.execute("""
             UPDATE documentos 
             SET status = 'Reprovado', motivo_rejeicao = %s 
-            WHERE id = %s
+            WHERE id = %s AND status = 'Pendente'
         """, (motivo, id_doc))
+
+        if cursor.rowcount == 0:
+            flash('Este documento não está pendente para reprovação.', 'warning')
+            return redirect(url_for('documentos'))
         conn.commit()
         flash('Solicitação de correção enviada ao usuário!', 'warning')
     except Exception as e:
