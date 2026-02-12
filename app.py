@@ -9,6 +9,7 @@ import psycopg2
 import calendar
 import secrets
 import smtplib
+import socket
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
@@ -1087,6 +1088,41 @@ def buscar_usuario_para_login(cur, username):
     return None
 
 
+def buscar_usuario_para_recuperacao(cur, email):
+    consultas = [
+        (
+            """
+            SELECT id, username, email
+            FROM usuarios
+            WHERE LOWER(email) = LOWER(%s) AND ativo = TRUE
+            """,
+            True,
+        ),
+        (
+            """
+            SELECT id, username, email
+            FROM usuarios
+            WHERE LOWER(email) = LOWER(%s)
+            """,
+            False,
+        ),
+    ]
+
+    ultimo_erro = None
+    for sql, _ in consultas:
+        try:
+            cur.execute(sql, (email,))
+            return cur.fetchone()
+        except psycopg2.errors.UndefinedColumn as exc:
+            ultimo_erro = exc
+            cur.connection.rollback()
+            continue
+
+    if ultimo_erro:
+        raise ultimo_erro
+    return None
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -1140,58 +1176,61 @@ def recuperar_senha():
             erro = "Informe o e-mail cadastrado."
             return render_template('recuperar_senha.html', erro=erro, mensagem=mensagem)
 
-        conn = conectar_banco()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id, username, email
-            FROM usuarios
-            WHERE LOWER(email) = LOWER(%s) AND ativo = TRUE
-            """,
-            (email,),
-        )
-        user_data = cur.fetchone()
+        conn = None
+        cur = None
+        user_data = None
+        try:
+            conn = conectar_banco()
+            cur = conn.cursor()
+            user_data = buscar_usuario_para_recuperacao(cur, email)
 
-        if user_data:
-            token = secrets.token_urlsafe(32)
-            expira_em = datetime.utcnow() + timedelta(hours=1)
-            cur.execute(
-                """
-                UPDATE usuarios
-                SET reset_token = %s, reset_token_expira = %s
-                WHERE id = %s
-                """,
-                (token, expira_em, user_data[0]),
-            )
-            conn.commit()
+            if user_data:
+                token = secrets.token_urlsafe(32)
+                expira_em = datetime.utcnow() + timedelta(hours=1)
+                cur.execute(
+                    """
+                    UPDATE usuarios
+                    SET reset_token = %s, reset_token_expira = %s
+                    WHERE id = %s
+                    """,
+                    (token, expira_em, user_data[0]),
+                )
+                conn.commit()
 
-            base_url = os.getenv("APP_BASE_URL", request.url_root).rstrip("/")
-            link = f"{base_url}{url_for('redefinir_senha', token=token)}"
-            corpo = (
-                f"Olá, {user_data[1]}!\n\n"
-                "Recebemos uma solicitação para redefinir sua senha. "
-                "Clique no link abaixo para criar uma nova senha:\n\n"
-                f"{link}\n\n"
-                "Se você não solicitou esta recuperação, ignore este e-mail."
-            )
-            ok, retorno = enviar_email_recuperacao(
-                destinatario=user_data[2],
-                assunto="Recuperação de senha - Sistema Recic3",
-                corpo=corpo,
-            )
-            if ok:
-                mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
+                base_url = os.getenv("APP_BASE_URL", request.url_root).rstrip("/")
+                link = f"{base_url}{url_for('redefinir_senha', token=token)}"
+                corpo = (
+                    f"Olá, {user_data[1]}!\n\n"
+                    "Recebemos uma solicitação para redefinir sua senha. "
+                    "Clique no link abaixo para criar uma nova senha:\n\n"
+                    f"{link}\n\n"
+                    "Se você não solicitou esta recuperação, ignore este e-mail."
+                )
+                ok, retorno = enviar_email_recuperacao(
+                    destinatario=user_data[2],
+                    assunto="Recuperação de senha - Sistema Recic3",
+                    corpo=corpo,
+                )
+                if ok:
+                    mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
+                else:
+                    mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
+                    if "Configuração de e-mail incompleta" not in retorno:
+                        erro = retorno
             else:
                 mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
-                if "Configuração de e-mail incompleta" not in retorno:
-                    erro = retorno
-        else:
-            mensagem = "Se o e-mail estiver cadastrado, você receberá as instruções em instantes."
 
-        cur.close()
-        conn.close()
+        except Exception as exc:
+            app.logger.error("Erro ao iniciar recuperação de senha para '%s': %s", email, exc)
+            erro = "Não foi possível processar sua solicitação agora. Tente novamente em instantes."
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
 
     return render_template('recuperar_senha.html', erro=erro, mensagem=mensagem)
+
 
 
 @app.route('/redefinir_senha/<token>', methods=['GET', 'POST'])
