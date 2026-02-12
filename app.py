@@ -768,6 +768,8 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
     smtp_use_tls = valor_env("SMTP_USE_TLS", "").lower()
     smtp_timeout_raw = valor_env("SMTP_TIMEOUT", "20")
     smtp_ssl_fallback_port_raw = valor_env("SMTP_SSL_FALLBACK_PORT", "465")
+    smtp_starttls_fallback_port_raw = valor_env("SMTP_STARTTLS_FALLBACK_PORT", "587")
+    smtp_allow_cross_mode_fallback = valor_env("SMTP_ALLOW_CROSS_MODE_FALLBACK", "true").lower() == "true"
     smtp_local_hostname_raw = valor_env("SMTP_LOCAL_HOSTNAME", "")
 
     try:
@@ -786,6 +788,14 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
         return False, (
             "Configuração inválida: SMTP_SSL_FALLBACK_PORT "
             f"({smtp_ssl_fallback_port_raw}) não é numérico."
+        )
+
+    try:
+        smtp_starttls_fallback_port = int(smtp_starttls_fallback_port_raw)
+    except ValueError:
+        return False, (
+            "Configuração inválida: SMTP_STARTTLS_FALLBACK_PORT "
+            f"({smtp_starttls_fallback_port_raw}) não é numérico."
         )
 
     # Compatibilidade legada: só usa SMTP_USE_TLS quando SMTP_SECURITY não foi definido.
@@ -898,6 +908,8 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
         tentativas = [(smtp_security, smtp_port)]
         if smtp_security == "starttls":
             tentativas.append(("ssl", smtp_ssl_fallback_port))
+        elif smtp_security == "ssl" and smtp_allow_cross_mode_fallback:
+            tentativas.append(("starttls", smtp_starttls_fallback_port))
 
     erros = []
     for modo, porta in tentativas:
@@ -915,13 +927,13 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
         except Exception as exc:
             erros.append(f"{modo}@{porta}:{type(exc).__name__}: {exc}")
             if smtp_security != "auto":
-                # Caso STARTTLS explícito falhe, tentamos SSL fallback antes de retornar erro.
-                if smtp_security == "starttls" and modo == "starttls" and len(tentativas) > 1:
+                # Com segurança explícita, ainda permitimos fallback cruzado para reduzir falhas por bloqueio de porta.
+                if len(tentativas) > 1 and modo == tentativas[0][0]:
                     app.logger.warning(
-                        "STARTTLS falhou; tentando fallback SSL. host=%s porta_starttls=%s porta_ssl=%s erro=%s",
+                        "SMTP modo primário falhou; tentando fallback. host=%s modo_primario=%s porta_primaria=%s erro=%s",
                         smtp_host,
+                        modo,
                         porta,
-                        smtp_ssl_fallback_port,
                         exc,
                     )
                     continue
@@ -950,11 +962,11 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
                         "Verifique SMTP_USER/SMTP_PASSWORD (senha de app do Gmail sem whitespace/aspas) "
                         "e se 2FA está ativo."
                     )
-                if isinstance(exc, smtplib.SMTPServerDisconnected):
+                if isinstance(exc, (TimeoutError, socket.timeout)):
                     return False, (
-                        "Erro ao enviar e-mail: conexão SMTP encerrada inesperadamente. "
-                        "Verifique host local inválido no EHLO (use SMTP_LOCAL_HOSTNAME), "
-                        "ou bloqueio de rede/porta no ambiente (Render/firewall/proxy)."
+                        "Erro ao enviar e-mail: tempo de conexão SMTP esgotado (timeout). "
+                        "Isso geralmente é bloqueio de rede/porta. Tente SMTP_SECURITY=starttls com SMTP_PORT=587 "
+                        "ou SMTP_SECURITY=ssl com SMTP_PORT=465, e ajuste SMTP_TIMEOUT (ex.: 30)."
                     )
                 return False, f"Erro ao enviar e-mail: {exc}"
 
@@ -966,7 +978,6 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
         " | ".join(erros),
     )
     return False, "Erro ao enviar e-mail: " + " | ".join(erros)
-
 
 
 def renderizar_template_com_fallback(template_name, **contexto):
