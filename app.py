@@ -752,12 +752,65 @@ def exigir_admin():
 
 
 def enviar_email_recuperacao(destinatario, assunto, corpo):
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = int(os.getenv("SMTP_PORT", "465"))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user)
-    smtp_use_tls = os.getenv("SMTP_USE_TLS", "false").lower() == "true"
+    def valor_env(chave, padrao=""):
+        valor = os.getenv(chave, padrao)
+        return valor.strip() if isinstance(valor, str) else valor
+
+    smtp_host = valor_env("SMTP_HOST")
+    smtp_port_raw = valor_env("SMTP_PORT", "465")
+    smtp_user = valor_env("SMTP_USER")
+    smtp_password_raw = valor_env("SMTP_PASSWORD", "")
+    smtp_password_sem_aspas = smtp_password_raw.strip("\"'")
+    smtp_password = "".join(smtp_password_sem_aspas.split())
+    smtp_from = valor_env("SMTP_FROM", smtp_user)
+    smtp_security_raw = valor_env("SMTP_SECURITY", "").lower()
+    smtp_security = smtp_security_raw or "auto"
+    smtp_use_tls = valor_env("SMTP_USE_TLS", "").lower()
+    smtp_timeout_raw = valor_env("SMTP_TIMEOUT", "20")
+    smtp_ssl_fallback_port_raw = valor_env("SMTP_SSL_FALLBACK_PORT", "465")
+    smtp_starttls_fallback_port_raw = valor_env("SMTP_STARTTLS_FALLBACK_PORT", "587")
+    smtp_allow_cross_mode_fallback = valor_env("SMTP_ALLOW_CROSS_MODE_FALLBACK", "true").lower() == "true"
+    smtp_local_hostname_raw = valor_env("SMTP_LOCAL_HOSTNAME", "")
+
+    try:
+        smtp_port = int(smtp_port_raw)
+    except ValueError:
+        return False, f"Configuração inválida: SMTP_PORT ({smtp_port_raw}) não é numérico."
+
+    try:
+        smtp_timeout = int(smtp_timeout_raw)
+    except ValueError:
+        return False, f"Configuração inválida: SMTP_TIMEOUT ({smtp_timeout_raw}) não é numérico."
+
+    try:
+        smtp_ssl_fallback_port = int(smtp_ssl_fallback_port_raw)
+    except ValueError:
+        return False, (
+            "Configuração inválida: SMTP_SSL_FALLBACK_PORT "
+            f"({smtp_ssl_fallback_port_raw}) não é numérico."
+        )
+
+    try:
+        smtp_starttls_fallback_port = int(smtp_starttls_fallback_port_raw)
+    except ValueError:
+        return False, (
+            "Configuração inválida: SMTP_STARTTLS_FALLBACK_PORT "
+            f"({smtp_starttls_fallback_port_raw}) não é numérico."
+        )
+
+    # Compatibilidade legada: só usa SMTP_USE_TLS quando SMTP_SECURITY não foi definido.
+    if not smtp_security_raw and smtp_use_tls in {"true", "false"}:
+        smtp_security = "starttls" if smtp_use_tls == "true" else "ssl"
+    elif smtp_security_raw and smtp_use_tls in {"true", "false"}:
+        app.logger.warning(
+            "SMTP_USE_TLS foi ignorado porque SMTP_SECURITY está definido (%s).",
+            smtp_security,
+        )
+
+    if smtp_security not in {"ssl", "starttls", "plain", "auto"}:
+        return False, (
+            "Configuração inválida: SMTP_SECURITY deve ser 'ssl', 'starttls', 'plain' ou 'auto'."
+        )
 
     faltantes = []
     if not smtp_host:
@@ -768,6 +821,11 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
         faltantes.append("SMTP_PASSWORD")
     if not smtp_from:
         faltantes.append("SMTP_FROM")
+
+    if smtp_password_raw and smtp_password != smtp_password_raw:
+        app.logger.warning(
+            "SMTP_PASSWORD continha aspas/whitespace e foi normalizada automaticamente para autenticação SMTP."
+        )
 
     if faltantes:
         app.logger.warning(
@@ -786,20 +844,140 @@ def enviar_email_recuperacao(destinatario, assunto, corpo):
     mensagem["To"] = destinatario
     mensagem.set_content(corpo)
 
-    try:
-        if smtp_use_tls:
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
-                server.send_message(mensagem)
-        else:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-                server.login(smtp_user, smtp_password)
-                server.send_message(mensagem)
-    except Exception as exc:
-        return False, f"Erro ao enviar e-mail: {exc}"
+    hostname_origem = smtp_local_hostname_raw or os.getenv("HOSTNAME") or os.getenv("COMPUTERNAME") or ""
+    hostname_origem = hostname_origem.strip()
+    if not hostname_origem:
+        try:
+            hostname_origem = socket.getfqdn().strip()
+        except Exception:
+            hostname_origem = ""
 
-    return True, "E-mail enviado com sucesso."
+    smtp_local_hostname = re.sub(r"\s+", "-", hostname_origem)
+    smtp_local_hostname = re.sub(r"[^A-Za-z0-9.-]", "-", smtp_local_hostname)
+    smtp_local_hostname = re.sub(r"-{2,}", "-", smtp_local_hostname).strip(".-")
+    if not smtp_local_hostname:
+        smtp_local_hostname = "localhost"
+
+    if hostname_origem and smtp_local_hostname != hostname_origem:
+        app.logger.warning(
+            "Hostname SMTP local inválido normalizado para EHLO. original=%s normalizado=%s",
+            hostname_origem,
+            smtp_local_hostname,
+        )
+
+    def enviar_com_modo(modo, porta):
+        if modo == "ssl":
+            with smtplib.SMTP_SSL(
+                smtp_host,
+                porta,
+                local_hostname=smtp_local_hostname,
+                timeout=smtp_timeout,
+            ) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(mensagem)
+            return
+
+        with smtplib.SMTP(
+            smtp_host,
+            porta,
+            local_hostname=smtp_local_hostname,
+            timeout=smtp_timeout,
+        ) as server:
+            server.ehlo()
+            if modo == "starttls":
+                if not server.has_extn("starttls"):
+                    raise smtplib.SMTPNotSupportedError(
+                        f"Servidor não anunciou STARTTLS em {smtp_host}:{porta}."
+                    )
+                server.starttls()
+                server.ehlo()
+            server.login(smtp_user, smtp_password)
+            server.send_message(mensagem)
+
+    tentativas = []
+    if smtp_security == "auto":
+        if smtp_port == 465:
+            tentativas = [("ssl", smtp_port), ("starttls", 587), ("plain", 25)]
+        else:
+            tentativas = [
+                ("starttls", smtp_port),
+                ("ssl", smtp_ssl_fallback_port),
+                ("plain", smtp_port),
+            ]
+    else:
+        tentativas = [(smtp_security, smtp_port)]
+        if smtp_security == "starttls":
+            tentativas.append(("ssl", smtp_ssl_fallback_port))
+        elif smtp_security == "ssl" and smtp_allow_cross_mode_fallback:
+            tentativas.append(("starttls", smtp_starttls_fallback_port))
+
+    erros = []
+    for modo, porta in tentativas:
+        try:
+            enviar_com_modo(modo, porta)
+            if (modo, porta) != tentativas[0]:
+                app.logger.warning(
+                    "SMTP usou fallback com sucesso. host=%s porta=%s modo=%s modo_configurado=%s",
+                    smtp_host,
+                    porta,
+                    modo,
+                    smtp_security,
+                )
+            return True, "E-mail enviado com sucesso."
+        except Exception as exc:
+            erros.append(f"{modo}@{porta}:{type(exc).__name__}: {exc}")
+            if smtp_security != "auto":
+                # Com segurança explícita, ainda permitimos fallback cruzado para reduzir falhas por bloqueio de porta.
+                if len(tentativas) > 1 and modo == tentativas[0][0]:
+                    app.logger.warning(
+                        "SMTP modo primário falhou; tentando fallback. host=%s modo_primario=%s porta_primaria=%s erro=%s",
+                        smtp_host,
+                        modo,
+                        porta,
+                        exc,
+                    )
+                    continue
+
+                app.logger.exception(
+                    "Falha ao enviar e-mail de recuperação via SMTP. host=%s porta=%s security=%s",
+                    smtp_host,
+                    smtp_port,
+                    smtp_security,
+                )
+                if smtp_security == "starttls":
+                    if isinstance(exc, smtplib.SMTPServerDisconnected):
+                        return False, (
+                            "Erro ao enviar e-mail: conexão SMTP foi encerrada pelo servidor/rede. "
+                            "Isso costuma indicar bloqueio/interceptação de porta no ambiente e não senha inválida. "
+                            "No Render, prefira SMTP_SECURITY=ssl com SMTP_PORT=465 e remova SMTP_USE_TLS."
+                        )
+                    return False, (
+                        "Erro ao enviar e-mail: STARTTLS não suportado e fallback SSL também falhou. "
+                        "Defina SMTP_SECURITY=ssl com SMTP_PORT=465 e remova SMTP_USE_TLS, "
+                        "ou verifique bloqueio de rede na porta 587."
+                    )
+                if isinstance(exc, smtplib.SMTPAuthenticationError):
+                    return False, (
+                        "Erro ao enviar e-mail: autenticação SMTP recusada. "
+                        "Verifique SMTP_USER/SMTP_PASSWORD (senha de app do Gmail sem whitespace/aspas) "
+                        "e se 2FA está ativo."
+                    )
+                if isinstance(exc, (TimeoutError, socket.timeout)):
+                    return False, (
+                        "Erro ao enviar e-mail: tempo de conexão SMTP esgotado (timeout). "
+                        "Isso geralmente é bloqueio de rede/porta. Tente SMTP_SECURITY=starttls com SMTP_PORT=587 "
+                        "ou SMTP_SECURITY=ssl com SMTP_PORT=465, e ajuste SMTP_TIMEOUT (ex.: 30)."
+                    )
+                return False, f"Erro ao enviar e-mail: {exc}"
+
+    app.logger.error(
+        "Falha ao enviar e-mail de recuperação via SMTP em todos os modos automáticos. "
+        "host=%s tentativas=%s erros=%s",
+        smtp_host,
+        ", ".join([f"{modo}@{porta}" for modo, porta in tentativas]),
+        " | ".join(erros),
+    )
+    return False, "Erro ao enviar e-mail: " + " | ".join(erros)
 
 
 def renderizar_template_com_fallback(template_name, **contexto):
