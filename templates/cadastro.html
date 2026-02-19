@@ -629,6 +629,21 @@
         <h2><i class="fas fa-landmark"></i> Cadastro de Contas Correntes</h2>
         <form method="POST" action="/cadastrar_conta_corrente" id="cadastroContaCorrenteForm">
             <input type="hidden" name="id_conta" id="idContaHidden">
+            <div class="row mb-3 p-2 bg-light border rounded mx-0">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">Data/Hora Cadastro</label>
+                    <input
+                        type="text"
+                        class="form-control form-control-sm fw-bold text-primary"
+                        id="dataHoraCadastroConta"
+                        name="data_hora_cadastro_conta"
+                        readonly
+                    >
+                </div>
+                <div class="col-md-8 d-flex align-items-end">
+                    <span class="text-muted small"><i class="fas fa-info-circle"></i> Gerado automaticamente pelo sistema.</span>
+                </div>
+            </div>
             <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_conta" id="uvrSelectConta" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_conta" id="associacaoInputConta" readonly></div></div>
             <div class="mb-3"><label class="form-label required-field">Banco</label><select class="form-select" name="banco_conta" id="bancoContaSelect" required><option value="">Carregando bancos...</option></select></div>
             <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">Agência</label><input type="text" class="form-control" name="agencia_conta" id="agenciaContaInput" required></div><div class="col-md-6 mb-3"><label class="form-label required-field">Conta</label><input type="text" class="form-control" name="conta_corrente_conta" id="contaCorrenteContaInput" required></div></div>
