@@ -829,9 +829,9 @@
             <small class="text-muted">Anexe a nota fiscal em PDF ou imagem (JPG/PNG).</small>
         </div>
         <div class="mb-3">
-            <label class="form-label required-field" id="labelComprovantePagamentoTransacao">Anexar comprovante de pagamento</label>
-            <input type="file" class="form-control" name="comprovante_pagamento_upload" id="comprovantePagamentoTransacaoUpload" accept="application/pdf,image/jpeg,image/png" required>
-            <small class="text-muted">Anexe o comprovante de pagamento em PDF ou imagem (JPG/PNG).</small>
+            <label class="form-label" id="labelComprovantePagamentoTransacao">Anexar comprovante de pagamento (opcional)</label>
+            <input type="file" class="form-control" name="comprovante_pagamento_upload" id="comprovantePagamentoTransacaoUpload" accept="application/pdf,image/jpeg,image/png">
+            <small class="text-muted">Anexe o comprovante de pagamento em PDF ou imagem (JPG/PNG), se houver.</small>
         </div>
         <div class="mb-3" id="mtrTransacaoUploadContainer" style="display:none;">
             <label class="form-label required-field" id="labelMtrTransacao">Anexar MTR</label>
@@ -2640,7 +2640,7 @@ function atualizarLabelNotaFiscalTransacao() {
     label.text(textoLabel);
     const isCadastro = $('#transacaoForm').attr('action') === '/registrar_transacao_financeira';
     input.prop('required', Boolean(tipoTransacao) && isCadastro);
-    comprovanteInput.prop('required', Boolean(tipoTransacao) && isCadastro);
+    comprovanteInput.prop('required', false);
     if (!tipoTransacao) {
         input.val('');
         comprovanteInput.val('');

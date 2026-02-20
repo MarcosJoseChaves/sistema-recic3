@@ -2743,11 +2743,10 @@ def registrar_transacao_financeira():
         if extensao_nf not in formatos_permitidos:
             return "A nota fiscal deve ser enviada em PDF ou imagem (JPG/PNG).", 400
         arquivo_comprovante = request.files.get('comprovante_pagamento_upload')
-        if not arquivo_comprovante or not arquivo_comprovante.filename:
-            return "Anexe o comprovante de pagamento em PDF ou imagem (JPG/PNG).", 400
-        extensao_comprovante = os.path.splitext(arquivo_comprovante.filename)[1].lower()
-        if extensao_comprovante not in formatos_permitidos:
-            return "O comprovante de pagamento deve ser enviado em PDF ou imagem (JPG/PNG).", 400
+        if arquivo_comprovante and arquivo_comprovante.filename:
+            extensao_comprovante = os.path.splitext(arquivo_comprovante.filename)[1].lower()
+            if extensao_comprovante not in formatos_permitidos:
+                return "O comprovante de pagamento deve ser enviado em PDF ou imagem (JPG/PNG).", 400
         arquivo_mtr = request.files.get('mtr_upload')
         exige_mtr = dados.get("tipo_transacao") == "Receita" and dados.get("tipo_atividade_transacao") == "Comercialização de Materiais Recicláveis"
         if exige_mtr and (not arquivo_mtr or not arquivo_mtr.filename):
@@ -2848,32 +2847,33 @@ def registrar_transacao_financeira():
             numero_referencia, observacoes_doc, enviado_por
         ))
 
-        comprovante_anexo = _preparar_comprovante_pagamento_anexo(
-            arquivo_comprovante, {
-                "uvr": dados["uvr_transacao"],
-                "data_documento": dados["data_documento_transacao"],
-                "numero_documento": numero_referencia,
-                "nome_origem": nome_final_origem,
-            }, valor_total_documento_calculado, id_transacao_criada, cur
-        )
-        cur.execute("""
-            INSERT INTO documentos
-            (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
-             data_validade, valor, numero_referencia, observacoes,
-             enviado_por, status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
-        """, (
-            dados["uvr_transacao"],
-            comprovante_anexo["id_tipo_documento"],
-            comprovante_anexo["caminho_arquivo"],
-            comprovante_anexo["nome_original"],
-            datetime.strptime(comprovante_anexo["competencia"], '%Y-%m-%d').date(),
-            None,
-            Decimal(str(comprovante_anexo["valor"])),
-            comprovante_anexo["numero_referencia"],
-            comprovante_anexo["observacoes"],
-            comprovante_anexo["enviado_por"],
-        ))
+        if arquivo_comprovante and arquivo_comprovante.filename:
+            comprovante_anexo = _preparar_comprovante_pagamento_anexo(
+                arquivo_comprovante, {
+                    "uvr": dados["uvr_transacao"],
+                    "data_documento": dados["data_documento_transacao"],
+                    "numero_documento": numero_referencia,
+                    "nome_origem": nome_final_origem,
+                }, valor_total_documento_calculado, id_transacao_criada, cur
+            )
+            cur.execute("""
+                INSERT INTO documentos
+                (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
+                 data_validade, valor, numero_referencia, observacoes,
+                 enviado_por, status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+            """, (
+                dados["uvr_transacao"],
+                comprovante_anexo["id_tipo_documento"],
+                comprovante_anexo["caminho_arquivo"],
+                comprovante_anexo["nome_original"],
+                datetime.strptime(comprovante_anexo["competencia"], '%Y-%m-%d').date(),
+                None,
+                Decimal(str(comprovante_anexo["valor"])),
+                comprovante_anexo["numero_referencia"],
+                comprovante_anexo["observacoes"],
+                comprovante_anexo["enviado_por"],
+            ))
 
         if arquivo_mtr and arquivo_mtr.filename:
             mtr_anexo = _preparar_mtr_anexo(
