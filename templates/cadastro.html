@@ -1099,6 +1099,10 @@
             </div>
         </div>
         <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Item</th><th>Tipo</th><th>Subgrupo</th><th>Grupo</th><th class="text-center" style="width: 100px;">Ações</th></tr></thead><tbody id="tabelaProdutosBody"><tr><td colspan="4" class="text-center">Selecione um filtro...</td></tr></tbody></table></div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+            <button class="btn btn-success btn-sm" id="btnBaixarCsvProdutos">CSV</button>
+            <button class="btn btn-danger btn-sm" id="btnBaixarPdfProdutos">PDF</button>
+        </div>
     </div>
 
 <div id="clienteFornecedorForm" class="form-container" style="display: none;">
@@ -4208,6 +4212,24 @@ $('#btnBaixarCsvTransacoes').on('click', function() {
 $('#btnBaixarPdfTransacoes').on('click', function() {
     const filtros = getFiltrosTransacoesGestao();
     window.baixarArquivo('/baixar_pdf_transacoes', filtros, 'transacoes.pdf');
+});
+
+function getFiltrosProdutosGestao() {
+    return {
+        tipo: $('#filtroTipoGestao').val(),
+        grupo: $('#filtroGrupoGestao').val(),
+        id_subgrupo: $('#filtroSubgrupoGestao').val()
+    };
+}
+
+$('#btnBaixarCsvProdutos').on('click', function() {
+    const filtros = getFiltrosProdutosGestao();
+    window.baixarArquivo('/baixar_csv_produtos', filtros, 'produtos_filtrados.csv');
+});
+
+$('#btnBaixarPdfProdutos').on('click', function() {
+    const filtros = getFiltrosProdutosGestao();
+    window.baixarArquivo('/baixar_pdf_produtos', filtros, 'produtos_filtrados.pdf');
 });
 
 // --- LÓGICA DE GESTÃO DE PRODUTOS E SUBGRUPOS (CASCATA COMPLETA) ---

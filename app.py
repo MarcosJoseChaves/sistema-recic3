@@ -6842,6 +6842,149 @@ def api_produtos_crud():
         return jsonify({"erro": str(e)}), 500
     finally:
         conn.close()
+
+
+def _buscar_produtos_para_export(filters):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        sql = """
+            SELECT p.item, p.tipo, p.tipo_atividade AS grupo, COALESCE(s.nome, '') AS subgrupo
+            FROM produtos_servicos p
+            LEFT JOIN subgrupos s ON p.id_subgrupo = s.id
+            WHERE 1=1
+        """
+        params = []
+
+        if filters.get('tipo'):
+            sql += " AND p.tipo = %s"
+            params.append(filters.get('tipo'))
+
+        if filters.get('grupo'):
+            sql += " AND p.tipo_atividade = %s"
+            params.append(filters.get('grupo'))
+
+        if filters.get('id_subgrupo'):
+            sql += " AND p.id_subgrupo = %s"
+            params.append(filters.get('id_subgrupo'))
+
+        sql += " ORDER BY p.item"
+        cur.execute(sql, tuple(params))
+        return cur.fetchall()
+    finally:
+        conn.close()
+
+
+@app.route("/baixar_csv_produtos", methods=["POST"])
+@login_required
+def baixar_csv_produtos():
+    try:
+        filters = request.get_json() or {}
+        data = _buscar_produtos_para_export(filters)
+
+        output = io.StringIO(newline="")
+        writer = csv.writer(
+            output,
+            delimiter=';',
+            quotechar='"',
+            quoting=csv.QUOTE_MINIMAL,
+            lineterminator='\n'
+        )
+
+        writer.writerow(["Item", "Tipo", "Subgrupo", "Grupo"])
+
+        for row in data:
+            writer.writerow([
+                row.get("item") or "-",
+                row.get("tipo") or "-",
+                row.get("subgrupo") or "-",
+                row.get("grupo") or "-"
+            ])
+
+        filename = "produtos_filtrados.csv"
+        response = Response(
+            '\ufeff' + output.getvalue(),
+            mimetype="text/csv; charset=utf-8-sig"
+        )
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
+
+    except Exception as e:
+        app.logger.error(f"Erro em /baixar_csv_produtos: {e}", exc_info=True)
+        return jsonify({"error": f"Erro ao gerar CSV: {str(e)}"}), 500
+
+
+@app.route("/baixar_pdf_produtos", methods=["POST"])
+@login_required
+def baixar_pdf_produtos():
+    try:
+        filters = request.get_json() or {}
+        data = _buscar_produtos_para_export(filters)
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            topMargin=1.5 * inch,
+            bottomMargin=1 * inch,
+            leftMargin=0.5 * inch,
+            rightMargin=0.5 * inch
+        )
+
+        styles = getSampleStyleSheet()
+        style_body = ParagraphStyle('BodyTextProdutos', parent=styles['Normal'], alignment=TA_LEFT, leading=9, fontSize=8)
+        style_center = ParagraphStyle('BodyTextProdutosCenter', parent=style_body, alignment=TA_CENTER)
+        style_header_table = ParagraphStyle('TableHeaderProdutos', parent=style_body, fontName='Helvetica-Bold', alignment=TA_CENTER)
+
+        subtitle_parts = []
+        if filters.get("tipo"):
+            subtitle_parts.append(f"Tipo: {filters.get('tipo')}")
+        if filters.get("grupo"):
+            subtitle_parts.append(f"Grupo: {filters.get('grupo')}")
+        if filters.get("id_subgrupo"):
+            subtitle_parts.append(f"ID Subgrupo: {filters.get('id_subgrupo')}")
+
+        subtitle_pdf = " | ".join(subtitle_parts) if subtitle_parts else "Sem filtros"
+
+        table_data = [[
+            Paragraph("Item", style_header_table),
+            Paragraph("Tipo", style_header_table),
+            Paragraph("Subgrupo", style_header_table),
+            Paragraph("Grupo", style_header_table)
+        ]]
+
+        for row in data:
+            table_data.append([
+                Paragraph(row.get("item") or "-", style_body),
+                Paragraph(row.get("tipo") or "-", style_center),
+                Paragraph(row.get("subgrupo") or "-", style_body),
+                Paragraph(row.get("grupo") or "-", style_body)
+            ])
+
+        report_table = Table(table_data, repeatRows=1)
+        report_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ]))
+
+        doc.build(
+            [report_table],
+            onFirstPage=lambda c, d: _create_pdf_header_footer(c, d, "Relatório de Produtos e Serviços", subtitle_pdf),
+            onLaterPages=lambda c, d: _create_pdf_header_footer(c, d, "Relatório de Produtos e Serviços", subtitle_pdf)
+        )
+
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='produtos_filtrados.pdf'
+        )
+    except Exception as e:
+        app.logger.error(f"Erro em /baixar_pdf_produtos: {e}", exc_info=True)
+        return jsonify({"error": f"Erro ao gerar PDF: {str(e)}"}), 500
 @app.route('/excluir_transacao/<int:id>', methods=['POST'])
 @login_required
 def excluir_transacao(id):
