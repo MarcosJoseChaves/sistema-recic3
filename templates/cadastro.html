@@ -297,6 +297,7 @@
 
     <form action="/cadastrar_associado" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="id_associado" id="idAssociadoHidden">
+        <input type="hidden" name="status_original" id="statusOriginalAssociado" value="Ativo">
         
         <div class="row mb-3 p-2 bg-light border rounded mx-0">
             <div class="col-md-3">
@@ -425,7 +426,7 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label required-field">Status</label>
-                <select class="form-select" name="status" required>
+                <select class="form-select" name="status" id="statusAssociado" required>
                     <option value="Ativo" selected>Ativo</option>
                     <option value="Inativo">Inativo</option>
                     <option value="Suspenso">Suspenso</option>
@@ -448,6 +449,72 @@
                     <option value="Triador">Triador</option>
                     <option value="Visitante">Visitante</option>
                 </select>
+            </div>
+        </div>
+
+        <div id="blocoStatusAssociado" class="row mb-3 p-2 bg-light border rounded mx-0" style="display:none;">
+            <div class="col-md-3 campo-transicao" id="campoDataExclusao" style="display:none;">
+                <label class="form-label required-field">Data de exclusão</label>
+                <input type="date" class="form-control" name="data_exclusao" id="dataExclusaoAssociado">
+            </div>
+            <div class="col-md-3 campo-transicao" id="campoDataSuspensao" style="display:none;">
+                <label class="form-label required-field">Data de suspensão</label>
+                <input type="date" class="form-control" name="data_suspensao" id="dataSuspensaoAssociado">
+            </div>
+            <div class="col-md-3 campo-transicao" id="campoDataAfastamento" style="display:none;">
+                <label class="form-label required-field">Data de afastamento</label>
+                <input type="date" class="form-control" name="data_afastamento" id="dataAfastamentoAssociado">
+            </div>
+            <div class="col-md-3 campo-transicao" id="campoDataReadmissao" style="display:none;">
+                <label class="form-label required-field">Data de readmissão</label>
+                <input type="date" class="form-control" name="data_readmissao" id="dataReadmissaoAssociado">
+            </div>
+
+            <div class="col-md-4 campo-transicao" id="campoMotivoExclusao" style="display:none;">
+                <label class="form-label required-field">Motivo da exclusão</label>
+                <select class="form-select" name="motivo_exclusao" id="motivoExclusaoAssociado">
+                    <option value="">Selecione...</option>
+                    <option value="Solicitação de exclusão pelo associado">Solicitação de exclusão pelo associado</option>
+                    <option value="Exclusão após processo disciplinar">Exclusão após processo disciplinar</option>
+                    <option value="Falecimento do associado">Falecimento do associado</option>
+                    <option value="Outros">Outros</option>
+                </select>
+            </div>
+            <div class="col-md-4 campo-transicao" id="campoMotivoSuspensao" style="display:none;">
+                <label class="form-label required-field">Motivo da suspensão</label>
+                <select class="form-select" name="motivo_suspensao" id="motivoSuspensaoAssociado">
+                    <option value="">Selecione...</option>
+                    <option value="Suspensão por descumprimento do estatuto/regimento">Suspensão por descumprimento do estatuto/regimento</option>
+                    <option value="Mandado Judicial">Mandado Judicial</option>
+                    <option value="Outros">Outros</option>
+                </select>
+            </div>
+            <div class="col-md-4 campo-transicao" id="campoMotivoAfastamento" style="display:none;">
+                <label class="form-label required-field">Motivo do afastamento</label>
+                <select class="form-select" name="motivo_afastamento" id="motivoAfastamentoAssociado">
+                    <option value="">Selecione...</option>
+                    <option value="Afastamento por doença">Afastamento por doença</option>
+                    <option value="Afastamento por acidente de trabalho">Afastamento por acidente de trabalho</option>
+                    <option value="Licença-maternidade">Licença-maternidade</option>
+                    <option value="Outros">Outros</option>
+                </select>
+            </div>
+            <div class="col-md-6 campo-transicao" id="campoMotivoReadmissao" style="display:none;">
+                <label class="form-label required-field">Motivo da readmissão</label>
+                <input type="text" class="form-control" name="motivo_readmissao" id="motivoReadmissaoAssociado" maxlength="255">
+            </div>
+
+            <div class="col-md-5 campo-transicao" id="campoObsExclusao" style="display:none;">
+                <label class="form-label">Observação</label>
+                <input type="text" class="form-control" name="observacao_exclusao" id="obsExclusaoAssociado" maxlength="255">
+            </div>
+            <div class="col-md-5 campo-transicao" id="campoObsSuspensao" style="display:none;">
+                <label class="form-label">Observação</label>
+                <input type="text" class="form-control" name="observacao_suspensao" id="obsSuspensaoAssociado" maxlength="255">
+            </div>
+            <div class="col-md-5 campo-transicao" id="campoObsAfastamento" style="display:none;">
+                <label class="form-label">Observação</label>
+                <input type="text" class="form-control" name="observacao_afastamento" id="obsAfastamentoAssociado" maxlength="255">
             </div>
         </div>
 
@@ -5843,6 +5910,9 @@ function mostrarFormulario(idForm, ignorarReset = false) {
             // Ajusta botão e ação para modo "Cadastrar"
             form.attr('action', '/cadastrar_associado');
             $('#idAssociadoHidden').val('');
+            $('#statusOriginalAssociado').val('Ativo');
+            $('#statusAssociado').val('Ativo');
+            atualizarCamposTransicaoStatusAssociado();
             $('#btnSalvarAssociado').html('<i class="fas fa-save"></i> Salvar Associado').removeClass('btn-warning').addClass('btn-primary');
             $('#btnCancelarEdicaoAssociado').hide();
 
@@ -5853,6 +5923,53 @@ function mostrarFormulario(idForm, ignorarReset = false) {
         }
     }
 }
+
+function ocultarCamposTransicaoStatusAssociado() {
+    $('#blocoStatusAssociado').hide();
+    $('.campo-transicao').hide();
+    $('#blocoStatusAssociado').find('input, select').prop('required', false);
+}
+
+function mostrarCamposTransicao(config) {
+    $('#blocoStatusAssociado').show();
+    config.campos.forEach(function(seletor) {
+        $(seletor).show();
+    });
+    config.obrigatorios.forEach(function(seletor) {
+        $(seletor).prop('required', true);
+    });
+}
+
+function atualizarCamposTransicaoStatusAssociado() {
+    const statusOriginal = ($('#statusOriginalAssociado').val() || 'Ativo').trim();
+    const statusAtual = ($('#statusAssociado').val() || '').trim();
+
+    ocultarCamposTransicaoStatusAssociado();
+
+    if (statusOriginal === 'Ativo' && statusAtual === 'Inativo') {
+        mostrarCamposTransicao({
+            campos: ['#campoDataExclusao', '#campoMotivoExclusao', '#campoObsExclusao'],
+            obrigatorios: ['#dataExclusaoAssociado', '#motivoExclusaoAssociado']
+        });
+    } else if (statusOriginal === 'Ativo' && statusAtual === 'Suspenso') {
+        mostrarCamposTransicao({
+            campos: ['#campoDataSuspensao', '#campoMotivoSuspensao', '#campoObsSuspensao'],
+            obrigatorios: ['#dataSuspensaoAssociado', '#motivoSuspensaoAssociado']
+        });
+    } else if (statusOriginal === 'Ativo' && statusAtual === 'Afastado') {
+        mostrarCamposTransicao({
+            campos: ['#campoDataAfastamento', '#campoMotivoAfastamento', '#campoObsAfastamento'],
+            obrigatorios: ['#dataAfastamentoAssociado', '#motivoAfastamentoAssociado']
+        });
+    } else if (['Inativo', 'Suspenso', 'Afastado'].includes(statusOriginal) && statusAtual === 'Ativo') {
+        mostrarCamposTransicao({
+            campos: ['#campoDataReadmissao', '#campoMotivoReadmissao'],
+            obrigatorios: ['#dataReadmissaoAssociado', '#motivoReadmissaoAssociado']
+        });
+    }
+}
+
+$(document).on('change', '#statusAssociado', atualizarCamposTransicaoStatusAssociado);
 
 /* =================================================================================
    2. LÓGICA DE FOTO E CÂMERA (ASSOCIADO)
@@ -6178,9 +6295,22 @@ function iniciarEdicaoAssociado(id) {
         form.find('input[name="uf"]').val(data.uf);
         form.find('input[name="telefone"]').val(data.telefone);
         form.find('select[name="status"]').val(data.status);
+        $('#statusOriginalAssociado').val(data.status || 'Ativo');
         
         // --- Preenche o Campo Função ---
         form.find('select[name="funcao"]').val(data.funcao); 
+        form.find('input[name="data_exclusao"]').val(data.data_exclusao || '');
+        form.find('select[name="motivo_exclusao"]').val(data.motivo_exclusao || '');
+        form.find('input[name="observacao_exclusao"]').val(data.observacao_exclusao || '');
+        form.find('input[name="data_suspensao"]').val(data.data_suspensao || '');
+        form.find('select[name="motivo_suspensao"]').val(data.motivo_suspensao || '');
+        form.find('input[name="observacao_suspensao"]').val(data.observacao_suspensao || '');
+        form.find('input[name="data_afastamento"]').val(data.data_afastamento || '');
+        form.find('select[name="motivo_afastamento"]').val(data.motivo_afastamento || '');
+        form.find('input[name="observacao_afastamento"]').val(data.observacao_afastamento || '');
+        form.find('input[name="data_readmissao"]').val(data.data_readmissao || '');
+        form.find('input[name="motivo_readmissao"]').val(data.motivo_readmissao || '');
+        atualizarCamposTransicaoStatusAssociado(); 
 
         if (data.data_cadastro) {
             $('#visualDataCadastroAssociado').val(data.data_cadastro);
@@ -6347,6 +6477,7 @@ $(document).ready(function() {
         atualizarAssociacaoAssociado();
     });
     atualizarAssociacaoAssociado(); // Executa ao carregar
+    atualizarCamposTransicaoStatusAssociado();
 
     // 3. Inicializa Busca de CEP do Associado
     setupBuscaCepAssociado();

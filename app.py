@@ -340,13 +340,29 @@ def criar_tabelas_se_nao_existir():
                 rg VARCHAR(20) NOT NULL, data_nascimento DATE NOT NULL, data_admissao DATE NOT NULL,
                 status VARCHAR(20) NOT NULL, cep VARCHAR(8) NOT NULL, logradouro VARCHAR(255), 
                 endereco_numero VARCHAR(20), bairro VARCHAR(100), cidade VARCHAR(100), uf VARCHAR(2),
-                telefone VARCHAR(20) NOT NULL, data_hora_cadastro TIMESTAMP NOT NULL
+                telefone VARCHAR(20) NOT NULL, data_hora_cadastro TIMESTAMP NOT NULL,
+                data_exclusao DATE, motivo_exclusao VARCHAR(120), observacao_exclusao TEXT,
+                data_suspensao DATE, motivo_suspensao VARCHAR(120), observacao_suspensao TEXT,
+                data_afastamento DATE, motivo_afastamento VARCHAR(120), observacao_afastamento TEXT,
+                data_readmissao DATE, motivo_readmissao TEXT
             )
         """)
         
         # Migração Associados
         try:
             cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS foto_base64 TEXT;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS funcao VARCHAR(100);")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS data_exclusao DATE;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS motivo_exclusao VARCHAR(120);")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS observacao_exclusao TEXT;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS data_suspensao DATE;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS motivo_suspensao VARCHAR(120);")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS observacao_suspensao TEXT;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS data_afastamento DATE;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS motivo_afastamento VARCHAR(120);")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS observacao_afastamento TEXT;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS data_readmissao DATE;")
+            cur.execute("ALTER TABLE associados ADD COLUMN IF NOT EXISTS motivo_readmissao TEXT;")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
@@ -1748,6 +1764,28 @@ def cadastrar_associado():
         except ValueError as e:
             return f"Formato de data inválido: {e}", 400
 
+        def parse_date_optional(campo):
+            valor = (dados.get(campo) or '').strip()
+            if not valor:
+                return None
+            try:
+                return datetime.strptime(valor, '%Y-%m-%d').date()
+            except ValueError:
+                return None
+
+        data_exclusao = parse_date_optional('data_exclusao')
+        data_suspensao = parse_date_optional('data_suspensao')
+        data_afastamento = parse_date_optional('data_afastamento')
+        data_readmissao = parse_date_optional('data_readmissao')
+
+        status = dados.get('status', '')
+        if status == 'Inativo' and (not data_exclusao or not dados.get('motivo_exclusao')):
+            return "Data e motivo da exclusão são obrigatórios.", 400
+        if status == 'Suspenso' and (not data_suspensao or not dados.get('motivo_suspensao')):
+            return "Data e motivo da suspensão são obrigatórios.", 400
+        if status == 'Afastado' and (not data_afastamento or not dados.get('motivo_afastamento')):
+            return "Data e motivo do afastamento são obrigatórios.", 400
+
         # --- LÓGICA DE FOTO INTELIGENTE (REVISADA) ---
         foto_final = ""
         
@@ -1793,17 +1831,23 @@ def cadastrar_associado():
             INSERT INTO associados (
                 numero, uvr, associacao, nome, cpf, rg, data_nascimento,
                 data_admissao, status, cep, logradouro, endereco_numero,
-                bairro, cidade, uf, telefone, data_hora_cadastro, foto_base64, 
-                funcao
+                bairro, cidade, uf, telefone, data_hora_cadastro, foto_base64,
+                funcao, data_exclusao, motivo_exclusao, observacao_exclusao,
+                data_suspensao, motivo_suspensao, observacao_suspensao,
+                data_afastamento, motivo_afastamento, observacao_afastamento,
+                data_readmissao, motivo_readmissao
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             numero_gerado_str, dados["uvr"], dados.get("associacao",""), dados["nome"],
             cpf_num, dados["rg"], data_nascimento, data_admissao, dados["status"],
-            cep_num, dados.get("logradouro", ""), dados.get("endereco_numero", ""), 
-            dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf", ""), 
-            dados["telefone"], data_hora, foto_final, 
-            dados.get("funcao")
+            cep_num, dados.get("logradouro", ""), dados.get("endereco_numero", ""),
+            dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf", ""),
+            dados["telefone"], data_hora, foto_final,
+            dados.get("funcao"), data_exclusao, dados.get("motivo_exclusao", ""), dados.get("observacao_exclusao", ""),
+            data_suspensao, dados.get("motivo_suspensao", ""), dados.get("observacao_suspensao", ""),
+            data_afastamento, dados.get("motivo_afastamento", ""), dados.get("observacao_afastamento", ""),
+            data_readmissao, dados.get("motivo_readmissao", "")
         ))
         
         conn.commit()
@@ -1959,8 +2003,8 @@ def get_associado(id):
             "data_admissao": fmt_iso(row['data_admissao']),
             "status": row['status'],
             "uvr": row['uvr'],
-            "associacao": row.get('associacao', ''), # <--- ADICIONADO (IMPORTANTE PARA EDIÇÃO)
-            "cep": row.get('cep', ''),               # <--- ADICIONADO (IMPORTANTE PARA EDIÇÃO)
+            "associacao": row.get('associacao', ''),
+            "cep": row.get('cep', ''),
             "logradouro": row['logradouro'],
             "numero": row.get('endereco_numero', ''),
             "endereco_numero": row.get('endereco_numero', ''),
@@ -1970,7 +2014,18 @@ def get_associado(id):
             "telefone": row['telefone'],
             "foto_base64": foto,
             "data_cadastro": fmt_br_completo(row.get('data_hora_cadastro')),
-            "funcao": row.get('funcao', '')  # <--- O CAMPO QUE FALTAVA
+            "funcao": row.get('funcao', ''),
+            "data_exclusao": fmt_iso(row.get('data_exclusao')),
+            "motivo_exclusao": row.get('motivo_exclusao', ''),
+            "observacao_exclusao": row.get('observacao_exclusao', ''),
+            "data_suspensao": fmt_iso(row.get('data_suspensao')),
+            "motivo_suspensao": row.get('motivo_suspensao', ''),
+            "observacao_suspensao": row.get('observacao_suspensao', ''),
+            "data_afastamento": fmt_iso(row.get('data_afastamento')),
+            "motivo_afastamento": row.get('motivo_afastamento', ''),
+            "observacao_afastamento": row.get('observacao_afastamento', ''),
+            "data_readmissao": fmt_iso(row.get('data_readmissao')),
+            "motivo_readmissao": row.get('motivo_readmissao', '')
         }
         return jsonify(res)
 
@@ -1994,20 +2049,28 @@ def editar_associado():
     try:
         dados = request.form.to_dict()
         id_associado = dados.get("id_associado")
-        if not id_associado: return "ID não encontrado.", 400
+        if not id_associado:
+            return "ID não encontrado.", 400
 
-        # Tratamento de dados
         cpf_num = re.sub(r'[^0-9]', '', dados.get("cpf", ""))
         cep_num = re.sub(r'[^0-9]', '', dados.get("cep", ""))
-        funcao = dados.get("funcao") # <--- Recupera a função do formulário
-        
+        funcao = dados.get("funcao")
+
+
         def processar_data(d):
-            if not d: return None
-            try: return datetime.strptime(d, '%Y-%m-%d').date()
-            except: return None
+            if not d:
+                return None
+            try:
+                return datetime.strptime(d, '%Y-%m-%d').date()
+            except Exception:
+                return None
 
         data_nasc = processar_data(dados.get("data_nascimento"))
         data_adm = processar_data(dados.get("data_admissao"))
+        data_exclusao = processar_data(dados.get("data_exclusao"))
+        data_suspensao = processar_data(dados.get("data_suspensao"))
+        data_afastamento = processar_data(dados.get("data_afastamento"))
+        data_readmissao = processar_data(dados.get("data_readmissao"))
 
         # --- LÓGICA DE FOTO NA EDIÇÃO ---
         foto_final = dados.get("foto_base64", "")
@@ -2037,36 +2100,73 @@ def editar_associado():
         conn = conectar_banco()
         cur = conn.cursor()
 
+        cur.execute("SELECT status FROM associados WHERE id=%s", (int(id_associado),))
+        status_atual_row = cur.fetchone()
+        if not status_atual_row:
+            return "Associado não encontrado.", 404
+
+        status_atual = status_atual_row[0]
+        status_novo = dados.get("status", "")
+
+        if status_atual == 'Ativo' and status_novo == 'Inativo':
+            if not data_exclusao or not dados.get('motivo_exclusao'):
+                return "Data e motivo da exclusão são obrigatórios.", 400
+        elif status_atual == 'Ativo' and status_novo == 'Suspenso':
+            if not data_suspensao or not dados.get('motivo_suspensao'):
+                return "Data e motivo da suspensão são obrigatórios.", 400
+        elif status_atual == 'Ativo' and status_novo == 'Afastado':
+            if not data_afastamento or not dados.get('motivo_afastamento'):
+                return "Data e motivo do afastamento são obrigatórios.", 400
+        elif status_atual in ('Inativo', 'Suspenso', 'Afastado') and status_novo == 'Ativo':
+            if not data_readmissao or not dados.get('motivo_readmissao'):
+                return "Data e motivo da readmissão são obrigatórios.", 400
+
         if current_user.role == 'admin':
-            # ADICIONADO: funcao=%s no SQL e a variável 'funcao' nos valores
             cur.execute("""
-                UPDATE associados SET 
+                UPDATE associados SET
                     nome=%s, cpf=%s, rg=%s, data_nascimento=%s, data_admissao=%s,
                     status=%s, uvr=%s, associacao=%s, cep=%s, logradouro=%s,
                     endereco_numero=%s, bairro=%s, cidade=%s, uf=%s, telefone=%s,
-                    foto_base64=%s, funcao=%s
+                    foto_base64=%s, funcao=%s,
+                    data_exclusao=%s, motivo_exclusao=%s, observacao_exclusao=%s,
+                    data_suspensao=%s, motivo_suspensao=%s, observacao_suspensao=%s,
+                    data_afastamento=%s, motivo_afastamento=%s, observacao_afastamento=%s,
+                    data_readmissao=%s, motivo_readmissao=%s
                 WHERE id=%s
             """, (
                 dados["nome"], cpf_num, dados["rg"], data_nasc, data_adm,
                 dados["status"], dados["uvr"], dados.get("associacao", ""), cep_num,
                 dados.get("logradouro", ""), dados.get("endereco_numero", ""),
                 dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf"),
-                dados["telefone"], foto_final, funcao, int(id_associado)
+                dados["telefone"], foto_final, funcao,
+                data_exclusao, dados.get("motivo_exclusao", ""), dados.get("observacao_exclusao", ""),
+                data_suspensao, dados.get("motivo_suspensao", ""), dados.get("observacao_suspensao", ""),
+                data_afastamento, dados.get("motivo_afastamento", ""), dados.get("observacao_afastamento", ""),
+                data_readmissao, dados.get("motivo_readmissao", ""),
+                int(id_associado)
             ))
             conn.commit()
             msg = "Alterações salvas com sucesso!"
         else:
-            # Lógica para Usuário Comum (Solicitação de Alteração)
             import json
             dados_json = dados.copy()
-            dados_json['foto_base64'] = foto_final 
-            
-            # Formata datas para string para o JSON não quebrar
-            if data_nasc: dados_json['data_nascimento'] = str(data_nasc)
-            if data_adm: dados_json['data_admissao'] = str(data_adm)
+            dados_json['foto_base64'] = foto_final
+
+            if data_nasc:
+                dados_json['data_nascimento'] = str(data_nasc)
+            if data_adm:
+                dados_json['data_admissao'] = str(data_adm)
+            if data_exclusao:
+                dados_json['data_exclusao'] = str(data_exclusao)
+            if data_suspensao:
+                dados_json['data_suspensao'] = str(data_suspensao)
+            if data_afastamento:
+                dados_json['data_afastamento'] = str(data_afastamento)
+            if data_readmissao:
+                dados_json['data_readmissao'] = str(data_readmissao)
 
             cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
+                INSERT INTO solicitacoes_alteracao
                 (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante)
                 VALUES (%s, %s, %s, %s, %s)
             """, ('associados', int(id_associado), 'EDICAO', json.dumps(dados_json), current_user.username))
@@ -2076,11 +2176,13 @@ def editar_associado():
         return pagina_sucesso_base("Processado", msg)
 
     except Exception as e:
-        if conn: conn.rollback()
+        if conn:
+            conn.rollback()
         app.logger.error(f"Erro edição associado: {e}")
         return f"Erro: {e}", 500
     finally:
-        if conn: conn.close()
+        if conn:
+            conn.close()
 
 @app.route("/cadastrar_produto_servico", methods=["POST"])
 def cadastrar_produto_servico():
@@ -5474,12 +5576,18 @@ def imprimir_ficha_associado(id):
 
         # --- PROCESSAMENTO DA FOTO (3x4) ---
         img_obj = None
-        if dados['foto'] and len(dados['foto']) > 100:
+        render_w, render_h = (0, 0)
+        foto_raw = (dados.get('foto') or "").strip()
+        if foto_raw:
             try:
-                img_str = dados['foto'].split(",")[1] if "," in dados['foto'] else dados['foto']
-                img_data = base64.b64decode(img_str)
-                imagem_io = io.BytesIO(img_data)
-                
+                if foto_raw.startswith(("http://", "https://")):
+                    resposta = requests.get(foto_raw, timeout=10)
+                    resposta.raise_for_status()
+                    imagem_io = io.BytesIO(resposta.content)
+                else:
+                    img_str = foto_raw.split(",", 1)[1] if foto_raw.startswith("data:image") else foto_raw
+                    img_data = base64.b64decode(img_str)
+                    imagem_io = io.BytesIO(img_data)
                 img_reader = ImageReader(imagem_io)
                 orig_w, orig_h = img_reader.getSize()
                 aspect = orig_h / float(orig_w)
@@ -5492,8 +5600,8 @@ def imprimir_ficha_associado(id):
                     render_w = render_h / aspect
                 
                 img_obj = ReportLabImage(imagem_io, width=render_w, height=render_h)
-            except Exception as e: 
-                app.logger.error(f"Erro imagem PDF: {e}")
+            except Exception as e:
+                app.logger.error(f"Erro imagem PDF (associado {id}): {e}")
 
         # Listas de campos
         lista_pessoais = [
@@ -8705,6 +8813,7 @@ def imprimir_ficha_cliente(id):
         return f"Erro ao gerar PDF: {e}", 500
     finally:
         if conn: conn.close()
+
 # --- ROTA PARA EDITAR (OU SOLICITAR EDIÇÃO) DE CLIENTE ---
 @app.route('/editar_cliente', methods=['POST'])
 @login_required
@@ -8712,71 +8821,119 @@ def editar_cliente():
     bloqueio = bloquear_visitante()
     if bloqueio:
         return bloqueio
+
     conn = None
     try:
         dados = request.form.to_dict()
-        id_registro = dados.get('id')
-        
-        if not id_registro:
+
+        id_registro_raw = (dados.get('id') or '').strip()
+        if not id_registro_raw:
             return "ID do registro não informado.", 400
 
-        # Tratamentos básicos (CNPJ apenas números, etc)
-        dados['cnpj'] = re.sub(r'[^0-9]', '', dados.get('cnpj', ''))
-        
-        # Conecta ao banco
+        try:
+            id_registro = int(id_registro_raw)
+        except ValueError:
+            return "ID do registro inválido.", 400
+
+        required_fields = {
+            'razao_social': 'Razão Social / Nome',
+            'cnpj': 'CNPJ / CPF',
+            'tipo_cadastro': 'Tipo de cadastro'
+        }
+        for field, label in required_fields.items():
+            if not (dados.get(field) or '').strip():
+                return f"{label} é obrigatório.", 400
+
+        cnpj_num = re.sub(r'[^0-9]', '', dados.get('cnpj', ''))
+        cep_num = re.sub(r'[^0-9]', '', dados.get('cep', ''))
+
         conn = conectar_banco()
         cur = conn.cursor()
 
-        # 1. ADMIN: Edita direto
         if current_user.role == 'admin':
             cur.execute("""
-                UPDATE cadastros 
-                SET razao_social=%s, cnpj=%s, telefone=%s, 
-                    cep=%s, logradouro=%s, numero=%s, bairro=%s, cidade=%s, uf=%s,
-                    tipo_cadastro=%s
-                WHERE id = %s
+                UPDATE cadastros
+                   SET razao_social=%s,
+                       cnpj=%s,
+                       telefone=%s,
+                       cep=%s,
+                       logradouro=%s,
+                       numero=%s,
+                       bairro=%s,
+                       cidade=%s,
+                       uf=%s,
+                       tipo_cadastro=%s
+                 WHERE id=%s
             """, (
-                dados['razao_social'], dados['cnpj'], dados.get('telefone'),
-                dados.get('cep'), dados.get('logradouro'), dados.get('numero'),
-                dados.get('bairro'), dados.get('cidade'), dados.get('uf'),
-                dados['tipo_cadastro'], id_registro
+                dados.get('razao_social', '').strip(),
+                cnpj_num,
+                dados.get('telefone', '').strip(),
+                cep_num,
+                dados.get('logradouro', '').strip(),
+                dados.get('numero', '').strip(),
+                dados.get('bairro', '').strip(),
+                dados.get('cidade', '').strip(),
+                dados.get('uf', '').strip(),
+                dados.get('tipo_cadastro', '').strip(),
+                id_registro
             ))
             conn.commit()
             flash("Cadastro atualizado com sucesso!", "success")
-            return redirect(url_for('sucesso')) # Ou redireciona para a lista
+            return redirect(url_for('sucesso'))
 
-        # 2. USUÁRIO COMUM: Cria Solicitação
-        else:
-            # Verifica se já tem pendência para não acumular lixo
-            cur.execute("""
-                SELECT id FROM solicitacoes_alteracao 
-                WHERE tabela_alvo='cadastros' AND id_registro=%s AND status='Pendente'
-            """, (id_registro,))
-            
-            if cur.fetchone():
-                return "Já existe uma solicitação pendente para este cadastro.", 400
+        cur.execute("""
+            SELECT id
+              FROM solicitacoes_alteracao
+             WHERE tabela_alvo='cadastros'
+               AND id_registro=%s
+               AND UPPER(status)='PENDENTE'
+        """, (id_registro,))
 
-            # Prepara os dados novos em JSON
-            dados_json = json.dumps(dados)
-            
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('cadastros', id_registro, 'EDICAO', dados_json, current_user.username))
-            
-            conn.commit()
-            
-            # Avisa o usuário que foi enviado para análise
-            return render_template('sucesso_generico.html', 
-                                   titulo="Solicitação Enviada", 
-                                   mensagem="As alterações foram enviadas para aprovação do administrador.")
+        if cur.fetchone():
+            return "Já existe uma solicitação pendente para este cadastro.", 400
+
+        dados_solicitacao = {
+            'id': id_registro,
+            'razao_social': dados.get('razao_social', '').strip(),
+            'cnpj': cnpj_num,
+            'telefone': dados.get('telefone', '').strip(),
+            'cep': cep_num,
+            'logradouro': dados.get('logradouro', '').strip(),
+            'numero': dados.get('numero', '').strip(),
+            'bairro': dados.get('bairro', '').strip(),
+            'cidade': dados.get('cidade', '').strip(),
+            'uf': dados.get('uf', '').strip(),
+            'tipo_cadastro': dados.get('tipo_cadastro', '').strip(),
+            'uvr': dados.get('uvr', '').strip()
+        }
+
+        cur.execute("""
+            INSERT INTO solicitacoes_alteracao
+            (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante)
+            VALUES (%s, %s, %s, %s, %s)
+        """, ('cadastros', id_registro, 'EDICAO', json.dumps(dados_solicitacao), current_user.username))
+        conn.commit()
+
+        return render_template(
+            'sucesso_generico.html',
+            titulo="Solicitação Enviada",
+            mensagem="As alterações foram enviadas para aprovação do administrador."
+        )
 
     except Exception as e:
-        if conn: conn.rollback()
+        if conn:
+            conn.rollback()
+        app.logger.error(
+            "Erro ao editar cliente/fornecedor (id=%s, usuario=%s): %s",
+            request.form.get('id'),
+            current_user.username,
+            e,
+            exc_info=True
+        )
         return f"Erro ao processar edição: {str(e)}", 500
     finally:
-        if conn: conn.close()
+        if conn:
+            conn.close()
 
 # --- ROTA: BUSCAR LISTA DE EPIs COM FILTRO ---
 @app.route("/buscar_epis", methods=["GET"])
@@ -8986,7 +9143,8 @@ def editar_epi():
         app.logger.error(f"Erro ao editar EPI: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        if conn: conn.close()
+        if conn:
+            conn.close()
 
 # --- ROTA: EXCLUIR (OU SOLICITAR EXCLUSÃO) DE EPI ---
 @app.route("/excluir_epi/<int:id>", methods=["POST"])
