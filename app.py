@@ -2475,7 +2475,8 @@ def get_associados_ativos():
         query = """
             SELECT id, nome, funcao 
             FROM associados 
-            WHERE uvr = %s AND status = 'Ativo' 
+            WHERE uvr = %s
+              AND COALESCE(TRIM(status), '') ILIKE 'Ativo' 
             ORDER BY nome
         """
         cur.execute(query, (uvr_filter,))
@@ -2659,6 +2660,18 @@ def registrar_transacao_financeira():
                 if nome_origem_input: 
                     nome_final_origem = nome_origem_input
             else: 
+                cur.execute(
+                    """
+                    SELECT nome
+                    FROM associados
+                    WHERE id = %s
+                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                    """,
+                    (id_origem_selecionado,)
+                )
+                associado_rateio = cur.fetchone()
+                if not associado_rateio:
+                    return "Associado inativo não pode receber rateio.", 400
                 if not nome_origem_input:
                      return "Erro: ID de associado selecionado para rateio sem nome correspondente.", 400
                 nome_final_origem = nome_origem_input
@@ -2994,6 +3007,18 @@ def editar_transacao():
             if not id_origem_selecionado:
                 nome_final_origem = nome_origem_input or "Rateio Geral Associados"
             else:
+                cur.execute(
+                    """
+                    SELECT nome
+                    FROM associados
+                    WHERE id = %s
+                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                    """,
+                    (id_origem_selecionado,)
+                )
+                associado_rateio = cur.fetchone()
+                if not associado_rateio:
+                    return "Associado inativo não pode receber rateio.", 400
                 if not nome_origem_input:
                     return "Erro: ID de associado selecionado para rateio sem nome correspondente.", 400
                 nome_final_origem = nome_origem_input
@@ -5082,16 +5107,28 @@ def responder_solicitacao():
                 elif tabela == 'cadastros':
                     novo_uvr = d.get("uvr")
                     nova_assoc = d.get("associacao", "")
-                    if not novo_uvr:
-                        cur.execute("SELECT uvr, associacao FROM cadastros WHERE id = %s", (id_reg,))
-                        atual = cur.fetchone()
-                        if atual:
+                    tipo_atividade = d.get("tipo_atividade")
+                    tipo_cadastro = d.get("tipo_cadastro")
+
+                    cur.execute("""
+                        SELECT uvr, associacao, tipo_atividade, tipo_cadastro
+                        FROM cadastros
+                        WHERE id = %s
+                    """, (id_reg,))
+                    atual = cur.fetchone()
+                    if atual:
+                        if not novo_uvr:
                             novo_uvr = atual[0]
-                            if not nova_assoc: nova_assoc = atual[1]
+                        if not nova_assoc:
+                            nova_assoc = atual[1]
+                        if not tipo_atividade:
+                            tipo_atividade = atual[2]
+                        if not tipo_cadastro:
+                            tipo_cadastro = atual[3]
 
                     cur.execute("""UPDATE cadastros SET uvr=%s, associacao=%s, razao_social=%s, cnpj=%s, cep=%s, logradouro=%s, numero=%s, bairro=%s, cidade=%s, uf=%s, telefone=%s, tipo_atividade=%s, tipo_cadastro=%s WHERE id=%s""",
                         (novo_uvr, nova_assoc,
-                         d.get("razao_social"), re.sub(r'[^0-9]', '', d.get("cnpj","")), re.sub(r'[^0-9]', '', d.get("cep","")), d.get("logradouro"), d.get("numero"), d.get("bairro"), d.get("cidade"), d.get("uf"), d.get("telefone"), d.get("tipo_atividade"), d.get("tipo_cadastro"), id_reg))
+                         d.get("razao_social"), re.sub(r'[^0-9]', '', d.get("cnpj","") or ""), re.sub(r'[^0-9]', '', d.get("cep","") or ""), d.get("logradouro"), d.get("numero"), d.get("bairro"), d.get("cidade"), d.get("uf"), d.get("telefone"), tipo_atividade, tipo_cadastro, id_reg))
                 
                 elif tabela == 'contas_correntes':
                     cur.execute("""UPDATE contas_correntes SET 
@@ -9453,10 +9490,31 @@ def controle_entrega_epi():
             cur = conn.cursor()
 
             # Busca dados do Associado
-            cur.execute("SELECT uvr, associacao FROM associados WHERE id = %s", (id_associado,))
+            cur.execute(
+                """
+                SELECT uvr, associacao
+                FROM associados
+                WHERE id = %s
+                  AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                """,
+                (id_associado,)
+            )
             row_assoc = cur.fetchone()
             if not row_assoc:
-                flash("Associado não encontrado.", "error")
+                flash("Associado inativo não pode receber EPI.", "error")
+                return redirect(url_for("controle_entrega_epi"))
+
+            cur.execute(
+                """
+                SELECT id
+                FROM associados
+                WHERE id = %s
+                  AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                """,
+                (id_responsavel,)
+            )
+            if not cur.fetchone():
+                flash("Responsável inativo não pode registrar entrega de EPI.", "error")
                 return redirect(url_for("controle_entrega_epi"))
 
             uvr_assoc, associacao_assoc = row_assoc
@@ -9568,7 +9626,13 @@ def controle_entrega_epi():
         if current_user.role == 'admin':
             if uvr_filtro:
                 cur.execute(
-                    "SELECT id, nome, uvr, associacao FROM associados WHERE uvr = %s ORDER BY nome ASC",
+                    """
+                    SELECT id, nome, uvr, associacao
+                    FROM associados
+                    WHERE uvr = %s
+                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                    ORDER BY nome ASC
+                    """,
                     (uvr_filtro,)
                 )
             else:
@@ -9597,12 +9661,24 @@ def controle_entrega_epi():
         else:
             if associacao_usuario:
                 cur.execute(
-                    "SELECT id, nome, uvr, associacao FROM associados WHERE associacao = %s ORDER BY nome ASC",
+                    """
+                    SELECT id, nome, uvr, associacao
+                    FROM associados
+                    WHERE associacao = %s
+                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                    ORDER BY nome ASC
+                    """,
                     (associacao_usuario,)
                 )
             else:
                 cur.execute(
-                    "SELECT id, nome, uvr, associacao FROM associados WHERE uvr = %s ORDER BY nome ASC",
+                    """
+                    SELECT id, nome, uvr, associacao
+                    FROM associados
+                    WHERE uvr = %s
+                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                    ORDER BY nome ASC
+                    """,
                     (current_user.uvr_acesso,)
                 )
         
