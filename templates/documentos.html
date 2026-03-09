@@ -5,7 +5,6 @@
     <title>Gestão de Documentos - Sistema Recic3</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- Favicon dummy para evitar erro 404 no console -->
     <link rel="icon" href="data:,">
     
     <style>
@@ -21,11 +20,9 @@
 </head>
 <body>
 
-<!-- Garante que a página não quebre se o backend esquecer de enviar a variável filtros -->
 {% set filtros = filtros|default({}) %}
 
 <div class="container">
-    <!-- MENSAGENS DE FEEDBACK -->
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
@@ -91,7 +88,6 @@
         });
     </script>
 
-    <!-- ÁREA DE NOVO UPLOAD -->
     <div class="card p-4 mb-4 shadow-sm bg-white border-top border-primary border-4">
         <h5 class="mb-3 text-primary"><i class="fas fa-cloud-upload-alt"></i> Novo Upload</h5>
         <form action="/documentos" method="POST" enctype="multipart/form-data">
@@ -175,7 +171,6 @@
         </form>
     </div>
 
-    <!-- SEÇÃO DE FILTROS (Posicionada acima da listagem) -->
     <div class="filter-section shadow-sm">
         <form action="/documentos" method="GET" class="row g-3">
             <h6 class="text-secondary fw-bold mb-0"><i class="fas fa-filter"></i> Filtrar Histórico</h6>
@@ -236,7 +231,6 @@
         </form>
     </div>
 
-    <!-- LISTA DE DOCUMENTOS -->
     <div class="table-responsive">
         <table class="table table-hover bg-white rounded shadow-sm align-middle border">
             <thead>
@@ -283,7 +277,6 @@
                         {% endif %}
                     </td>
                     <td class="text-center" style="white-space: nowrap;">
-                        <!-- Ver Arquivo -->
                         {% if doc.caminho_arquivo %}
                         {% set doc_url = doc.url_visualizacao or doc.caminho_arquivo %}
                         {% if not doc_url.startswith('http') %}
@@ -292,7 +285,6 @@
                         <a href="{{ doc_url }}" target="_blank" class="btn btn-acao btn-outline-primary" title="Ver Arquivo"><i class="fas fa-eye"></i></a>
                         {% endif %}
                         
-                        <!-- Auditoria (Admin) -->
                         {% if current_user.role|lower == 'admin' and doc.status == 'Pendente' %}
                             <form action="/aprovar_documento_direto/{{ doc.id }}" method="POST" class="d-inline">
                                 <button type="submit" class="btn btn-acao btn-success" title="Aprovar"><i class="fas fa-check"></i></button>
@@ -300,13 +292,11 @@
                             <button type="button" class="btn btn-acao btn-danger btn-reprovar-doc" data-id="{{ doc.id }}" title="Reprovar"><i class="fas fa-exclamation-circle"></i></button>
                         {% endif %}
 
-                        <!-- Editar -->
                         <button type="button" class="btn btn-acao btn-outline-warning btn-editar-doc" 
                                 data-doc="{{ doc|tojson|forceescape }}" title="Editar">
                             <i class="fas fa-edit"></i>
                         </button>
 
-                        <!-- Excluir (Recuperado) -->
                         <a href="/excluir_documento/{{ doc.id }}" class="btn btn-acao btn-outline-danger" 
                            onclick="return confirm('Deseja realmente solicitar a EXCLUSÃO?')" title="Excluir">
                             <i class="fas fa-trash"></i>
@@ -314,7 +304,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="text-center p-5 text-muted">Nenhum documento encontrado.</td></tr>
+                <tr><td colspan="7" class="text-center p-5 text-muted">Nenhum documento encontrado.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -323,7 +313,6 @@
     </div>
 </div>
 
-<!-- MODAL EDITAR -->
 <div class="modal fade" id="modalEditar" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -370,7 +359,6 @@
     </div>
 </div>
 
-<!-- MODAL REPROVAR -->
 <div class="modal fade" id="modalReprovar" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -395,7 +383,6 @@
     </div>
 </div>
 
-<!-- SCRIPTS -->
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -460,20 +447,91 @@
         var $selectType = $('#tipo_documento');
         $selectType.data('options', $selectType.find('option').clone());
         filtrarOpcoesUpload();
+        
         $(document).on('click', '.btn-editar-doc', function(e) {
             e.preventDefault();
             var docData = $(this).data('doc');
             abrirModalEditar(docData);
         });
+        
         $(document).on('click', '.btn-reprovar-doc', function(e) {
             e.preventDefault();
             var docId = $(this).data('id');
             abrirModalReprovar(docId);
         });
+
+        // =========================================================
+        // 1. Interceptar a APROVAÇÃO do documento (Botão Verde)
+        // =========================================================
+        $('form[action^="/aprovar_documento_direto/"]').on('submit', function(e) {
+            e.preventDefault(); // Impede a página de piscar/recarregar
+            var form = $(this);
+            var btn = form.find('button');
+            var linha = form.closest('tr'); // Descobre em qual linha da tabela o botão foi clicado
+            
+            btn.prop('disabled', true); // Desativa o botão rapidamente para evitar duplo clique
+            
+            $.ajax({
+                type: form.attr('method'),
+                url: form.attr('action'),
+                data: form.serialize(),
+                success: function() {
+                    // Atualiza a coluna de status (coluna 5 na tabela, índice 5 é a 6ª coluna baseada em 0)
+                    linha.find('td:eq(5)').html('<span class="status-badge bg-success text-white"><i class="fas fa-check-circle"></i> OK</span>');
+                    
+                    // Remove os botões de auditoria para não aprovar/reprovar 2 vezes
+                    linha.find('form[action^="/aprovar_documento_direto/"]').remove();
+                    linha.find('.btn-reprovar-doc').remove();
+                },
+                error: function() {
+                    alert('Erro ao aprovar. Verifique sua conexão e tente novamente.');
+                    btn.prop('disabled', false);
+                }
+            });
+        });
+
+        // =========================================================
+        // 2. Interceptar a REPROVAÇÃO do documento (Modal Vermelho)
+        // =========================================================
+        $('#modalReprovar form').on('submit', function(e) {
+            e.preventDefault(); // Impede o redirecionamento
+            var form = $(this);
+            var btn = form.find('button[type="submit"]');
+            var docId = $('#reprovar_id').val();
+            var linha = $('button[data-id="' + docId + '"]').closest('tr'); // Acha a linha correta pelo ID do botão de reprovar
+            var motivoDigitado = form.find('textarea[name="motivo_rejeicao"]').val();
+            
+            btn.prop('disabled', true); // Desativa botão de enviar do modal
+            
+            $.ajax({
+                type: form.attr('method'),
+                url: form.attr('action'),
+                data: form.serialize(),
+                success: function() {
+                    // Esconde o modal nativo do Bootstrap
+                    var reprovarModal = bootstrap.Modal.getInstance(document.getElementById('modalReprovar'));
+                    reprovarModal.hide(); 
+                    
+                    btn.prop('disabled', false);
+                    form[0].reset(); // Limpa o texto que o usuário digitou
+                    
+                    // Atualiza a coluna de status para a etiqueta vermelha
+                    linha.find('td:eq(5)').html(
+                        '<span class="status-badge bg-danger text-white"><i class="fas fa-times-circle"></i> CORRIGIR</span>' +
+                        '<div class="mt-1 small text-danger" style="font-size: 0.7rem;">' + motivoDigitado + '</div>'
+                    );
+                    
+                    // Remove os botões de auditoria dessa linha
+                    linha.find('form[action^="/aprovar_documento_direto/"]').remove();
+                    linha.find('.btn-reprovar-doc').remove();
+                },
+                error: function() {
+                    alert('Erro ao reprovar. Verifique sua conexão e tente novamente.');
+                    btn.prop('disabled', false);
+                }
+            });
+        });
     });
 </script>
 </body>
 </html>
-
-
-

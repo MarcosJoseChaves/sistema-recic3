@@ -164,126 +164,83 @@
         
     </div>
     
-    <div class="container mb-5" id="menuPrincipal">
-    <div class="row g-4">
-        
-        <div class="col-md-4">
-            <div class="card h-100 dashboard-card">
-                <div class="card-header card-header-custom bg-primary text-white">
-                    <i class="fas fa-users me-2"></i> Cadastros Gerais
-                </div>
-                <div class="card-body">
-                    <small class="text-muted d-block mb-2">PESSOAS & ENTIDADES</small>
-                    <div class="btn-group-dashboard">
-                        <button type="button" class="btn btn-success" 
-                            onclick="mostrarFormulario('clienteFornecedorForm');
-                                    let agora = new Date(); 
-                                    let strData = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR'); 
-                                    document.getElementById('visualDataCadastroCliente').value = strData; 
-                                    document.getElementById('inputDataCadastroCliente').value = strData;">
-                            <i class="fas fa-plus"></i> Novo
-                        </button>
-                        <button id="btnGestaoCadastros" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Pesquisar</button>
-                    </div>
+    <div class="container mb-4" id="menuPrincipal" style="padding: 0;">
+        <div class="d-flex flex-wrap align-items-center gap-3 p-3 bg-white rounded shadow-sm border">
+            <span class="text-muted fw-bold"><i class="fas fa-bars me-2"></i> Menu:</span>
+            
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle fw-bold shadow-sm" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-users"></i> Cadastros Gerais
+                </button>
+                <ul class="dropdown-menu shadow-lg border-0" style="min-width: 280px;">
+                    <li><h6 class="dropdown-header text-primary fw-bold">PESSOAS & ENTIDADES</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" onclick="mostrarFormulario('clienteFornecedorForm'); let agora = new Date(); let strData = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR'); document.getElementById('visualDataCadastroCliente').value = strData; document.getElementById('inputDataCadastroCliente').value = strData;"><i class="fas fa-plus text-success me-2"></i> Novo Cadastro</a></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnGestaoCadastros"><i class="fas fa-search text-primary me-2"></i> Pesquisar Cadastros</a></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnAssociado" onclick="mostrarFormulario('associadoForm')"><i class="fas fa-user-plus text-info me-2"></i> Novo Associado</a></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnGestaoAssociados" onclick="mostrarFormulario('gestaoAssociadosContainer'); buscarAssociados();"><i class="fas fa-users text-primary me-2"></i> Gerenciar Associados</a></li>
+                    
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-primary fw-bold">PATRIMÔNIO & ESTRUTURA</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" onclick="mostrarFormulario('gestaoPatrimonioContainer')"><i class="fas fa-truck-moving text-secondary me-2"></i> Frota & Equipamentos</a></li>
+                    
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-primary fw-bold">GESTÃO DE EPIs</h6></li>
+                    <li><a class="dropdown-item py-2" href="{{ url_for('cadastrar_epi') }}"><i class="fas fa-helmet-safety text-secondary me-2"></i> 1. Cadastrar Tipos de EPI</a></li>
+                    <li><a class="dropdown-item py-2" href="{{ url_for('entrada_epi') }}"><i class="fas fa-boxes-packing text-success me-2"></i> 2. Entrada de Estoque</a></li>
+                    <li><a class="dropdown-item py-2" href="{{ url_for('saldo_epis') }}"><i class="fas fa-list-check text-primary me-2"></i> 3. Saldo em Estoque</a></li>
+                    <li><a class="dropdown-item py-2" href="{{ url_for('controle_entrega_epi') }}"><i class="fas fa-clipboard-check text-warning me-2"></i> 4. Entrega de EPIs</a></li>
 
-                    <div class="btn-group-dashboard">
-                        <button id="btnAssociado" class="btn btn-outline-primary btn-sm" onclick="mostrarFormulario('associadoForm')">
-                            <i class="fas fa-user-plus"></i> Associado
-                        </button>
-                        <button id="btnGestaoAssociados" class="btn btn-primary btn-sm" onclick="mostrarFormulario('gestaoAssociadosContainer'); buscarAssociados();">
-                            <i class="fas fa-users"></i> Gerenciar
-                        </button>
-                    </div>
-
-                    <hr>
-                    <small class="text-muted d-block mb-2">PATRIMÔNIO & ESTRUTURA</small>
-                    <button class="btn btn-outline-secondary w-100 btn-dashboard btn-sm" onclick="mostrarFormulario('gestaoPatrimonioContainer')">
-                        <i class="fas fa-truck-moving"></i> Frota & Equipamentos
-                    </button>
-
-                    <hr>
-                    <small class="text-muted d-block mb-2">GESTÃO DE EPIs</small>
-                    <div class="d-grid gap-2">
-                        <a href="{{ url_for('cadastrar_epi') }}" class="btn btn-outline-secondary btn-dashboard btn-sm text-start">
-                            <i class="fas fa-helmet-safety me-2"></i> 1. Cadastrar Tipos de EPI
-                        </a>
-                        <a href="{{ url_for('entrada_epi') }}" class="btn btn-outline-success btn-dashboard btn-sm text-start">
-                            <i class="fas fa-boxes-packing me-2"></i> 2. Entrada de Estoque
-                        </a>
-                        <a href="{{ url_for('saldo_epis') }}" class="btn btn-outline-primary btn-dashboard btn-sm text-start">
-                            <i class="fas fa-list-check me-2"></i> 3. Saldo em Estoque
-                        </a>
-                        <a href="{{ url_for('controle_entrega_epi') }}" class="btn btn-outline-warning btn-dashboard btn-sm text-start">
-                            <i class="fas fa-clipboard-check me-2"></i> 4. Controle de Entrega de EPIs
-                        </a>
-                    </div>
-
-                    <hr>
-                    <small class="text-muted d-block mb-2">REGULARIDADE & ARQUIVOS</small>
-                    <a href="/documentos" class="btn btn-info w-100 btn-dashboard text-white mb-2">
-                        <i class="fas fa-folder-open"></i> Documentos & Certidões
-                    </a>
-
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-primary fw-bold">REGULARIDADE & ARQUIVOS</h6></li>
+                    <li><a class="dropdown-item py-2" href="/documentos"><i class="fas fa-folder-open text-info me-2"></i> Documentos & Certidões</a></li>
+                    
                     {% if usuario and usuario.role == 'admin' %}
-                    <hr>
-                    <small class="text-muted d-block mb-2">ITENS DE COMERCIALIZAÇÃO</small>
-                    <button id="btnGestaoProdutosServicos" class="btn btn-outline-secondary w-100 btn-dashboard btn-sm">
-                        <i class="fas fa-box-open"></i> Catálogo de Produtos
-                    </button>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-primary fw-bold">ITENS DE COMERCIALIZAÇÃO</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnGestaoProdutosServicos"><i class="fas fa-box-open text-secondary me-2"></i> Catálogo de Produtos</a></li>
                     {% endif %}
-                </div>
+                </ul>
             </div>
-        </div>
 
-        <div class="col-md-4">
-            <div class="card h-100 dashboard-card">
-                <div class="card-header card-header-custom bg-success text-white">
-                    <i class="fas fa-wallet me-2"></i> Operacional Financeiro
-                </div>
-                <div class="card-body">
-                    <small class="text-muted d-block mb-2">LANÇAMENTOS (Dia a Dia)</small>
-                    <button id="btnReceitaDespesa" class="btn btn-success w-100 btn-dashboard shadow-sm"><i class="fas fa-plus-circle"></i> Nova Receita / Despesa</button>
-                    <button id="btnGestaoTransacoes" class="btn btn-outline-success w-100 btn-dashboard"><i class="fas fa-search-dollar"></i> Pesquisar Transações</button>
-
-                    <hr>
-                    <small class="text-muted d-block mb-2">BANCÁRIO</small>
-                    <div class="btn-group-dashboard">
-                        <button id="btnContaCorrente" class="btn btn-outline-dark btn-sm"><i class="fas fa-landmark"></i> Nova Conta</button>
-                        <button id="btnGestaoContas" class="btn btn-dark btn-sm"><i class="fas fa-list"></i> Listar Contas</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if usuario and usuario.role == 'admin' %}
-        <div class="col-md-4">
-            <div class="card h-100 dashboard-card">
-                <div class="card-header card-header-custom bg-warning text-dark">
-                    <i class="fas fa-chart-line me-2"></i> Gestão & Controle
-                </div>
-                <div class="card-body">
-                    <small class="text-muted d-block mb-2">FLUXO DE CAIXA</small>
-                    <button id="btnFluxoCaixa" class="btn btn-danger w-100 btn-dashboard mb-3 text-white"><i class="fas fa-exchange-alt"></i> Baixas & Conciliação</button>
+            <div class="dropdown">
+                <button class="btn btn-success dropdown-toggle fw-bold shadow-sm" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-wallet"></i> Operacional Financeiro
+                </button>
+                <ul class="dropdown-menu shadow-lg border-0" style="min-width: 280px;">
+                    <li><h6 class="dropdown-header text-success fw-bold">LANÇAMENTOS</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnReceitaDespesa"><i class="fas fa-plus-circle text-success me-2"></i> Nova Receita / Despesa</a></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnGestaoTransacoes"><i class="fas fa-search-dollar text-primary me-2"></i> Pesquisar Transações</a></li>
                     
-                    <small class="text-muted d-block mb-2">RELATÓRIOS</small>
-                    <div class="btn-group-dashboard">
-                        <button id="btnExtratoBancario" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-invoice-dollar"></i> Extrato</button>
-                        <button id="btnRelatorios" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-alt"></i> Financeiro</button>
-                    </div>
-                    
-                    <hr>
-                    <small class="text-muted d-block mb-2">ADMINISTRAÇÃO</small>
-                    <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
-                        <i class="fas fa-check-double"></i> Aprovações Pendentes
-                    </button>
-                    <a href="{{ url_for('admin_usuarios') }}" class="btn btn-outline-dark w-100 btn-dashboard mt-2">
-                        <i class="fas fa-users-cog"></i> Gestão de Usuários
-                    </a>
-                </div>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-success fw-bold">BANCÁRIO</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnContaCorrente"><i class="fas fa-landmark text-dark me-2"></i> Nova Conta</a></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnGestaoContas"><i class="fas fa-list text-dark me-2"></i> Listar Contas</a></li>
+                </ul>
             </div>
+
+            {% if usuario and usuario.role == 'admin' %}
+            <div class="dropdown">
+                <button class="btn btn-warning dropdown-toggle fw-bold shadow-sm" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-chart-line"></i> Gestão & Controle
+                </button>
+                <ul class="dropdown-menu shadow-lg border-0" style="min-width: 280px;">
+                    <li><h6 class="dropdown-header text-warning text-dark fw-bold">FLUXO DE CAIXA</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnFluxoCaixa"><i class="fas fa-exchange-alt text-danger me-2"></i> Baixas & Conciliação</a></li>
+                    
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-warning text-dark fw-bold">RELATÓRIOS</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnExtratoBancario"><i class="fas fa-file-invoice-dollar text-dark me-2"></i> Extrato</a></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnRelatorios"><i class="fas fa-file-alt text-dark me-2"></i> Financeiro</a></li>
+                    
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header text-warning text-dark fw-bold">ADMINISTRAÇÃO</h6></li>
+                    <li><a class="dropdown-item py-2" href="#" id="btnAprovacoes"><i class="fas fa-check-double text-warning me-2"></i> Aprovações Pendentes</a></li>
+                    <li><a class="dropdown-item py-2" href="{{ url_for('admin_usuarios') }}"><i class="fas fa-users-cog text-dark me-2"></i> Gestão de Usuários</a></li>
+                </ul>
+            </div>
+            {% endif %}
+            
         </div>
-        {% endif %}
-        
     </div>
 </div>
 
