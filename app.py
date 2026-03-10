@@ -2756,6 +2756,9 @@ def registrar_transacao_financeira():
         if id_patrimonio and medidor_atual is None:
             return "KM/Horímetro atual é obrigatório quando há patrimônio vinculado.", 400
 
+        conn = conectar_banco()
+        cur = conn.cursor()
+
         if tipo_atividade == "Rateio dos Associados":
             if not id_origem_selecionado: 
                 nome_final_origem = "Rateio Geral Associados"
@@ -2888,11 +2891,6 @@ def registrar_transacao_financeira():
         numero_referencia = dados.get("numero_documento_transacao", "")
         enviado_por = current_user.username if current_user.is_authenticated else "sistema"
 
-        # --- CORREÇÃO AQUI: USANDO O NOME CERTO DA FUNÇÃO ---
-        conn = conectar_banco() 
-        # ----------------------------------------------------
-        
-        cur = conn.cursor()
         cur.execute("""
             INSERT INTO transacoes_financeiras
             (uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
