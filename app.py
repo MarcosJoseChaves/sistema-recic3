@@ -1556,10 +1556,36 @@ def admin_editar_usuario(user_id):
     )
 
 @app.route("/", methods=["GET"])
-@login_required  # <--- ADICIONE ISSO: Protege a rota
+@login_required
 def index():
-    """Renderiza a página principal com os formulários."""
-    # Passamos o 'current_user' para o HTML saber quem está logado
+    """Renderiza a página inicial com os módulos disponíveis."""
+    modulos = [
+        {
+            "nome": "Coleta Seletiva",
+            "descricao": "Acessa o sistema já estruturado com cadastros, financeiro, documentos e EPIs.",
+            "icone": "fa-recycle",
+            "rota": "coleta_seletiva",
+            "cor": "success",
+            "disponivel": True,
+            "badge": "Disponível",
+        },
+        {
+            "nome": "Ouvidoria",
+            "descricao": "Base preparada para registrar e gerenciar reclamações e denúncias por tipo.",
+            "icone": "fa-comments",
+            "rota": "ouvidoria",
+            "cor": "primary",
+            "disponivel": True,
+            "badge": "Em estruturação",
+        },
+    ]
+    return render_template("modulos.html", usuario=current_user, modulos=modulos)
+
+
+@app.route("/modulos/coleta-seletiva", methods=["GET"])
+@login_required
+def coleta_seletiva():
+    """Renderiza o módulo de coleta seletiva com o dashboard existente."""
     status_resumo = None
     conn = conectar_banco()
     cursor = conn.cursor()
@@ -1602,6 +1628,13 @@ def index():
         conn.close()
 
     return render_template("cadastro.html", usuario=current_user, status_resumo=status_resumo)
+
+
+@app.route("/modulos/ouvidoria", methods=["GET"])
+@login_required
+def ouvidoria():
+    """Renderiza uma página inicial para o futuro módulo de Ouvidoria."""
+    return render_template("ouvidoria.html", usuario=current_user)
 
 # Substitua sua função buscar_cep por esta
 @app.route("/buscar_cep/<string:cep_numeros>", methods=["GET"])
@@ -2039,7 +2072,7 @@ def get_associado(id):
 @login_required
 def editar_associado():
     if request.method == "GET":
-        return redirect(url_for('index'))
+        return redirect(url_for('coleta_seletiva'))
     
     bloqueio = bloquear_visitante()
     if bloqueio:

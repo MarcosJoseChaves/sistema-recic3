@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo Ouvidoria</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #eef4ff 0%, #f8f9fa 55%, #f3f8ff 100%);
+            font-family: 'Inter', sans-serif;
+        }
+        .placeholder-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 32px 0;
+        }
+        .placeholder-card {
+            background: rgba(255,255,255,0.94);
+            border-radius: 28px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .feature-list li + li {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="placeholder-shell">
+        <div class="container">
+            <div class="placeholder-card mx-auto" style="max-width: 860px;">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4 mb-4">
+                    <div>
+                        <span class="badge text-bg-primary mb-3">Novo módulo</span>
+                        <h1 class="display-6 fw-bold mb-3"><i class="fas fa-comments text-primary me-2"></i> Ouvidoria</h1>
+                        <p class="lead text-secondary mb-0">
+                            A base do sistema agora já comporta um módulo dedicado para a Ouvidoria, separado da Coleta Seletiva e pronto para evoluir.
+                        </p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i> Voltar aos módulos</a>
+                        <a href="{{ url_for('coleta_seletiva') }}" class="btn btn-success"><i class="fas fa-recycle me-1"></i> Ir para Coleta Seletiva</a>
+                    </div>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <div class="border rounded-4 p-4 h-100 bg-light">
+                            <h2 class="h5 fw-bold mb-3">Estrutura prevista</h2>
+                            <ul class="feature-list ps-3 mb-0 text-secondary">
+                                <li>Registro de reclamações, denúncias, solicitações e elogios.</li>
+                                <li>Classificação por tipo, status, prioridade e origem.</li>
+                                <li>Painel de acompanhamento com filtros e histórico de tratativas.</li>
+                                <li>Expansão futura sem misturar atalhos com o módulo de Coleta Seletiva.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="border rounded-4 p-4 h-100">
+                            <h2 class="h5 fw-bold mb-3">Próximo passo sugerido</h2>
+                            <p class="text-secondary">
+                                No próximo incremento, podemos criar o cadastro das manifestações, categorias de atendimento e uma área de gestão para acompanhar o fluxo completo da Ouvidoria.
+                            </p>
+                            <div class="alert alert-primary mb-0">
+                                Este espaço já está separado como módulo próprio para facilitar a expansão do sistema por contrato e por ferramenta.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
