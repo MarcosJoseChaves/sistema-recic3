@@ -54,6 +54,15 @@ GRUPOS_FIXOS_SISTEMA = [
     "Gestão Associativa"  
 ]
 
+ARQUIVO_TIPOLOGIAS_OUVIDORIA = "tipologias_ouvidoria.csv"
+OUVIDORIA_GRUPOS_PADRAO = [
+    "Fiscalização Ambiental",
+    "Poluição e Incômodos",
+    "Fauna, Flora e Áreas Verdes",
+    "Resíduos e Limpeza Urbana",
+    "Licenciamento e Regularização",
+]
+
 # Carrega as variáveis do arquivo .env
 load_dotenv()
 
@@ -633,12 +642,601 @@ def criar_tabelas_se_nao_existir():
         except psycopg2.Error:
             conn.rollback()
 
+        # --- MÓDULO DE OUVIDORIA ---
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ouvidoria_grupos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(255) NOT NULL UNIQUE,
+                ordem INTEGER NOT NULL DEFAULT 0,
+                fixo BOOLEAN NOT NULL DEFAULT TRUE,
+                data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ouvidoria_subgrupos (
+                id SERIAL PRIMARY KEY,
+                id_grupo INTEGER NOT NULL REFERENCES ouvidoria_grupos(id) ON DELETE RESTRICT,
+                nome VARCHAR(255) NOT NULL,
+                ativo BOOLEAN NOT NULL DEFAULT TRUE,
+                data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(id_grupo, nome)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ouvidoria_tipos (
+                id SERIAL PRIMARY KEY,
+                id_subgrupo INTEGER NOT NULL REFERENCES ouvidoria_subgrupos(id) ON DELETE RESTRICT,
+                nome VARCHAR(255) NOT NULL,
+                ativo BOOLEAN NOT NULL DEFAULT TRUE,
+                data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(id_subgrupo, nome)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ouvidoria_subtipos (
+                id SERIAL PRIMARY KEY,
+                id_tipo INTEGER NOT NULL REFERENCES ouvidoria_tipos(id) ON DELETE RESTRICT,
+                nome VARCHAR(255) NOT NULL,
+                ativo BOOLEAN NOT NULL DEFAULT TRUE,
+                data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(id_tipo, nome)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ouvidoria_manifestacoes (
+                id SERIAL PRIMARY KEY,
+                protocolo VARCHAR(30) NOT NULL UNIQUE,
+                data_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                id_grupo INTEGER NOT NULL REFERENCES ouvidoria_grupos(id),
+                id_subgrupo INTEGER REFERENCES ouvidoria_subgrupos(id),
+                id_tipo INTEGER REFERENCES ouvidoria_tipos(id),
+                id_subtipo INTEGER REFERENCES ouvidoria_subtipos(id),
+                status VARCHAR(30) NOT NULL DEFAULT 'Aberta',
+                prioridade VARCHAR(20) NOT NULL DEFAULT 'Média',
+                origem VARCHAR(50) NOT NULL DEFAULT 'Web',
+                nome_manifestante VARCHAR(255),
+                telefone_manifestante VARCHAR(30),
+                email_manifestante VARCHAR(255),
+                descricao TEXT NOT NULL,
+                observacoes_internas TEXT,
+                inscricao_imobiliaria VARCHAR(100),
+                cep VARCHAR(8),
+                logradouro VARCHAR(255),
+                numero VARCHAR(30),
+                complemento VARCHAR(255),
+                bairro VARCHAR(100),
+                cidade VARCHAR(100),
+                uf VARCHAR(2),
+                ponto_referencia VARCHAR(255),
+                latitude VARCHAR(30),
+                longitude VARCHAR(30),
+                usuario_registro VARCHAR(100),
+                uvr VARCHAR(10),
+                associacao VARCHAR(50)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ouvidoria_manifestacao_fotos (
+                id SERIAL PRIMARY KEY,
+                id_manifestacao INTEGER NOT NULL REFERENCES ouvidoria_manifestacoes(id) ON DELETE CASCADE,
+                url_arquivo TEXT NOT NULL,
+                nome_original VARCHAR(255),
+                data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        try:
+            cur.execute("ALTER TABLE ouvidoria_grupos ADD COLUMN IF NOT EXISTS ordem INTEGER NOT NULL DEFAULT 0;")
+            cur.execute("ALTER TABLE ouvidoria_grupos ADD COLUMN IF NOT EXISTS fixo BOOLEAN NOT NULL DEFAULT TRUE;")
+            cur.execute("ALTER TABLE ouvidoria_grupos ADD COLUMN IF NOT EXISTS data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+
+            cur.execute("ALTER TABLE ouvidoria_subgrupos ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;")
+            cur.execute("ALTER TABLE ouvidoria_subgrupos ADD COLUMN IF NOT EXISTS data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+
+            cur.execute("ALTER TABLE ouvidoria_tipos ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;")
+            cur.execute("ALTER TABLE ouvidoria_tipos ADD COLUMN IF NOT EXISTS data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+
+            cur.execute("ALTER TABLE ouvidoria_subtipos ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;")
+            cur.execute("ALTER TABLE ouvidoria_subtipos ADD COLUMN IF NOT EXISTS data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS protocolo VARCHAR(30);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS data_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_grupo INTEGER;")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_subgrupo INTEGER;")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_tipo INTEGER;")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_subtipo INTEGER;")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'Aberta';")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS prioridade VARCHAR(20) NOT NULL DEFAULT 'Média';")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS origem VARCHAR(50) NOT NULL DEFAULT 'Web';")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS nome_manifestante VARCHAR(255);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS telefone_manifestante VARCHAR(30);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS email_manifestante VARCHAR(255);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS observacoes_internas TEXT;")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS inscricao_imobiliaria VARCHAR(100);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS cep VARCHAR(8);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS logradouro VARCHAR(255);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS numero VARCHAR(30);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS complemento VARCHAR(255);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS bairro VARCHAR(100);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS cidade VARCHAR(100);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS uf VARCHAR(2);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS ponto_referencia VARCHAR(255);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS latitude VARCHAR(30);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS longitude VARCHAR(30);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS usuario_registro VARCHAR(100);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS uvr VARCHAR(10);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS associacao VARCHAR(50);")
+
+            cur.execute("ALTER TABLE ouvidoria_manifestacao_fotos ADD COLUMN IF NOT EXISTS nome_original VARCHAR(255);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacao_fotos ADD COLUMN IF NOT EXISTS data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+
+            _migrar_manifestacoes_ouvidoria_legadas(cur)
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
+
         conn.commit()
     except psycopg2.Error as e:
         app.logger.error(f"Erro tabelas: {e}")
         if conn: conn.rollback()
     finally:
         if conn: conn.close()
+
+
+def _coluna_existe(cur, tabela, coluna):
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = %s AND column_name = %s
+        LIMIT 1
+        """,
+        (tabela, coluna),
+    )
+    return cur.fetchone() is not None
+
+
+def _migrar_manifestacoes_ouvidoria_legadas(cur):
+    if not _coluna_existe(cur, "ouvidoria_manifestacoes", "id_grupo"):
+        return
+
+    if _coluna_existe(cur, "ouvidoria_manifestacoes", "grupo"):
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes m
+            SET id_grupo = g.id
+            FROM ouvidoria_grupos g
+            WHERE m.id_grupo IS NULL
+              AND TRIM(COALESCE(m.grupo, '')) <> ''
+              AND LOWER(TRIM(m.grupo)) = LOWER(TRIM(g.nome))
+            """
+        )
+
+    if _coluna_existe(cur, "ouvidoria_manifestacoes", "subgrupo"):
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes m
+            SET id_subgrupo = sg.id
+            FROM ouvidoria_subgrupos sg
+            WHERE m.id_subgrupo IS NULL
+              AND TRIM(COALESCE(m.subgrupo, '')) <> ''
+              AND LOWER(TRIM(m.subgrupo)) = LOWER(TRIM(sg.nome))
+              AND (m.id_grupo IS NULL OR sg.id_grupo = m.id_grupo)
+            """
+        )
+
+    if _coluna_existe(cur, "ouvidoria_manifestacoes", "tipo"):
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes m
+            SET id_tipo = t.id
+            FROM ouvidoria_tipos t
+            WHERE m.id_tipo IS NULL
+              AND TRIM(COALESCE(m.tipo, '')) <> ''
+              AND LOWER(TRIM(m.tipo)) = LOWER(TRIM(t.nome))
+              AND (m.id_subgrupo IS NULL OR t.id_subgrupo = m.id_subgrupo)
+            """
+        )
+
+    if _coluna_existe(cur, "ouvidoria_manifestacoes", "subtipo"):
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes m
+            SET id_subtipo = st.id
+            FROM ouvidoria_subtipos st
+            WHERE m.id_subtipo IS NULL
+              AND TRIM(COALESCE(m.subtipo, '')) <> ''
+              AND LOWER(TRIM(m.subtipo)) = LOWER(TRIM(st.nome))
+              AND (m.id_tipo IS NULL OR st.id_tipo = m.id_tipo)
+            """
+        )
+
+    if _coluna_existe(cur, "ouvidoria_manifestacoes", "protocolo"):
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes
+            SET protocolo = CONCAT('OUV-LEGADO-', id)
+            WHERE COALESCE(TRIM(protocolo), '') = ''
+            """
+        )
+
+
+def _normalizar_nome_tipologia(valor):
+    return re.sub(r"\s+", " ", str(valor or "").strip())
+
+
+def _caminho_csv_tipologias_ouvidoria():
+    candidatos = [
+        os.path.join(os.getcwd(), ARQUIVO_TIPOLOGIAS_OUVIDORIA),
+        os.path.join(app.root_path, ARQUIVO_TIPOLOGIAS_OUVIDORIA),
+    ]
+    for caminho in candidatos:
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+
+def _identificar_coluna(colunas, termos):
+    normalizadas = {str(coluna or "").strip().lower(): coluna for coluna in colunas}
+    for termo in termos:
+        termo_norm = termo.strip().lower()
+        for chave_norm, original in normalizadas.items():
+            if termo_norm == chave_norm or termo_norm in chave_norm:
+                return original
+    return None
+
+
+def _detectar_dialeto_csv_tipologias(caminho_csv):
+    with open(caminho_csv, "r", encoding="utf-8-sig", newline="") as arquivo_csv:
+        amostra = arquivo_csv.read(4096)
+
+    delimitador_padrao = ";"
+    if not amostra:
+        return csv.excel
+
+    try:
+        dialeto = csv.Sniffer().sniff(amostra, delimiters=";,|\t")
+        return dialeto
+    except csv.Error:
+        primeira_linha = amostra.splitlines()[0] if amostra.splitlines() else ""
+        if primeira_linha.count(";") >= primeira_linha.count(","):
+            delimitador_padrao = ";"
+        else:
+            delimitador_padrao = ","
+
+    class DialetoTipologias(csv.excel):
+        delimiter = delimitador_padrao
+
+    return DialetoTipologias
+
+
+def _limpar_tipologias_ouvidoria_mal_importadas(cur):
+    cur.execute(
+        """
+        UPDATE ouvidoria_manifestacoes
+        SET id_subtipo = NULL
+        WHERE id_subtipo IN (
+            SELECT id FROM ouvidoria_subtipos WHERE nome LIKE '%%;%%'
+        )
+        """
+    )
+    cur.execute(
+        """
+        DELETE FROM ouvidoria_subtipos
+        WHERE nome LIKE '%%;%%'
+        """
+    )
+
+    cur.execute(
+        """
+        UPDATE ouvidoria_manifestacoes
+        SET id_tipo = NULL
+        WHERE id_tipo IN (
+            SELECT id FROM ouvidoria_tipos WHERE nome LIKE '%%;%%'
+        )
+        """
+    )
+    cur.execute(
+        """
+        DELETE FROM ouvidoria_tipos
+        WHERE nome LIKE '%%;%%'
+        """
+    )
+
+    cur.execute(
+        """
+        UPDATE ouvidoria_manifestacoes
+        SET id_subgrupo = NULL
+        WHERE id_subgrupo IN (
+            SELECT id FROM ouvidoria_subgrupos WHERE nome LIKE '%%;%%'
+        )
+        """
+    )
+    cur.execute(
+        """
+        DELETE FROM ouvidoria_subgrupos
+        WHERE nome LIKE '%%;%%'
+        """
+    )
+
+    cur.execute(
+        """
+        UPDATE ouvidoria_manifestacoes
+        SET id_grupo = NULL
+        WHERE id_grupo IN (
+            SELECT id FROM ouvidoria_grupos WHERE nome LIKE '%%;%%'
+        )
+        """
+    )
+    cur.execute(
+        """
+        DELETE FROM ouvidoria_grupos
+        WHERE nome LIKE '%%;%%'
+        """
+    )
+
+
+def _gerar_protocolo_ouvidoria(cur):
+    prefixo = datetime.now().strftime("OUV%Y%m%d")
+    cur.execute(
+        """
+        SELECT COUNT(*)
+        FROM ouvidoria_manifestacoes
+        WHERE protocolo LIKE %s
+        """,
+        (f"{prefixo}%",),
+    )
+    sequencia = (cur.fetchone()[0] or 0) + 1
+    return f"{prefixo}-{sequencia:04d}"
+
+
+def garantir_tipologias_ouvidoria_iniciais(forcar_csv=False):
+    conn = None
+    resumo = {"csv_importado": False, "arquivo_csv": None}
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM ouvidoria_grupos")
+        total_grupos = cur.fetchone()[0]
+
+        if total_grupos == 0:
+            for ordem, nome in enumerate(OUVIDORIA_GRUPOS_PADRAO, start=1):
+                cur.execute(
+                    """
+                    INSERT INTO ouvidoria_grupos (nome, ordem, fixo)
+                    VALUES (%s, %s, TRUE)
+                    ON CONFLICT (nome) DO NOTHING
+                    """,
+                    (nome, ordem),
+                )
+            conn.commit()
+
+        caminho_csv = _caminho_csv_tipologias_ouvidoria()
+        if total_grupos > 0 and not forcar_csv:
+            cur.execute(
+                """
+                SELECT
+                    EXISTS (SELECT 1 FROM ouvidoria_grupos WHERE nome LIKE '%%;%%')
+                    OR EXISTS (SELECT 1 FROM ouvidoria_subgrupos WHERE nome LIKE '%%;%%')
+                    OR EXISTS (SELECT 1 FROM ouvidoria_tipos WHERE nome LIKE '%%;%%')
+                    OR EXISTS (SELECT 1 FROM ouvidoria_subtipos WHERE nome LIKE '%%;%%')
+                """
+            )
+            possui_importacao_malformada = bool(cur.fetchone()[0])
+            if possui_importacao_malformada and caminho_csv:
+                forcar_csv = True
+        if not caminho_csv or (not forcar_csv and total_grupos > 0):
+            resumo["arquivo_csv"] = caminho_csv
+            return resumo
+
+        if forcar_csv:
+            _limpar_tipologias_ouvidoria_mal_importadas(cur)
+            conn.commit()
+
+        dialeto_csv = _detectar_dialeto_csv_tipologias(caminho_csv)
+
+        with open(caminho_csv, "r", encoding="utf-8-sig", newline="") as arquivo_csv:
+            leitor = csv.DictReader(arquivo_csv, dialect=dialeto_csv)
+            if not leitor.fieldnames:
+                resumo["arquivo_csv"] = caminho_csv
+                return resumo
+
+            coluna_grupo = _identificar_coluna(leitor.fieldnames, ["grupo"])
+            coluna_subgrupo = _identificar_coluna(leitor.fieldnames, ["subgrupo"])
+            coluna_tipo = _identificar_coluna(leitor.fieldnames, ["tipo"])
+            coluna_subtipo = _identificar_coluna(leitor.fieldnames, ["subtipo"])
+
+            if not coluna_grupo:
+                resumo["arquivo_csv"] = caminho_csv
+                return resumo
+
+            grupos_cache = {}
+            subgrupos_cache = {}
+            tipos_cache = {}
+
+            cur.execute("SELECT id, nome FROM ouvidoria_grupos")
+            for row in cur.fetchall():
+                grupos_cache[_normalizar_nome_tipologia(row[1]).lower()] = row[0]
+
+            for ordem, linha in enumerate(leitor, start=1):
+                nome_grupo = _normalizar_nome_tipologia(linha.get(coluna_grupo))
+                nome_subgrupo = _normalizar_nome_tipologia(linha.get(coluna_subgrupo)) if coluna_subgrupo else ""
+                nome_tipo = _normalizar_nome_tipologia(linha.get(coluna_tipo)) if coluna_tipo else ""
+                nome_subtipo = _normalizar_nome_tipologia(linha.get(coluna_subtipo)) if coluna_subtipo else ""
+
+                if not nome_grupo:
+                    continue
+
+                grupo_id = grupos_cache.get(nome_grupo.lower())
+                if not grupo_id:
+                    cur.execute(
+                        """
+                        INSERT INTO ouvidoria_grupos (nome, ordem, fixo)
+                        VALUES (%s, %s, TRUE)
+                        ON CONFLICT (nome) DO UPDATE SET fixo = TRUE
+                        RETURNING id
+                        """,
+                        (nome_grupo, ordem),
+                    )
+                    retorno = cur.fetchone()
+                    if retorno:
+                        grupo_id = retorno[0]
+                    else:
+                        cur.execute("SELECT id FROM ouvidoria_grupos WHERE nome = %s", (nome_grupo,))
+                        grupo_id = cur.fetchone()[0]
+                    grupos_cache[nome_grupo.lower()] = grupo_id
+
+                subgrupo_id = None
+                if nome_subgrupo:
+                    chave_subgrupo = (grupo_id, nome_subgrupo.lower())
+                    subgrupo_id = subgrupos_cache.get(chave_subgrupo)
+                    if not subgrupo_id:
+                        cur.execute(
+                            """
+                            INSERT INTO ouvidoria_subgrupos (id_grupo, nome)
+                            VALUES (%s, %s)
+                            ON CONFLICT (id_grupo, nome) DO NOTHING
+                            RETURNING id
+                            """,
+                            (grupo_id, nome_subgrupo),
+                        )
+                        retorno = cur.fetchone()
+                        if retorno:
+                            subgrupo_id = retorno[0]
+                        else:
+                            cur.execute(
+                                "SELECT id FROM ouvidoria_subgrupos WHERE id_grupo = %s AND nome = %s",
+                                (grupo_id, nome_subgrupo),
+                            )
+                            subgrupo_id = cur.fetchone()[0]
+                        subgrupos_cache[chave_subgrupo] = subgrupo_id
+
+                tipo_id = None
+                if subgrupo_id and nome_tipo:
+                    chave_tipo = (subgrupo_id, nome_tipo.lower())
+                    tipo_id = tipos_cache.get(chave_tipo)
+                    if not tipo_id:
+                        cur.execute(
+                            """
+                            INSERT INTO ouvidoria_tipos (id_subgrupo, nome)
+                            VALUES (%s, %s)
+                            ON CONFLICT (id_subgrupo, nome) DO NOTHING
+                            RETURNING id
+                            """,
+                            (subgrupo_id, nome_tipo),
+                        )
+                        retorno = cur.fetchone()
+                        if retorno:
+                            tipo_id = retorno[0]
+                        else:
+                            cur.execute(
+                                "SELECT id FROM ouvidoria_tipos WHERE id_subgrupo = %s AND nome = %s",
+                                (subgrupo_id, nome_tipo),
+                            )
+                            tipo_id = cur.fetchone()[0]
+                        tipos_cache[chave_tipo] = tipo_id
+
+                if tipo_id and nome_subtipo:
+                    cur.execute(
+                        """
+                        INSERT INTO ouvidoria_subtipos (id_tipo, nome)
+                        VALUES (%s, %s)
+                        ON CONFLICT (id_tipo, nome) DO NOTHING
+                        """,
+                        (tipo_id, nome_subtipo),
+                    )
+
+        conn.commit()
+        resumo["csv_importado"] = bool(caminho_csv)
+        resumo["arquivo_csv"] = caminho_csv
+        return resumo
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Erro ao garantir tipologias da ouvidoria: {e}")
+        return resumo
+    finally:
+        if conn:
+            conn.close()
+
+
+def _listar_hierarquia_ouvidoria(cur):
+    cur.execute(
+        """
+        SELECT
+            g.id AS grupo_id,
+            COALESCE(g.nome, 'Sem grupo') AS grupo_nome,
+            g.fixo AS grupo_fixo,
+            sg.id AS subgrupo_id,
+            sg.nome AS subgrupo_nome,
+            t.id AS tipo_id,
+            t.nome AS tipo_nome,
+            st.id AS subtipo_id,
+            st.nome AS subtipo_nome
+        FROM ouvidoria_grupos g
+        LEFT JOIN ouvidoria_subgrupos sg ON sg.id_grupo = g.id
+        LEFT JOIN ouvidoria_tipos t ON t.id_subgrupo = sg.id
+        LEFT JOIN ouvidoria_subtipos st ON st.id_tipo = t.id
+        ORDER BY g.ordem, g.nome, sg.nome, t.nome, st.nome
+        """
+    )
+
+    grupos = []
+    mapa_grupos = {}
+    mapa_subgrupos = {}
+    mapa_tipos = {}
+
+    for row in cur.fetchall():
+        grupo_id = row["grupo_id"]
+        grupo = mapa_grupos.get(grupo_id)
+        if not grupo:
+            grupo = {
+                "id": grupo_id,
+                "nome": row["grupo_nome"],
+                "fixo": row["grupo_fixo"],
+                "subgrupos": [],
+            }
+            mapa_grupos[grupo_id] = grupo
+            grupos.append(grupo)
+
+        subgrupo_id = row["subgrupo_id"]
+        if subgrupo_id:
+            subgrupo = mapa_subgrupos.get(subgrupo_id)
+            if not subgrupo:
+                subgrupo = {
+                    "id": subgrupo_id,
+                    "nome": row["subgrupo_nome"],
+                    "tipos": [],
+                }
+                mapa_subgrupos[subgrupo_id] = subgrupo
+                grupo["subgrupos"].append(subgrupo)
+
+            tipo_id = row["tipo_id"]
+            if tipo_id:
+                tipo = mapa_tipos.get(tipo_id)
+                if not tipo:
+                    tipo = {
+                        "id": tipo_id,
+                        "nome": row["tipo_nome"],
+                        "subtipos": [],
+                    }
+                    mapa_tipos[tipo_id] = tipo
+                    subgrupo["tipos"].append(tipo)
+
+                subtipo_id = row["subtipo_id"]
+                if subtipo_id:
+                    tipo["subtipos"].append({
+                        "id": subtipo_id,
+                        "nome": row["subtipo_nome"],
+                    })
+
+    return grupos
 
 def migrar_dados_antigos_produtos():
     """Migra subgrupos texto para a tabela 'subgrupos' e vincula IDs."""
@@ -732,6 +1330,7 @@ def garantir_estrutura_documentos():
     try:
         criar_tabelas_se_nao_existir()
         garantir_tipos_documentos_padrao()
+        garantir_tipologias_ouvidoria_iniciais()
         _estrutura_db_garantida = True
     except Exception as e:
         app.logger.error(f"Erro ao garantir estrutura do banco: {e}")
@@ -1633,8 +2232,363 @@ def coleta_seletiva():
 @app.route("/modulos/ouvidoria", methods=["GET"])
 @login_required
 def ouvidoria():
-    """Renderiza uma página inicial para o futuro módulo de Ouvidoria."""
-    return render_template("ouvidoria.html", usuario=current_user)
+    """Renderiza o módulo inicial da Ouvidoria com cadastro de manifestações e gestão de tipologias."""
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    csv_status = garantir_tipologias_ouvidoria_iniciais()
+    try:
+        hierarquia = _listar_hierarquia_ouvidoria(cur)
+        cur.execute(
+            """
+            SELECT
+                m.id,
+                m.protocolo,
+                m.data_registro,
+                m.status,
+                m.prioridade,
+                g.nome AS grupo_nome,
+                sg.nome AS subgrupo_nome,
+                t.nome AS tipo_nome,
+                st.nome AS subtipo_nome,
+                COALESCE(m.logradouro, '') AS logradouro,
+                COALESCE(m.numero, '') AS numero,
+                COALESCE(m.bairro, '') AS bairro
+            FROM ouvidoria_manifestacoes m
+            LEFT JOIN ouvidoria_grupos g ON g.id = m.id_grupo
+            LEFT JOIN ouvidoria_subgrupos sg ON sg.id = m.id_subgrupo
+            LEFT JOIN ouvidoria_tipos t ON t.id = m.id_tipo
+            LEFT JOIN ouvidoria_subtipos st ON st.id = m.id_subtipo
+            ORDER BY m.data_registro DESC
+            LIMIT 20
+            """
+        )
+        manifestacoes = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template(
+        "ouvidoria.html",
+        usuario=current_user,
+        hierarquia_tipologias=hierarquia,
+        manifestacoes_recentes=manifestacoes,
+        csv_tipologias_encontrado=bool(csv_status.get("arquivo_csv")),
+        csv_tipologias_caminho=csv_status.get("arquivo_csv"),
+        permissao_edicao_tipologias=not usuario_visitante(),
+    )
+
+
+@app.route("/ouvidoria/api/hierarquia", methods=["GET"])
+@login_required
+def api_hierarquia_ouvidoria():
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        return jsonify(_listar_hierarquia_ouvidoria(cur))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/subgrupos/<int:grupo_id>", methods=["GET"])
+@login_required
+def api_subgrupos_ouvidoria(grupo_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, nome FROM ouvidoria_subgrupos WHERE id_grupo = %s ORDER BY nome",
+            (grupo_id,),
+        )
+        return jsonify(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/tipos/<int:subgrupo_id>", methods=["GET"])
+@login_required
+def api_tipos_ouvidoria(subgrupo_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, nome FROM ouvidoria_tipos WHERE id_subgrupo = %s ORDER BY nome",
+            (subgrupo_id,),
+        )
+        return jsonify(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/subtipos/<int:tipo_id>", methods=["GET"])
+@login_required
+def api_subtipos_ouvidoria(tipo_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, nome FROM ouvidoria_subtipos WHERE id_tipo = %s ORDER BY nome",
+            (tipo_id,),
+        )
+        return jsonify(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/tipologias/<string:nivel>", methods=["POST"])
+@login_required
+def api_criar_tipologia_ouvidoria(nivel):
+    if usuario_visitante():
+        return jsonify({"erro": "Perfil sem permissão para editar tipologias."}), 403
+
+    dados = request.get_json(silent=True) or request.form.to_dict()
+    nome = _normalizar_nome_tipologia(dados.get("nome"))
+    parent_id = dados.get("parent_id")
+    if not nome:
+        return jsonify({"erro": "Informe o nome da tipologia."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        if nivel == "subgrupos":
+            if not parent_id:
+                return jsonify({"erro": "Grupo pai é obrigatório."}), 400
+            cur.execute(
+                """
+                INSERT INTO ouvidoria_subgrupos (id_grupo, nome)
+                VALUES (%s, %s)
+                RETURNING id, nome
+                """,
+                (parent_id, nome),
+            )
+        elif nivel == "tipos":
+            if not parent_id:
+                return jsonify({"erro": "Subgrupo pai é obrigatório."}), 400
+            cur.execute(
+                """
+                INSERT INTO ouvidoria_tipos (id_subgrupo, nome)
+                VALUES (%s, %s)
+                RETURNING id, nome
+                """,
+                (parent_id, nome),
+            )
+        elif nivel == "subtipos":
+            if not parent_id:
+                return jsonify({"erro": "Tipo pai é obrigatório."}), 400
+            cur.execute(
+                """
+                INSERT INTO ouvidoria_subtipos (id_tipo, nome)
+                VALUES (%s, %s)
+                RETURNING id, nome
+                """,
+                (parent_id, nome),
+            )
+        else:
+            return jsonify({"erro": "Nível de tipologia inválido."}), 400
+
+        registro = cur.fetchone()
+        conn.commit()
+        return jsonify({"mensagem": "Tipologia cadastrada com sucesso.", "registro": registro}), 201
+    except psycopg2.Error as e:
+        conn.rollback()
+        return jsonify({"erro": e.pgerror or str(e)}), 400
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/tipologias/<string:nivel>/<int:registro_id>", methods=["PUT", "POST"])
+@login_required
+def api_atualizar_tipologia_ouvidoria(nivel, registro_id):
+    if usuario_visitante():
+        return jsonify({"erro": "Perfil sem permissão para editar tipologias."}), 403
+
+    dados = request.get_json(silent=True) or request.form.to_dict()
+    nome = _normalizar_nome_tipologia(dados.get("nome"))
+    if not nome:
+        return jsonify({"erro": "Informe o nome da tipologia."}), 400
+
+    mapeamento = {
+        "subgrupos": "ouvidoria_subgrupos",
+        "tipos": "ouvidoria_tipos",
+        "subtipos": "ouvidoria_subtipos",
+    }
+    tabela = mapeamento.get(nivel)
+    if not tabela:
+        return jsonify({"erro": "Nível de tipologia inválido."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            f"UPDATE {tabela} SET nome = %s WHERE id = %s RETURNING id, nome",
+            (nome, registro_id),
+        )
+        registro = cur.fetchone()
+        if not registro:
+            conn.rollback()
+            return jsonify({"erro": "Registro não encontrado."}), 404
+        conn.commit()
+        return jsonify({"mensagem": "Tipologia atualizada com sucesso.", "registro": registro})
+    except psycopg2.Error as e:
+        conn.rollback()
+        return jsonify({"erro": e.pgerror or str(e)}), 400
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/tipologias/<string:nivel>/<int:registro_id>", methods=["DELETE"])
+@login_required
+def api_excluir_tipologia_ouvidoria(nivel, registro_id):
+    if usuario_visitante():
+        return jsonify({"erro": "Perfil sem permissão para editar tipologias."}), 403
+
+    mapeamento = {
+        "subgrupos": "ouvidoria_subgrupos",
+        "tipos": "ouvidoria_tipos",
+        "subtipos": "ouvidoria_subtipos",
+    }
+    tabela = mapeamento.get(nivel)
+    if not tabela:
+        return jsonify({"erro": "Nível de tipologia inválido."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM {tabela} WHERE id = %s", (registro_id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"erro": "Registro não encontrado."}), 404
+        conn.commit()
+        return jsonify({"mensagem": "Tipologia excluída com sucesso."})
+    except psycopg2.Error as e:
+        conn.rollback()
+        return jsonify({"erro": "Não foi possível excluir. Verifique vínculos existentes antes de remover."}), 400
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/api/reimportar-csv", methods=["POST"])
+@login_required
+def api_reimportar_csv_tipologias_ouvidoria():
+    if usuario_visitante():
+        return jsonify({"erro": "Perfil sem permissão para reimportar tipologias."}), 403
+    resultado = garantir_tipologias_ouvidoria_iniciais(forcar_csv=True)
+    if not resultado.get("arquivo_csv"):
+        return jsonify({"erro": f"Arquivo '{ARQUIVO_TIPOLOGIAS_OUVIDORIA}' não encontrado no diretório do sistema."}), 404
+    return jsonify({"mensagem": "CSV processado com sucesso.", "arquivo_csv": resultado.get("arquivo_csv")})
+
+
+@app.route("/ouvidoria/manifestacoes", methods=["POST"])
+@login_required
+def cadastrar_manifestacao_ouvidoria():
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        grupo_id = request.form.get("grupo_id")
+        subgrupo_id = request.form.get("subgrupo_id") or None
+        tipo_id = request.form.get("tipo_id") or None
+        subtipo_id = request.form.get("subtipo_id") or None
+        descricao = (request.form.get("descricao") or "").strip()
+
+        if not grupo_id:
+            flash("Selecione o grupo da manifestação.", "danger")
+            return redirect(url_for("ouvidoria"))
+        if not descricao:
+            flash("Descreva a ocorrência para registrar a manifestação.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        protocolo = _gerar_protocolo_ouvidoria(cur)
+        cur.execute(
+            """
+            INSERT INTO ouvidoria_manifestacoes (
+                protocolo, id_grupo, id_subgrupo, id_tipo, id_subtipo,
+                status, prioridade, origem, nome_manifestante, telefone_manifestante,
+                email_manifestante, descricao, observacoes_internas, inscricao_imobiliaria,
+                cep, logradouro, numero, complemento, bairro, cidade, uf,
+                ponto_referencia, latitude, longitude, usuario_registro, uvr, associacao
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s
+            )
+            RETURNING id, protocolo
+            """,
+            (
+                protocolo,
+                grupo_id,
+                subgrupo_id,
+                tipo_id,
+                subtipo_id,
+                request.form.get("status") or "Aberta",
+                request.form.get("prioridade") or "Média",
+                request.form.get("origem") or "Web",
+                (request.form.get("nome_manifestante") or "").strip() or None,
+                (request.form.get("telefone_manifestante") or "").strip() or None,
+                (request.form.get("email_manifestante") or "").strip() or None,
+                descricao,
+                (request.form.get("observacoes_internas") or "").strip() or None,
+                (request.form.get("inscricao_imobiliaria") or "").strip() or None,
+                re.sub(r"[^0-9]", "", request.form.get("cep") or "") or None,
+                (request.form.get("logradouro") or "").strip() or None,
+                (request.form.get("numero") or "").strip() or None,
+                (request.form.get("complemento") or "").strip() or None,
+                (request.form.get("bairro") or "").strip() or None,
+                (request.form.get("cidade") or "").strip() or None,
+                (request.form.get("uf") or "").strip() or None,
+                (request.form.get("ponto_referencia") or "").strip() or None,
+                (request.form.get("latitude") or "").strip() or None,
+                (request.form.get("longitude") or "").strip() or None,
+                getattr(current_user, "username", None),
+                getattr(current_user, "uvr_acesso", None),
+                request.form.get("associacao") or None,
+            ),
+        )
+        manifestacao = cur.fetchone()
+
+        arquivos = request.files.getlist("fotos")
+        for indice, arquivo in enumerate(arquivos, start=1):
+            if not arquivo or not arquivo.filename:
+                continue
+            url_foto = _upload_file_to_cloudinary(
+                arquivo,
+                "ouvidoria/manifestacoes",
+                public_id=f"{manifestacao['protocolo']}_{indice}_{int(datetime.now().timestamp())}",
+                resource_type="image",
+            )
+            if not url_foto:
+                mime = arquivo.mimetype or "image/jpeg"
+                conteudo = base64.b64encode(arquivo.read()).decode("utf-8")
+                arquivo.stream.seek(0)
+                url_foto = f"data:{mime};base64,{conteudo}"
+
+            cur.execute(
+                """
+                INSERT INTO ouvidoria_manifestacao_fotos (id_manifestacao, url_arquivo, nome_original)
+                VALUES (%s, %s, %s)
+                """,
+                (manifestacao["id"], url_foto, arquivo.filename),
+            )
+
+        conn.commit()
+        flash(f"Manifestação {manifestacao['protocolo']} registrada com sucesso.", "success")
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao cadastrar manifestação da ouvidoria: {e}")
+        flash(f"Não foi possível registrar a manifestação: {e}", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("ouvidoria"))
 
 # Substitua sua função buscar_cep por esta
 @app.route("/buscar_cep/<string:cep_numeros>", methods=["GET"])
@@ -8151,7 +9105,7 @@ def documentos():
     except Exception as e:
         app.logger.error(f"Erro GET /documentos: {e}")
         flash('Erro ao carregar lista de documentos.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('coleta_seletiva'))
 
     finally:
         if not cursor.closed:
@@ -8491,7 +9445,7 @@ def processar_solicitacao_doc():
         flash(f'Erro: {str(e)}', 'danger')
     finally:
         conn.close()
-        return redirect(url_for('index'))
+        return redirect(url_for('coleta_seletiva'))
 
 # --- NOVA ROTA: EXCLUIR DOCUMENTO (SÓ ADMIN) ---
 @app.route('/excluir_documento/<int:id_doc>')
@@ -9309,7 +10263,7 @@ def entrada_epi():
         if conn: conn.rollback()
         print(f"Erro Entrada EPI: {e}") # Log no terminal
         flash(f"Erro ao abrir entrada de EPI: {str(e)}", "error")
-        return redirect(url_for('index'))  # <--- Mande para o 'index' (ou 'home')
+        return redirect(url_for('coleta_seletiva'))  # <--- Mande para o 'index' (ou 'home')
     finally:
         if conn: conn.close()
 
