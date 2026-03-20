@@ -54,14 +54,21 @@ GRUPOS_FIXOS_SISTEMA = [
     "Gestão Associativa"  
 ]
 
-ARQUIVO_TIPOLOGIAS_OUVIDORIA = "tipologias_ouvidoria.csv"
 OUVIDORIA_GRUPOS_PADRAO = [
-    "Fiscalização Ambiental",
-    "Poluição e Incômodos",
-    "Fauna, Flora e Áreas Verdes",
-    "Resíduos e Limpeza Urbana",
-    "Licenciamento e Regularização",
+    "Gestão de Resíduos e Limpeza",
+    "Fiscalização e Controle",
+    "Licenciamento e Anuências",
+    "Arborização e Áreas Verdes",
+    "Administrativo e Contratos",
 ]
+
+OUVIDORIA_GRUPOS_LEGADOS = {
+    "Fiscalização Ambiental": "Fiscalização e Controle",
+    "Poluição e Incômodos": "Fiscalização e Controle",
+    "Fauna, Flora e Áreas Verdes": "Arborização e Áreas Verdes",
+    "Resíduos e Limpeza Urbana": "Gestão de Resíduos e Limpeza",
+    "Licenciamento e Regularização": "Licenciamento e Anuências",
+}
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
@@ -870,115 +877,164 @@ def _normalizar_nome_tipologia(valor):
     return re.sub(r"\s+", " ", str(valor or "").strip())
 
 
-def _caminho_csv_tipologias_ouvidoria():
-    candidatos = [
-        os.path.join(os.getcwd(), ARQUIVO_TIPOLOGIAS_OUVIDORIA),
-        os.path.join(app.root_path, ARQUIVO_TIPOLOGIAS_OUVIDORIA),
-    ]
-    for caminho in candidatos:
-        if os.path.exists(caminho):
-            return caminho
-    return None
+def _consolidar_grupos_ouvidoria_legados(cur):
+    for nome_legado, nome_canonico in OUVIDORIA_GRUPOS_LEGADOS.items():
+        cur.execute("SELECT id FROM ouvidoria_grupos WHERE nome = %s", (nome_legado,))
+        grupo_legado = cur.fetchone()
+        if not grupo_legado:
+            continue
 
+        grupo_legado_id = grupo_legado[0]
+        cur.execute("SELECT id FROM ouvidoria_grupos WHERE nome = %s", (nome_canonico,))
+        grupo_canonico = cur.fetchone()
 
-def _identificar_coluna(colunas, termos):
-    normalizadas = {str(coluna or "").strip().lower(): coluna for coluna in colunas}
-    for termo in termos:
-        termo_norm = termo.strip().lower()
-        for chave_norm, original in normalizadas.items():
-            if termo_norm == chave_norm or termo_norm in chave_norm:
-                return original
-    return None
+        if not grupo_canonico:
+            cur.execute(
+                """
+                UPDATE ouvidoria_grupos
+                SET nome = %s
+                WHERE id = %s
+                """,
+                (nome_canonico, grupo_legado_id),
+            )
+            continue
 
-
-def _detectar_dialeto_csv_tipologias(caminho_csv):
-    with open(caminho_csv, "r", encoding="utf-8-sig", newline="") as arquivo_csv:
-        amostra = arquivo_csv.read(4096)
-
-    delimitador_padrao = ";"
-    if not amostra:
-        return csv.excel
-
-    try:
-        dialeto = csv.Sniffer().sniff(amostra, delimiters=";,|\t")
-        return dialeto
-    except csv.Error:
-        primeira_linha = amostra.splitlines()[0] if amostra.splitlines() else ""
-        if primeira_linha.count(";") >= primeira_linha.count(","):
-            delimitador_padrao = ";"
-        else:
-            delimitador_padrao = ","
-
-    class DialetoTipologias(csv.excel):
-        delimiter = delimitador_padrao
-
-    return DialetoTipologias
-
-
-def _limpar_tipologias_ouvidoria_mal_importadas(cur):
-    cur.execute(
-        """
-        UPDATE ouvidoria_manifestacoes
-        SET id_subtipo = NULL
-        WHERE id_subtipo IN (
-            SELECT id FROM ouvidoria_subtipos WHERE nome LIKE '%%;%%'
+        grupo_canonico_id = grupo_canonico[0]
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes
+            SET id_grupo = %s
+            WHERE id_grupo = %s
+            """,
+            (grupo_canonico_id, grupo_legado_id),
         )
-        """
-    )
-    cur.execute(
-        """
-        DELETE FROM ouvidoria_subtipos
-        WHERE nome LIKE '%%;%%'
-        """
-    )
 
-    cur.execute(
-        """
-        UPDATE ouvidoria_manifestacoes
-        SET id_tipo = NULL
-        WHERE id_tipo IN (
-            SELECT id FROM ouvidoria_tipos WHERE nome LIKE '%%;%%'
+        cur.execute(
+            """
+            SELECT id, nome, ativo, data_hora_cadastro
+            FROM ouvidoria_subgrupos
+            WHERE id_grupo = %s
+            ORDER BY id
+            """,
+            (grupo_legado_id,),
         )
-        """
-    )
-    cur.execute(
-        """
-        DELETE FROM ouvidoria_tipos
-        WHERE nome LIKE '%%;%%'
-        """
-    )
+        subgrupos_legados = cur.fetchall()
 
-    cur.execute(
-        """
-        UPDATE ouvidoria_manifestacoes
-        SET id_subgrupo = NULL
-        WHERE id_subgrupo IN (
-            SELECT id FROM ouvidoria_subgrupos WHERE nome LIKE '%%;%%'
-        )
-        """
-    )
-    cur.execute(
-        """
-        DELETE FROM ouvidoria_subgrupos
-        WHERE nome LIKE '%%;%%'
-        """
-    )
+        for subgrupo_legado_id, nome_subgrupo, ativo_subgrupo, data_subgrupo in subgrupos_legados:
+            cur.execute(
+                """
+                INSERT INTO ouvidoria_subgrupos (id_grupo, nome, ativo, data_hora_cadastro)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (id_grupo, nome) DO NOTHING
+                RETURNING id
+                """,
+                (grupo_canonico_id, nome_subgrupo, ativo_subgrupo, data_subgrupo),
+            )
+            retorno = cur.fetchone()
+            if retorno:
+                subgrupo_canonico_id = retorno[0]
+            else:
+                cur.execute(
+                    "SELECT id FROM ouvidoria_subgrupos WHERE id_grupo = %s AND nome = %s",
+                    (grupo_canonico_id, nome_subgrupo),
+                )
+                subgrupo_canonico_id = cur.fetchone()[0]
 
-    cur.execute(
-        """
-        UPDATE ouvidoria_manifestacoes
-        SET id_grupo = NULL
-        WHERE id_grupo IN (
-            SELECT id FROM ouvidoria_grupos WHERE nome LIKE '%%;%%'
-        )
-        """
-    )
-    cur.execute(
-        """
-        DELETE FROM ouvidoria_grupos
-        WHERE nome LIKE '%%;%%'
-        """
-    )
+            cur.execute(
+                """
+                UPDATE ouvidoria_manifestacoes
+                SET id_subgrupo = %s
+                WHERE id_subgrupo = %s
+                """,
+                (subgrupo_canonico_id, subgrupo_legado_id),
+            )
+
+            cur.execute(
+                """
+                SELECT id, nome, ativo, data_hora_cadastro
+                FROM ouvidoria_tipos
+                WHERE id_subgrupo = %s
+                ORDER BY id
+                """,
+                (subgrupo_legado_id,),
+            )
+            tipos_legados = cur.fetchall()
+
+            for tipo_legado_id, nome_tipo, ativo_tipo, data_tipo in tipos_legados:
+                cur.execute(
+                    """
+                    INSERT INTO ouvidoria_tipos (id_subgrupo, nome, ativo, data_hora_cadastro)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (id_subgrupo, nome) DO NOTHING
+                    RETURNING id
+                    """,
+                    (subgrupo_canonico_id, nome_tipo, ativo_tipo, data_tipo),
+                )
+                retorno = cur.fetchone()
+                if retorno:
+                    tipo_canonico_id = retorno[0]
+                else:
+                    cur.execute(
+                        "SELECT id FROM ouvidoria_tipos WHERE id_subgrupo = %s AND nome = %s",
+                        (subgrupo_canonico_id, nome_tipo),
+                    )
+                    tipo_canonico_id = cur.fetchone()[0]
+
+                cur.execute(
+                    """
+                    UPDATE ouvidoria_manifestacoes
+                    SET id_tipo = %s
+                    WHERE id_tipo = %s
+                    """,
+                    (tipo_canonico_id, tipo_legado_id),
+                )
+
+                cur.execute(
+                    """
+                    SELECT id, nome, ativo, data_hora_cadastro
+                    FROM ouvidoria_subtipos
+                    WHERE id_tipo = %s
+                    ORDER BY id
+                    """,
+                    (tipo_legado_id,),
+                )
+                subtipos_legados = cur.fetchall()
+
+                for subtipo_legado_id, nome_subtipo, ativo_subtipo, data_subtipo in subtipos_legados:
+                    cur.execute(
+                        """
+                        INSERT INTO ouvidoria_subtipos (id_tipo, nome, ativo, data_hora_cadastro)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (id_tipo, nome) DO NOTHING
+                        RETURNING id
+                        """,
+                        (tipo_canonico_id, nome_subtipo, ativo_subtipo, data_subtipo),
+                    )
+                    retorno = cur.fetchone()
+                    if retorno:
+                        subtipo_canonico_id = retorno[0]
+                    else:
+                        cur.execute(
+                            "SELECT id FROM ouvidoria_subtipos WHERE id_tipo = %s AND nome = %s",
+                            (tipo_canonico_id, nome_subtipo),
+                        )
+                        subtipo_canonico_id = cur.fetchone()[0]
+
+                    cur.execute(
+                        """
+                        UPDATE ouvidoria_manifestacoes
+                        SET id_subtipo = %s
+                        WHERE id_subtipo = %s
+                        """,
+                        (subtipo_canonico_id, subtipo_legado_id),
+                    )
+
+                cur.execute("DELETE FROM ouvidoria_subtipos WHERE id_tipo = %s", (tipo_legado_id,))
+
+            cur.execute("DELETE FROM ouvidoria_tipos WHERE id_subgrupo = %s", (subgrupo_legado_id,))
+
+        cur.execute("DELETE FROM ouvidoria_subgrupos WHERE id_grupo = %s", (grupo_legado_id,))
+        cur.execute("DELETE FROM ouvidoria_grupos WHERE id = %s", (grupo_legado_id,))
 
 
 def _gerar_protocolo_ouvidoria(cur):
@@ -995,172 +1051,33 @@ def _gerar_protocolo_ouvidoria(cur):
     return f"{prefixo}-{sequencia:04d}"
 
 
-def garantir_tipologias_ouvidoria_iniciais(forcar_csv=False):
+def garantir_tipologias_ouvidoria_iniciais():
     conn = None
-    resumo = {"csv_importado": False, "arquivo_csv": None}
     try:
         conn = conectar_banco()
         cur = conn.cursor()
 
-        cur.execute("SELECT COUNT(*) FROM ouvidoria_grupos")
-        total_grupos = cur.fetchone()[0]
+        _consolidar_grupos_ouvidoria_legados(cur)
+        conn.commit()
 
-        if total_grupos == 0:
-            for ordem, nome in enumerate(OUVIDORIA_GRUPOS_PADRAO, start=1):
-                cur.execute(
-                    """
-                    INSERT INTO ouvidoria_grupos (nome, ordem, fixo)
-                    VALUES (%s, %s, TRUE)
-                    ON CONFLICT (nome) DO NOTHING
-                    """,
-                    (nome, ordem),
-                )
-            conn.commit()
-
-        caminho_csv = _caminho_csv_tipologias_ouvidoria()
-        if total_grupos > 0 and not forcar_csv:
+        for ordem, nome in enumerate(OUVIDORIA_GRUPOS_PADRAO, start=1):
             cur.execute(
                 """
-                SELECT
-                    EXISTS (SELECT 1 FROM ouvidoria_grupos WHERE nome LIKE '%%;%%')
-                    OR EXISTS (SELECT 1 FROM ouvidoria_subgrupos WHERE nome LIKE '%%;%%')
-                    OR EXISTS (SELECT 1 FROM ouvidoria_tipos WHERE nome LIKE '%%;%%')
-                    OR EXISTS (SELECT 1 FROM ouvidoria_subtipos WHERE nome LIKE '%%;%%')
-                """
+                INSERT INTO ouvidoria_grupos (nome, ordem, fixo)
+                VALUES (%s, %s, TRUE)
+                ON CONFLICT (nome) DO UPDATE
+                SET ordem = EXCLUDED.ordem,
+                    fixo = TRUE
+                """,
+                (nome, ordem),
             )
-            possui_importacao_malformada = bool(cur.fetchone()[0])
-            if possui_importacao_malformada and caminho_csv:
-                forcar_csv = True
-        if not caminho_csv or (not forcar_csv and total_grupos > 0):
-            resumo["arquivo_csv"] = caminho_csv
-            return resumo
-
-        if forcar_csv:
-            _limpar_tipologias_ouvidoria_mal_importadas(cur)
-            conn.commit()
-
-        dialeto_csv = _detectar_dialeto_csv_tipologias(caminho_csv)
-
-        with open(caminho_csv, "r", encoding="utf-8-sig", newline="") as arquivo_csv:
-            leitor = csv.DictReader(arquivo_csv, dialect=dialeto_csv)
-            if not leitor.fieldnames:
-                resumo["arquivo_csv"] = caminho_csv
-                return resumo
-
-            coluna_grupo = _identificar_coluna(leitor.fieldnames, ["grupo"])
-            coluna_subgrupo = _identificar_coluna(leitor.fieldnames, ["subgrupo"])
-            coluna_tipo = _identificar_coluna(leitor.fieldnames, ["tipo"])
-            coluna_subtipo = _identificar_coluna(leitor.fieldnames, ["subtipo"])
-
-            if not coluna_grupo:
-                resumo["arquivo_csv"] = caminho_csv
-                return resumo
-
-            grupos_cache = {}
-            subgrupos_cache = {}
-            tipos_cache = {}
-
-            cur.execute("SELECT id, nome FROM ouvidoria_grupos")
-            for row in cur.fetchall():
-                grupos_cache[_normalizar_nome_tipologia(row[1]).lower()] = row[0]
-
-            for ordem, linha in enumerate(leitor, start=1):
-                nome_grupo = _normalizar_nome_tipologia(linha.get(coluna_grupo))
-                nome_subgrupo = _normalizar_nome_tipologia(linha.get(coluna_subgrupo)) if coluna_subgrupo else ""
-                nome_tipo = _normalizar_nome_tipologia(linha.get(coluna_tipo)) if coluna_tipo else ""
-                nome_subtipo = _normalizar_nome_tipologia(linha.get(coluna_subtipo)) if coluna_subtipo else ""
-
-                if not nome_grupo:
-                    continue
-
-                grupo_id = grupos_cache.get(nome_grupo.lower())
-                if not grupo_id:
-                    cur.execute(
-                        """
-                        INSERT INTO ouvidoria_grupos (nome, ordem, fixo)
-                        VALUES (%s, %s, TRUE)
-                        ON CONFLICT (nome) DO UPDATE SET fixo = TRUE
-                        RETURNING id
-                        """,
-                        (nome_grupo, ordem),
-                    )
-                    retorno = cur.fetchone()
-                    if retorno:
-                        grupo_id = retorno[0]
-                    else:
-                        cur.execute("SELECT id FROM ouvidoria_grupos WHERE nome = %s", (nome_grupo,))
-                        grupo_id = cur.fetchone()[0]
-                    grupos_cache[nome_grupo.lower()] = grupo_id
-
-                subgrupo_id = None
-                if nome_subgrupo:
-                    chave_subgrupo = (grupo_id, nome_subgrupo.lower())
-                    subgrupo_id = subgrupos_cache.get(chave_subgrupo)
-                    if not subgrupo_id:
-                        cur.execute(
-                            """
-                            INSERT INTO ouvidoria_subgrupos (id_grupo, nome)
-                            VALUES (%s, %s)
-                            ON CONFLICT (id_grupo, nome) DO NOTHING
-                            RETURNING id
-                            """,
-                            (grupo_id, nome_subgrupo),
-                        )
-                        retorno = cur.fetchone()
-                        if retorno:
-                            subgrupo_id = retorno[0]
-                        else:
-                            cur.execute(
-                                "SELECT id FROM ouvidoria_subgrupos WHERE id_grupo = %s AND nome = %s",
-                                (grupo_id, nome_subgrupo),
-                            )
-                            subgrupo_id = cur.fetchone()[0]
-                        subgrupos_cache[chave_subgrupo] = subgrupo_id
-
-                tipo_id = None
-                if subgrupo_id and nome_tipo:
-                    chave_tipo = (subgrupo_id, nome_tipo.lower())
-                    tipo_id = tipos_cache.get(chave_tipo)
-                    if not tipo_id:
-                        cur.execute(
-                            """
-                            INSERT INTO ouvidoria_tipos (id_subgrupo, nome)
-                            VALUES (%s, %s)
-                            ON CONFLICT (id_subgrupo, nome) DO NOTHING
-                            RETURNING id
-                            """,
-                            (subgrupo_id, nome_tipo),
-                        )
-                        retorno = cur.fetchone()
-                        if retorno:
-                            tipo_id = retorno[0]
-                        else:
-                            cur.execute(
-                                "SELECT id FROM ouvidoria_tipos WHERE id_subgrupo = %s AND nome = %s",
-                                (subgrupo_id, nome_tipo),
-                            )
-                            tipo_id = cur.fetchone()[0]
-                        tipos_cache[chave_tipo] = tipo_id
-
-                if tipo_id and nome_subtipo:
-                    cur.execute(
-                        """
-                        INSERT INTO ouvidoria_subtipos (id_tipo, nome)
-                        VALUES (%s, %s)
-                        ON CONFLICT (id_tipo, nome) DO NOTHING
-                        """,
-                        (tipo_id, nome_subtipo),
-                    )
+       
 
         conn.commit()
-        resumo["csv_importado"] = bool(caminho_csv)
-        resumo["arquivo_csv"] = caminho_csv
-        return resumo
     except Exception as e:
         if conn:
             conn.rollback()
         app.logger.error(f"Erro ao garantir tipologias da ouvidoria: {e}")
-        return resumo
     finally:
         if conn:
             conn.close()
@@ -2235,7 +2152,7 @@ def ouvidoria():
     """Renderiza o módulo inicial da Ouvidoria com cadastro de manifestações e gestão de tipologias."""
     conn = conectar_banco()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    csv_status = garantir_tipologias_ouvidoria_iniciais()
+    garantir_tipologias_ouvidoria_iniciais()
     try:
         hierarquia = _listar_hierarquia_ouvidoria(cur)
         cur.execute(
@@ -2272,8 +2189,6 @@ def ouvidoria():
         usuario=current_user,
         hierarquia_tipologias=hierarquia,
         manifestacoes_recentes=manifestacoes,
-        csv_tipologias_encontrado=bool(csv_status.get("arquivo_csv")),
-        csv_tipologias_caminho=csv_status.get("arquivo_csv"),
         permissao_edicao_tipologias=not usuario_visitante(),
     )
 
@@ -2471,17 +2386,6 @@ def api_excluir_tipologia_ouvidoria(nivel, registro_id):
     finally:
         cur.close()
         conn.close()
-
-
-@app.route("/ouvidoria/api/reimportar-csv", methods=["POST"])
-@login_required
-def api_reimportar_csv_tipologias_ouvidoria():
-    if usuario_visitante():
-        return jsonify({"erro": "Perfil sem permissão para reimportar tipologias."}), 403
-    resultado = garantir_tipologias_ouvidoria_iniciais(forcar_csv=True)
-    if not resultado.get("arquivo_csv"):
-        return jsonify({"erro": f"Arquivo '{ARQUIVO_TIPOLOGIAS_OUVIDORIA}' não encontrado no diretório do sistema."}), 404
-    return jsonify({"mensagem": "CSV processado com sucesso.", "arquivo_csv": resultado.get("arquivo_csv")})
 
 
 @app.route("/ouvidoria/manifestacoes", methods=["POST"])

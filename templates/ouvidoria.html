@@ -227,16 +227,7 @@
                     <div class="col-lg-4">
                         <div class="form-section h-100">
                             <div class="section-title"><i class="fas fa-layer-group text-primary me-2"></i> Tipologias</div>
-                            <p class="small-muted mb-2">Os grupos permanecem fixos. Subgrupos, tipos e subtipos podem ser incluídos, alterados e excluídos conforme a necessidade operacional.</p>
-                            {% if csv_tipologias_encontrado %}
-                                <div class="alert alert-success py-2 mb-0">
-                                    <i class="fas fa-file-csv me-1"></i> CSV localizado em <code>{{ csv_tipologias_caminho }}</code>.
-                                </div>
-                            {% else %}
-                                <div class="alert alert-warning py-2 mb-0">
-                                    <i class="fas fa-triangle-exclamation me-1"></i> O arquivo <code>tipologias_ouvidoria.csv</code> não foi encontrado neste ambiente. O sistema usa grupos padrão até a importação.
-                                </div>
-                            {% endif %}
+                            <p class="small-muted mb-0">Os grupos permanecem fixos. Subgrupos, tipos e subtipos podem ser incluídos, alterados e excluídos diretamente pelos botões do sistema, conforme a necessidade operacional.</p>
                         </div>
                     </div>
                     <div class="col-lg-4">
@@ -541,96 +532,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        @@ -65,63 +65,84 @@
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            max-height: 620px;
-            overflow-y: auto;
-            padding-right: 4px;
-        }
-        .grupo-lista-btn {
-            width: 100%;
-            text-align: left;
-            border: 1px solid #dbe3f3;
-            border-radius: 16px;
-            padding: 12px 14px;
-            background: #fff;
-            transition: all .2s ease;
-        }
-        .grupo-lista-btn:hover,
-        .grupo-lista-btn.active {
-            border-color: #0d6efd;
-            box-shadow: 0 12px 24px rgba(13, 110, 253, 0.12);
-            transform: translateY(-1px);
-        }
-        .grupo-lista-btn.active {
-            background: #eef5ff;
-        }
-        .grupo-icon-badge {
-            width: 40px;
-            height: 40px;
-            border-radius: 14px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid currentColor;
-            flex-shrink: 0;
-        }
-        .tipologia-workspace {
-            border: 1px solid #e5e7eb;
-            border-radius: 22px;
-            padding: 22px;
-            background: #fff;
-            min-height: 560px;
-        }
-        .tipologia-summary {
-            border: 1px solid #dbe6ff;
-            border-radius: 18px;
-            background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
-            padding: 16px 18px;
-        }
-        .grupo-summary-icon {
-            width: 52px;
-            height: 52px;
-            border-radius: 16px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid currentColor;
-            font-size: 1.2rem;
-            flex-shrink: 0;
-        }
-        .tipologia-stat {
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 12px 14px;
-            background: #f8fafc;
-        }
-        .subgrupo-card {
-            border: 1px solid #dbeafe;
-            border-radius: 20px;
-            background: #f8fbff;
-            padding: 18px;
-        }
-        .tipo-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 16px;
-            background: #fff;
-            padding: 14px 16px;
-        }
-        .subtipo-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            border: 1px solid #dbe3f3;
-            background: #f8fafc;
-            border-radius: 999px;
-@@ -521,50 +542,77 @@
-        </div>
-    </div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -640,6 +542,43 @@
         let filtroTipologias = '';
         const podeEditarTipologias = {{ 'true' if permissao_edicao_tipologias else 'false' }};
         const tipologiaModal = new bootstrap.Modal(document.getElementById('tipologiaModal'));
+        const estilosGrupo = {
+            'gestao de residuos e limpeza': {
+                icon: 'fas fa-recycle',
+                color: '#047857',
+                background: '#ecfdf5',
+                border: '#6ee7b7',
+                etiqueta: 'Resíduos',
+            },
+            'fiscalizacao e controle': {
+                icon: 'fas fa-user-shield',
+                color: '#c2410c',
+                background: '#fff7ed',
+                border: '#fdba74',
+                etiqueta: 'Fiscalização',
+            },
+            'licenciamento e anuencias': {
+                icon: 'fas fa-file-signature',
+                color: '#7c3aed',
+                background: '#f5f3ff',
+                border: '#c4b5fd',
+                etiqueta: 'Licenciamento',
+            },
+            'arborizacao e areas verdes': {
+                icon: 'fas fa-tree',
+                color: '#166534',
+                background: '#f0fdf4',
+                border: '#86efac',
+                etiqueta: 'Arborização',
+            },
+            'administrativo e contratos': {
+                icon: 'fas fa-file-contract',
+                color: '#334155',
+                background: '#f8fafc',
+                border: '#cbd5e1',
+                etiqueta: 'Administrativo',
+            },
+        };
 
         function escapeHtml(valor) {
             return String(valor || '')
@@ -658,27 +597,19 @@
             return String(valor || '')
                 .normalize('NFD')
                 .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
                 .toLowerCase();
         }
 
         function obterEstiloGrupo(nomeGrupo) {
-            const nome = normalizarGrupo(nomeGrupo);
-            if (nome.includes('residuos') || nome.includes('limpeza')) {
-                return { icon: 'fas fa-recycle', color: '#047857', background: '#ecfdf5', border: '#6ee7b7', etiqueta: 'Resíduos' };
-            }
-            if (nome.includes('poluicao') || nome.includes('incomodos')) {
-                return { icon: 'fas fa-smog', color: '#c2410c', background: '#fff7ed', border: '#fdba74', etiqueta: 'Poluição' };
-            }
-            if (nome.includes('fauna') || nome.includes('flora') || nome.includes('areas verdes')) {
-                return { icon: 'fas fa-leaf', color: '#3f6212', background: '#f7fee7', border: '#bef264', etiqueta: 'Fauna e flora' };
-            }
-            if (nome.includes('licenciamento') || nome.includes('regularizacao') || nome.includes('anuncias')) {
-                return { icon: 'fas fa-file-signature', color: '#7c3aed', background: '#f5f3ff', border: '#c4b5fd', etiqueta: 'Licenciamento' };
-            }
-            if (nome.includes('fiscalizacao') || nome.includes('controle')) {
-                return { icon: 'fas fa-shield-halved', color: '#1d4ed8', background: '#eff6ff', border: '#93c5fd', etiqueta: 'Fiscalização' };
-            }
-            return { icon: 'fas fa-layer-group', color: '#475569', background: '#f8fafc', border: '#cbd5e1', etiqueta: 'Grupo' };
+            return estilosGrupo[normalizarGrupo(nomeGrupo)] || {
+                icon: 'fas fa-layer-group',
+                color: '#475569',
+                background: '#f8fafc',
+                border: '#cbd5e1',
+                etiqueta: 'Grupo',
+            };
         }
 
         function preencherSelect(select, itens, placeholder, selectedValue = '') {
@@ -734,7 +665,10 @@
         function contarDescendentes(grupo) {
             const subgrupos = grupo.subgrupos || [];
             const tipos = subgrupos.reduce((acc, subgrupo) => acc + (subgrupo.tipos || []).length, 0);
-            const subtipos = subgrupos.reduce((acc, subgrupo) => acc + (subgrupo.tipos || []).reduce((sum, tipo) => sum + (tipo.subtipos || []).length, 0), 0);
+            const subtipos = subgrupos.reduce(
+                (acc, subgrupo) => acc + (subgrupo.tipos || []).reduce((sum, tipo) => sum + (tipo.subtipos || []).length, 0),
+                0,
+            );
             return { subgrupos: subgrupos.length, tipos, subtipos };
         }
 
@@ -755,7 +689,7 @@
                 grupoSelecionadoId = gruposFiltrados[0].id;
             }
 
-       container.innerHTML = gruposFiltrados.map(grupo => {
+            container.innerHTML = gruposFiltrados.map(grupo => {
                 const contagem = contarDescendentes(grupo);
                 const estilo = obterEstiloGrupo(grupo.nome);
                 return `
@@ -799,7 +733,6 @@
                 ? `
                     <div class="d-flex flex-wrap gap-2">
                         ${criarBotaoAcao({ label: 'Novo subgrupo', icon: 'fas fa-plus', classes: 'btn btn-primary btn-sm', onclick: `abrirModalTipologia('subgrupos', '', '', ${grupo.id})` })}
-                        ${criarBotaoAcao({ label: 'Reimportar CSV', icon: 'fas fa-file-import', classes: 'btn btn-outline-success btn-sm', onclick: 'reimportarCsvTipologias()' })}
                     </div>
                 `
                 : '<div class="alert alert-info mb-0 py-2">Seu perfil possui consulta das tipologias, mas não pode alterá-las.</div>';
@@ -1025,11 +958,11 @@
                 error => {
                     alert(`Não foi possível capturar a localização: ${error.message}`);
                 },
-                { enableHighAccuracy: true, timeout: 10000 }
+                { enableHighAccuracy: true, timeout: 10000 },
             );
         });
 
-        document.getElementById('filtroTipologiasInput')?.addEventListener('input', (event) => {
+        document.getElementById('filtroTipologiasInput')?.addEventListener('input', event => {
             filtroTipologias = event.target.value.trim();
             renderizarGestaoTipologias();
         });
@@ -1073,19 +1006,6 @@
             }
             await recarregarHierarquia();
         }
-
-        async function reimportarCsvTipologias() {
-            const response = await fetch('/ouvidoria/api/reimportar-csv', { method: 'POST' });
-            const data = await response.json();
-            if (!response.ok) {
-                alert(data.erro || 'Não foi possível reimportar o CSV.');
-                return;
-            }
-            alert(data.mensagem);
-            await recarregarHierarquia();
-        }
-
-        document.getElementById('btnReimportarCsv')?.addEventListener('click', reimportarCsvTipologias);
 
         renderizarGestaoTipologias();
     </script>
