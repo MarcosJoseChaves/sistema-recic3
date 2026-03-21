@@ -291,19 +291,18 @@
                                             <div class="col-md-4">
                                                 <label class="form-label">Status inicial</label>
                                                 <select class="form-select" name="status">
-                                                    <option value="Aberta" selected>Aberta</option>
-                                                    <option value="Em análise">Em análise</option>
+                                                    <option value="" selected>Salvar como pendente</option>
+                                                    <option value="em análise">Em análise</option>
+                                                    <option value="Não resolvida">Não resolvida</option>
                                                     <option value="Encaminhada">Encaminhada</option>
+                                                    <option value="Arquivada">Arquivada</option>
                                                 </select>
+                                                <div class="form-text">Se nada for selecionado, a manifestação será registrada como pendente.</div>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Prioridade</label>
-                                                <select class="form-select" name="prioridade">
-                                                    <option>Baixa</option>
-                                                    <option selected>Média</option>
-                                                    <option>Alta</option>
-                                                    <option>Urgente</option>
-                                                </select>
+                                                <input type="text" class="form-control" value="Normal" readonly>
+                                                <div class="form-text">A prioridade inicial é salva automaticamente como Normal.</div>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Origem</label>
@@ -332,16 +331,31 @@
                                         <div class="section-title">2. Dados do manifestante</div>
                                         <div class="row g-3">
                                             <div class="col-12">
-                                                <label class="form-label">Nome</label>
-                                                <input type="text" class="form-control" name="nome_manifestante" placeholder="Opcional">
+                                                <label class="form-label d-block">Identificação do manifestante</label>
+                                                <div class="d-flex flex-wrap gap-3 pt-1">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="tipo_manifestante" id="manifestanteIdentificado" value="identificado" checked>
+                                                        <label class="form-check-label" for="manifestanteIdentificado">Quero me identificar</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="tipo_manifestante" id="manifestanteAnonimo" value="anonimo">
+                                                        <label class="form-check-label" for="manifestanteAnonimo">Anônimo</label>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label">Telefone</label>
-                                                <input type="text" class="form-control" name="telefone_manifestante" placeholder="(00) 00000-0000">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label">E-mail</label>
-                                                <input type="email" class="form-control" name="email_manifestante" placeholder="Opcional">
+                                            <div id="dadosIdentificacaoManifestante" class="row g-3">
+                                                <div class="col-12">
+                                                    <label class="form-label">Nome</label>
+                                                    <input type="text" class="form-control" name="nome_manifestante" placeholder="Opcional">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Telefone</label>
+                                                    <input type="text" class="form-control" name="telefone_manifestante" placeholder="(00) 00000-0000">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">E-mail</label>
+                                                    <input type="email" class="form-control" name="email_manifestante" placeholder="Opcional">
+                                                </div>
                                             </div>
                                             <div class="col-12">
                                                 <label class="form-label">Associação/Origem interna</label>
@@ -921,9 +935,25 @@
             tipologiaModal.show();
         }
 
+        function atualizarCamposManifestante() {
+            const anonimoSelecionado = document.getElementById('manifestanteAnonimo')?.checked;
+            const container = document.getElementById('dadosIdentificacaoManifestante');
+            if (!container) return;
+            container.style.display = anonimoSelecionado ? 'none' : '';
+            if (anonimoSelecionado) {
+                container.querySelectorAll('input').forEach(input => {
+                    input.value = '';
+                });
+            }
+        }
+
         document.getElementById('grupoSelect')?.addEventListener('change', e => carregarSubgrupos(e.target.value));
         document.getElementById('subgrupoSelect')?.addEventListener('change', e => carregarTipos(e.target.value));
         document.getElementById('tipoSelect')?.addEventListener('change', e => carregarSubtipos(e.target.value));
+        document.querySelectorAll('input[name="tipo_manifestante"]').forEach(input => {
+            input.addEventListener('change', atualizarCamposManifestante);
+        });
+        atualizarCamposManifestante();
 
         document.getElementById('btnBuscarCep')?.addEventListener('click', async () => {
             const cepInput = document.getElementById('cepInput');

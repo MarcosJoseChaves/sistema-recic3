@@ -702,8 +702,8 @@ def criar_tabelas_se_nao_existir():
                 id_subgrupo INTEGER REFERENCES ouvidoria_subgrupos(id),
                 id_tipo INTEGER REFERENCES ouvidoria_tipos(id),
                 id_subtipo INTEGER REFERENCES ouvidoria_subtipos(id),
-                status VARCHAR(30) NOT NULL DEFAULT 'Aberta',
-                prioridade VARCHAR(20) NOT NULL DEFAULT 'Média',
+                status VARCHAR(30) NOT NULL DEFAULT 'pendente',
+                prioridade VARCHAR(20) NOT NULL DEFAULT 'Normal',
                 origem VARCHAR(50) NOT NULL DEFAULT 'Web',
                 nome_manifestante VARCHAR(255),
                 telefone_manifestante VARCHAR(30),
@@ -757,8 +757,8 @@ def criar_tabelas_se_nao_existir():
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_subgrupo INTEGER;")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_tipo INTEGER;")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS id_subtipo INTEGER;")
-            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'Aberta';")
-            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS prioridade VARCHAR(20) NOT NULL DEFAULT 'Média';")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'pendente';")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS prioridade VARCHAR(20) NOT NULL DEFAULT 'Normal';")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS origem VARCHAR(50) NOT NULL DEFAULT 'Web';")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS nome_manifestante VARCHAR(255);")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS telefone_manifestante VARCHAR(30);")
@@ -778,6 +778,8 @@ def criar_tabelas_se_nao_existir():
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS usuario_registro VARCHAR(100);")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS uvr VARCHAR(10);")
             cur.execute("ALTER TABLE ouvidoria_manifestacoes ADD COLUMN IF NOT EXISTS associacao VARCHAR(50);")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ALTER COLUMN status SET DEFAULT 'pendente';")
+            cur.execute("ALTER TABLE ouvidoria_manifestacoes ALTER COLUMN prioridade SET DEFAULT 'Normal';")
 
             cur.execute("ALTER TABLE ouvidoria_manifestacao_fotos ADD COLUMN IF NOT EXISTS nome_original VARCHAR(255);")
             cur.execute("ALTER TABLE ouvidoria_manifestacao_fotos ADD COLUMN IF NOT EXISTS data_hora_cadastro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
@@ -2407,6 +2409,12 @@ def cadastrar_manifestacao_ouvidoria():
             flash("Descreva a ocorrência para registrar a manifestação.", "danger")
             return redirect(url_for("ouvidoria"))
 
+        tipo_manifestante = (request.form.get("tipo_manifestante") or "identificado").strip().lower()
+        manifestacao_anonima = tipo_manifestante == "anonimo"
+        nome_manifestante = None if manifestacao_anonima else ((request.form.get("nome_manifestante") or "").strip() or None)
+        telefone_manifestante = None if manifestacao_anonima else ((request.form.get("telefone_manifestante") or "").strip() or None)
+        email_manifestante = None if manifestacao_anonima else ((request.form.get("email_manifestante") or "").strip() or None)
+
         protocolo = _gerar_protocolo_ouvidoria(cur)
         cur.execute(
             """
@@ -2432,12 +2440,12 @@ def cadastrar_manifestacao_ouvidoria():
                 subgrupo_id,
                 tipo_id,
                 subtipo_id,
-                request.form.get("status") or "Aberta",
-                request.form.get("prioridade") or "Média",
+                request.form.get("status") or "pendente",
+                request.form.get("prioridade") or "Normal",
                 request.form.get("origem") or "Web",
-                (request.form.get("nome_manifestante") or "").strip() or None,
-                (request.form.get("telefone_manifestante") or "").strip() or None,
-                (request.form.get("email_manifestante") or "").strip() or None,
+                nome_manifestante,
+                telefone_manifestante,
+                email_manifestante,
                 descricao,
                 (request.form.get("observacoes_internas") or "").strip() or None,
                 (request.form.get("inscricao_imobiliaria") or "").strip() or None,
