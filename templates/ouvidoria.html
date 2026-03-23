@@ -719,7 +719,7 @@
                                                         <button type="button" class="btn btn-outline-secondary" onclick="editarManifestacao({{ item.id }})">
                                                             <i class="fas fa-pen"></i>
                                                         </button>
-                                                        <button type="button" class="btn btn-outline-danger" onclick="excluirManifestacao({{ item.id }}, {{ item.protocolo|tojson }})">
+                                                        <button type="button" class="btn btn-outline-danger" onclick='excluirManifestacao({{ item.id }}, {{ item.protocolo|tojson }})'>
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </div>
@@ -885,6 +885,10 @@
             return `'${String(valor || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
         }
 
+        function escaparAtributoHtml(valor) {
+            return escapeHtml(valor);
+        }
+
         function normalizarGrupo(valor) {
             return String(valor || '')
                 .normalize('NFD')
@@ -1004,7 +1008,7 @@
         }
 
         function criarBotaoAcao({ label, icon, classes = 'btn btn-outline-primary btn-sm', onclick }) {
-            return `<button type="button" class="${classes}" onclick="${onclick}"><i class="${icon} me-1"></i>${label}</button>`;
+            return `<button type="button" class="${classes}" onclick="${escaparAtributoHtml(onclick)}"><i class="${icon} me-1"></i>${label}</button>`;
         }
 
         function renderizarWorkspaceTipologias() {
@@ -1132,8 +1136,8 @@
                                 <span class="subtipo-chip">
                                     <span>${escapeHtml(subtipo.nome)}</span>
                                     ${podeEditarTipologias ? `
-                                        <button type="button" class="btn-icon-soft" title="Editar subtipo" onclick="abrirModalTipologia('subtipos', ${subtipo.id}, ${quoteForOnclick(subtipo.nome)})"><i class="fas fa-pen"></i></button>
-                                        <button type="button" class="btn-icon-soft text-danger" title="Excluir subtipo" onclick="excluirTipologia('subtipos', ${subtipo.id})"><i class="fas fa-times"></i></button>
+                                        <button type="button" class="btn-icon-soft" title="Editar subtipo" onclick="${escaparAtributoHtml(`abrirModalTipologia('subtipos', ${subtipo.id}, ${quoteForOnclick(subtipo.nome)})`)}"><i class="fas fa-pen"></i></button>
+                                        <button type="button" class="btn-icon-soft text-danger" title="Excluir subtipo" onclick="${escaparAtributoHtml(`excluirTipologia('subtipos', ${subtipo.id})`)}"><i class="fas fa-times"></i></button>
                                     ` : ''}
                                 </span>
                             `).join('')}
