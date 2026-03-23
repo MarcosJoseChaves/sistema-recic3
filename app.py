@@ -70,6 +70,21 @@ OUVIDORIA_GRUPOS_LEGADOS = {
     "Licenciamento e Regularização": "Licenciamento e Anuências",
 }
 
+OUVIDORIA_STATUS_OPCOES = [
+    "pendente",
+    "em análise",
+    "Não resolvida",
+    "Encaminhada",
+    "Arquivada",
+]
+
+OUVIDORIA_PRIORIDADE_OPCOES = [
+    "Baixa",
+    "Normal",
+    "Alta",
+    "Urgente",
+]
+
 # Carrega as variáveis do arquivo .env
 load_dotenv()
 
@@ -1106,6 +1121,76 @@ def _gerar_protocolo_ouvidoria(cur):
         total = resultado[0] if resultado else 0
     sequencia = (total or 0) + 1
     return f"{prefixo}-{sequencia:04d}"
+
+
+def _serializar_manifestacao_ouvidoria(cur, manifestacao_id):
+    cur.execute(
+        """
+        SELECT
+            m.id,
+            m.protocolo,
+            m.data_registro,
+            m.status,
+            m.prioridade,
+            m.origem,
+            m.nome_manifestante,
+            m.telefone_manifestante,
+            m.email_manifestante,
+            m.descricao,
+            m.observacoes_internas,
+            m.inscricao_imobiliaria,
+            m.cep,
+            m.logradouro,
+            m.numero,
+            m.complemento,
+            m.bairro,
+            m.cidade,
+            m.uf,
+            m.ponto_referencia,
+            m.latitude,
+            m.longitude,
+            m.associacao,
+            m.usuario_registro,
+            m.uvr,
+            g.id AS grupo_id,
+            g.nome AS grupo_nome,
+            sg.id AS subgrupo_id,
+            sg.nome AS subgrupo_nome,
+            t.id AS tipo_id,
+            t.nome AS tipo_nome,
+            st.id AS subtipo_id,
+            st.nome AS subtipo_nome
+        FROM ouvidoria_manifestacoes m
+        LEFT JOIN ouvidoria_grupos g ON g.id = m.id_grupo
+        LEFT JOIN ouvidoria_subgrupos sg ON sg.id = m.id_subgrupo
+        LEFT JOIN ouvidoria_tipos t ON t.id = m.id_tipo
+        LEFT JOIN ouvidoria_subtipos st ON st.id = m.id_subtipo
+        WHERE m.id = %s
+        """,
+        (manifestacao_id,),
+    )
+    manifestacao = cur.fetchone()
+    if not manifestacao:
+        return None
+
+    cur.execute(
+        """
+        SELECT id, url_arquivo, nome_original, data_hora_cadastro
+        FROM ouvidoria_manifestacao_fotos
+        WHERE id_manifestacao = %s
+        ORDER BY data_hora_cadastro ASC, id ASC
+        """,
+        (manifestacao_id,),
+    )
+    manifestacao["fotos"] = cur.fetchall()
+    manifestacao["manifestacao_anonima"] = not any(
+        [
+            manifestacao.get("nome_manifestante"),
+            manifestacao.get("telefone_manifestante"),
+            manifestacao.get("email_manifestante"),
+        ]
+    )
+    return manifestacao
 
 
 def garantir_tipologias_ouvidoria_iniciais():
@@ -2247,6 +2332,8 @@ def ouvidoria():
         hierarquia_tipologias=hierarquia,
         manifestacoes_recentes=manifestacoes,
         permissao_edicao_tipologias=not usuario_visitante(),
+        ouvidoria_status_opcoes=OUVIDORIA_STATUS_OPCOES,
+        ouvidoria_prioridade_opcoes=OUVIDORIA_PRIORIDADE_OPCOES,
     )
 
 
@@ -2596,6 +2683,320 @@ def cadastrar_manifestacao_ouvidoria():
         conn.close()
 
     return redirect(url_for("ouvidoria"))
+
+
+@app.route("/ouvidoria/api/manifestacoes/<int:manifestacao_id>", methods=["GET"])
+@login_required
+def api_detalhar_manifestacao_ouvidoria(manifestacao_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        manifestacao = _serializar_manifestacao_ouvidoria(cur, manifestacao_id)
+        if not manifestacao:
+            return jsonify({"erro": "Manifestação não encontrada."}), 404
+        return jsonify(manifestacao)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/manifestacoes/<int:manifestacao_id>/editar", methods=["POST"])
+@login_required
+def editar_manifestacao_ouvidoria(manifestacao_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, protocolo, prioridade FROM ouvidoria_manifestacoes WHERE id = %s",
+            (manifestacao_id,),
+        )
+        manifestacao_atual = cur.fetchone()
+        if not manifestacao_atual:
+            flash("Manifestação não encontrada para edição.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        grupo_id = request.form.get("grupo_id")
+        subgrupo_id = request.form.get("subgrupo_id") or None
+        tipo_id = request.form.get("tipo_id") or None
+        subtipo_id = request.form.get("subtipo_id") or None
+        descricao = (request.form.get("descricao") or "").strip()
+
+        if not grupo_id:
+            flash("Selecione o grupo da manifestação.", "danger")
+            return redirect(url_for("ouvidoria"))
+        if not descricao:
+            flash("Descreva a ocorrência para atualizar a manifestação.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        tipo_manifestante = (request.form.get("tipo_manifestante") or "identificado").strip().lower()
+        manifestacao_anonima = tipo_manifestante == "anonimo"
+        nome_manifestante = None if manifestacao_anonima else ((request.form.get("nome_manifestante") or "").strip() or None)
+        telefone_manifestante = None if manifestacao_anonima else ((request.form.get("telefone_manifestante") or "").strip() or None)
+        email_manifestante = None if manifestacao_anonima else ((request.form.get("email_manifestante") or "").strip() or None)
+        classificacao = _obter_classificacao_manifestacao_ouvidoria(cur, grupo_id, subgrupo_id, tipo_id, subtipo_id)
+        tipo_manifestacao_legado = (
+            classificacao.get("subtipo_nome")
+            or classificacao.get("tipo_nome")
+            or classificacao.get("subgrupo_nome")
+            or classificacao.get("grupo_nome")
+            or "Manifestação"
+        )
+
+        metadados_manifestacoes = _listar_colunas_tabela(cur, "ouvidoria_manifestacoes")
+        valores_update = {
+            "id_grupo": grupo_id,
+            "id_subgrupo": subgrupo_id,
+            "id_tipo": tipo_id,
+            "id_subtipo": subtipo_id,
+            "status": request.form.get("status") or "pendente",
+            "prioridade": request.form.get("prioridade") or manifestacao_atual.get("prioridade") or "Normal",
+            "origem": request.form.get("origem") or "Web",
+            "nome_manifestante": nome_manifestante,
+            "telefone_manifestante": telefone_manifestante,
+            "email_manifestante": email_manifestante,
+            "descricao": descricao,
+            "observacoes_internas": (request.form.get("observacoes_internas") or "").strip() or None,
+            "inscricao_imobiliaria": (request.form.get("inscricao_imobiliaria") or "").strip() or None,
+            "cep": re.sub(r"[^0-9]", "", request.form.get("cep") or "") or None,
+            "logradouro": (request.form.get("logradouro") or "").strip() or None,
+            "numero": (request.form.get("numero") or "").strip() or None,
+            "complemento": (request.form.get("complemento") or "").strip() or None,
+            "bairro": (request.form.get("bairro") or "").strip() or None,
+            "cidade": (request.form.get("cidade") or "").strip() or None,
+            "uf": (request.form.get("uf") or "").strip() or None,
+            "ponto_referencia": (request.form.get("ponto_referencia") or "").strip() or None,
+            "latitude": (request.form.get("latitude") or "").strip() or None,
+            "longitude": (request.form.get("longitude") or "").strip() or None,
+            "associacao": request.form.get("associacao") or None,
+        }
+        colunas_legadas = {
+            "tipo_manifestacao": tipo_manifestacao_legado,
+            "categoria": classificacao.get("grupo_nome") or classificacao.get("subgrupo_nome") or tipo_manifestacao_legado,
+            "assunto": descricao or tipo_manifestacao_legado,
+            "titulo": tipo_manifestacao_legado,
+            "tema": classificacao.get("grupo_nome") or tipo_manifestacao_legado,
+            "demanda": tipo_manifestacao_legado,
+            "solicitacao": tipo_manifestacao_legado,
+            "grupo": classificacao.get("grupo_nome"),
+            "subgrupo": classificacao.get("subgrupo_nome"),
+            "tipo": classificacao.get("tipo_nome"),
+            "subtipo": classificacao.get("subtipo_nome"),
+            "manifestacao_anonima": manifestacao_anonima,
+            "anonima": manifestacao_anonima,
+            "origem_manifestacao": request.form.get("origem") or "Web",
+        }
+        for coluna, valor in colunas_legadas.items():
+            if coluna in metadados_manifestacoes:
+                valores_update[coluna] = valor
+
+        colunas_sql = ", ".join(f"{coluna} = %s" for coluna in valores_update.keys())
+        cur.execute(
+            f"UPDATE ouvidoria_manifestacoes SET {colunas_sql} WHERE id = %s",
+            tuple(valores_update.values()) + (manifestacao_id,),
+        )
+
+        arquivos = request.files.getlist("fotos")
+        fotos_existentes = request.form.getlist("fotos_existentes")
+        cur.execute(
+            """
+            SELECT id, url_arquivo
+            FROM ouvidoria_manifestacao_fotos
+            WHERE id_manifestacao = %s
+            """,
+            (manifestacao_id,),
+        )
+        fotos_atuais = cur.fetchall()
+        ids_fotos_existentes = {int(foto_id) for foto_id in fotos_existentes if str(foto_id).isdigit()}
+        for foto in fotos_atuais:
+            if foto["id"] in ids_fotos_existentes:
+                continue
+            _delete_cloudinary_asset(
+                foto["url_arquivo"],
+                resource_type=_detect_cloudinary_resource_type(foto["url_arquivo"], default="image"),
+            )
+            cur.execute("DELETE FROM ouvidoria_manifestacao_fotos WHERE id = %s", (foto["id"],))
+
+        indice_base = len(ids_fotos_existentes)
+        for indice, arquivo in enumerate(arquivos, start=1):
+            if not arquivo or not arquivo.filename:
+                continue
+            url_foto = _upload_file_to_cloudinary(
+                arquivo,
+                "ouvidoria/manifestacoes",
+                public_id=f"{manifestacao_atual['protocolo']}_{indice_base + indice}_{int(datetime.now().timestamp())}",
+                resource_type="image",
+            )
+            if not url_foto:
+                mime = arquivo.mimetype or "image/jpeg"
+                conteudo = base64.b64encode(arquivo.read()).decode("utf-8")
+                arquivo.stream.seek(0)
+                url_foto = f"data:{mime};base64,{conteudo}"
+
+            cur.execute(
+                """
+                INSERT INTO ouvidoria_manifestacao_fotos (id_manifestacao, url_arquivo, nome_original)
+                VALUES (%s, %s, %s)
+                """,
+                (manifestacao_id, url_foto, arquivo.filename),
+            )
+
+        conn.commit()
+        flash(f"Manifestação {manifestacao_atual['protocolo']} atualizada com sucesso.", "success")
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception("Erro ao editar manifestação da ouvidoria: %s", e)
+        flash(f"Não foi possível atualizar a manifestação: {e}", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("ouvidoria"))
+
+
+@app.route("/ouvidoria/api/manifestacoes/<int:manifestacao_id>", methods=["DELETE"])
+@login_required
+def excluir_manifestacao_ouvidoria(manifestacao_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, protocolo FROM ouvidoria_manifestacoes WHERE id = %s",
+            (manifestacao_id,),
+        )
+        manifestacao = cur.fetchone()
+        if not manifestacao:
+            conn.rollback()
+            return jsonify({"erro": "Manifestação não encontrada."}), 404
+
+        cur.execute(
+            """
+            SELECT url_arquivo
+            FROM ouvidoria_manifestacao_fotos
+            WHERE id_manifestacao = %s
+            """,
+            (manifestacao_id,),
+        )
+        for foto in cur.fetchall():
+            _delete_cloudinary_asset(
+                foto["url_arquivo"],
+                resource_type=_detect_cloudinary_resource_type(foto["url_arquivo"], default="image"),
+            )
+
+        cur.execute("DELETE FROM ouvidoria_manifestacoes WHERE id = %s", (manifestacao_id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"erro": "Manifestação não encontrada para exclusão."}), 404
+        conn.commit()
+        return jsonify({"mensagem": f"Manifestação {manifestacao['protocolo']} excluída com sucesso."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception("Erro ao excluir manifestação da ouvidoria: %s", e)
+        return jsonify({"erro": f"Não foi possível excluir a manifestação: {e}"}), 400
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/ouvidoria/manifestacoes/<int:manifestacao_id>/excluir", methods=["POST"])
+@login_required
+def excluir_manifestacao_ouvidoria_post(manifestacao_id):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, protocolo FROM ouvidoria_manifestacoes WHERE id = %s",
+            (manifestacao_id,),
+        )
+        manifestacao = cur.fetchone()
+        if not manifestacao:
+            flash("Manifestação não encontrada para exclusão.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        cur.execute(
+            """
+            SELECT url_arquivo
+            FROM ouvidoria_manifestacao_fotos
+            WHERE id_manifestacao = %s
+            """,
+            (manifestacao_id,),
+        )
+        for foto in cur.fetchall():
+            _delete_cloudinary_asset(
+                foto["url_arquivo"],
+                resource_type=_detect_cloudinary_resource_type(foto["url_arquivo"], default="image"),
+            )
+
+        cur.execute("DELETE FROM ouvidoria_manifestacoes WHERE id = %s", (manifestacao_id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            flash("Manifestação não encontrada para exclusão.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        conn.commit()
+        flash(f"Manifestação {manifestacao['protocolo']} excluída com sucesso.", "success")
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception("Erro ao excluir manifestação da ouvidoria via formulário: %s", e)
+        flash(f"Não foi possível excluir a manifestação: {e}", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("ouvidoria"))
+
+
+@app.route("/ouvidoria/api/manifestacoes/<int:manifestacao_id>/atualizacao-rapida", methods=["POST"])
+@login_required
+def atualizar_manifestacao_ouvidoria_rapido(manifestacao_id):
+    dados = request.get_json(silent=True) or request.form.to_dict()
+    status = (dados.get("status") or "").strip()
+    prioridade = (dados.get("prioridade") or "").strip()
+
+    if status and status not in OUVIDORIA_STATUS_OPCOES:
+        return jsonify({"erro": "Status inválido para a manifestação."}), 400
+    if prioridade and prioridade not in OUVIDORIA_PRIORIDADE_OPCOES:
+        return jsonify({"erro": "Prioridade inválida para a manifestação."}), 400
+    if not status and not prioridade:
+        return jsonify({"erro": "Informe ao menos status ou prioridade para atualizar."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, protocolo, status, prioridade FROM ouvidoria_manifestacoes WHERE id = %s",
+            (manifestacao_id,),
+        )
+        manifestacao = cur.fetchone()
+        if not manifestacao:
+            conn.rollback()
+            return jsonify({"erro": "Manifestação não encontrada."}), 404
+
+        novo_status = status or manifestacao.get("status") or "pendente"
+        nova_prioridade = prioridade or manifestacao.get("prioridade") or "Normal"
+        cur.execute(
+            """
+            UPDATE ouvidoria_manifestacoes
+            SET status = %s, prioridade = %s
+            WHERE id = %s
+            RETURNING id, protocolo, status, prioridade
+            """,
+            (novo_status, nova_prioridade, manifestacao_id),
+        )
+        registro = cur.fetchone()
+        conn.commit()
+        return jsonify(
+            {
+                "mensagem": f"Manifestação {registro['protocolo']} atualizada com sucesso.",
+                "registro": registro,
+            }
+        )
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception("Erro na atualização rápida da manifestação da ouvidoria: %s", e)
+        return jsonify({"erro": f"Não foi possível atualizar a manifestação: {e}"}), 400
+    finally:
+        cur.close()
+        conn.close()
 
 # Substitua sua função buscar_cep por esta
 @app.route("/buscar_cep/<string:cep_numeros>", methods=["GET"])

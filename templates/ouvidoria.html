@@ -364,7 +364,19 @@
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="cadastro-pane" role="tabpanel" tabindex="0">
                         <form method="POST" action="{{ url_for('cadastrar_manifestacao_ouvidoria') }}" enctype="multipart/form-data" id="manifestacaoWizardForm">
+                            <input type="hidden" name="manifestacao_id" id="manifestacaoIdInput">
                             <div class="wizard-shell">
+                                <div class="d-none alert alert-warning border-0 shadow-sm mb-4" id="manifestacaoEditBanner">
+                                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                                        <div>
+                                            <div class="fw-bold"><i class="fas fa-pen-to-square me-2"></i>Modo de edição ativo</div>
+                                            <div class="small mb-0">Você está editando uma manifestação já cadastrada. Revise os dados e salve para atualizar o protocolo.</div>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-dark btn-sm" id="btnCancelarEdicaoManifestacao">
+                                            <i class="fas fa-xmark me-1"></i> Cancelar edição
+                                        </button>
+                                    </div>
+                                </div>
                                 <div class="row g-4">
                                     <div class="col-xl-4 col-xxl-3">
                                         <div class="wizard-progress">
@@ -454,18 +466,20 @@
                                                     <div class="col-md-4">
                                                         <label class="form-label">Status inicial</label>
                                                         <select class="form-select" name="status">
-                                                            <option value="" selected>Salvar como pendente</option>
-                                                            <option value="em análise">Em análise</option>
-                                                            <option value="Não resolvida">Não resolvida</option>
-                                                            <option value="Encaminhada">Encaminhada</option>
-                                                            <option value="Arquivada">Arquivada</option>
+                                                            {% for status in ouvidoria_status_opcoes %}
+                                                                <option value="{{ status }}" {% if status == 'pendente' %}selected{% endif %}>{{ status|capitalize }}</option>
+                                                            {% endfor %}
                                                         </select>
                                                         <div class="form-text">Se nada for selecionado, a manifestação será registrada como pendente.</div>
                                                     </div>
                                                     <div class="col-md-4">
                                                         <label class="form-label">Prioridade</label>
-                                                        <input type="text" class="form-control" value="Normal" readonly>
-                                                        <div class="form-text">A prioridade inicial é salva automaticamente como Normal.</div>
+                                                        <select class="form-select" name="prioridade">
+                                                            {% for prioridade in ouvidoria_prioridade_opcoes %}
+                                                                <option value="{{ prioridade }}" {% if prioridade == 'Normal' %}selected{% endif %}>{{ prioridade }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                        <div class="form-text">Você pode ajustar a prioridade no cadastro ou diretamente na listagem.</div>
                                                     </div>
                                                     <div class="col-md-4">
                                                         <label class="form-label">Origem</label>
@@ -595,10 +609,15 @@
                                                             <i class="fas fa-crosshairs me-1"></i> Usar minha localização atual
                                                         </button>
                                                     </div>
-                                                    <div class="col-12">
+                                                   <div class="col-12">
                                                         <label class="form-label">Fotos da situação</label>
                                                         <input type="file" class="form-control" name="fotos" id="fotosInput" multiple accept="image/*">
                                                         <div class="photo-hint mt-2">Envie uma ou mais imagens do local, fachada, ponto impactado ou evidências complementares.</div>
+                                                    </div>
+                                                    <div class="col-12 d-none" id="fotosExistentesWrapper">
+                                                        <label class="form-label">Fotos já vinculadas</label>
+                                                        <div class="d-flex flex-wrap gap-3" id="fotosExistentesContainer"></div>
+                                                        <div class="form-text">Desmarque uma foto para removê-la ao salvar a edição.</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -665,6 +684,7 @@
                                             <th>Status</th>
                                             <th>Prioridade</th>
                                             <th>Local</th>
+                                            <th class="text-end">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -674,15 +694,41 @@
                                                 <td>{{ item.data_registro.strftime('%d/%m/%Y %H:%M') if item.data_registro else '' }}</td>
                                                 <td>
                                                     <div>{{ item.grupo_nome }}</div>
-                                                    <small class="text-muted">{{ item.subgrupo_nome or '—' }} / {{ item.tipo_nome or '—' }} / {{ item.subtipo_nome or '—' }}</small
+                                                    <small class="text-muted">{{ item.subgrupo_nome or '—' }} / {{ item.tipo_nome or '—' }} / {{ item.subtipo_nome or '—' }}</small>
                                                 </td>
-                                                <td><span class="badge text-bg-secondary">{{ item.status }}</span></td>
-                                                <td>{{ item.prioridade }}</td>
+                                                <td style="min-width: 170px;">
+                                                    <select class="form-select form-select-sm" onchange="atualizarStatusPrioridadeManifestacao({{ item.id }})" data-quick-status="{{ item.id }}" data-valor-anterior="{{ item.status }}">
+                                                        {% for status in ouvidoria_status_opcoes %}
+                                                            <option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status|capitalize }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </td>
+                                                <td style="min-width: 140px;">
+                                                    <select class="form-select form-select-sm" onchange="atualizarStatusPrioridadeManifestacao({{ item.id }})" data-quick-prioridade="{{ item.id }}" data-valor-anterior="{{ item.prioridade }}">
+                                                        {% for prioridade in ouvidoria_prioridade_opcoes %}
+                                                            <option value="{{ prioridade }}" {% if item.prioridade == prioridade %}selected{% endif %}>{{ prioridade }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </td>
                                                 <td>{{ item.logradouro }} {{ item.numero }}{% if item.bairro %} - {{ item.bairro }}{% endif %}</td>
+                                                <td class="text-end">
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button type="button" class="btn btn-outline-primary" onclick="visualizarManifestacao({{ item.id }})">
+                                                            <i class="fas fa-eye"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary" onclick="editarManifestacao({{ item.id }})">
+                                                            <i class="fas fa-pen"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-danger" onclick="excluirManifestacao({{ item.id }}, {{ item.protocolo|tojson }})">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                    <div class="small text-muted mt-1" data-quick-feedback="{{ item.id }}"></div>
+                                                </td>
                                             </tr>
                                         {% else %}
                                             <tr>
-                                                <td colspan="6" class="text-center text-muted py-4">Nenhuma manifestação cadastrada ainda.</td>
+                                                <td colspan="7" class="text-center text-muted py-4">Nenhuma manifestação cadastrada ainda.</td>
                                             </tr>
                                         {% endfor %}
                                     </tbody>
@@ -751,6 +797,31 @@
         </div>
     </div>
 
+    <div class="modal fade" id="manifestacaoDetalheModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-1">Detalhes da manifestação</h5>
+                        <div class="small text-muted" id="manifestacaoDetalheSubtitulo">Carregando...</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="manifestacaoDetalheConteudo">
+                    <div class="text-center text-muted py-4">Carregando informações...</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-primary" id="btnEditarNoModal">
+                        <i class="fas fa-pen me-1"></i> Editar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" id="manifestacaoExcluirForm" class="d-none"></form>
+
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -761,6 +832,8 @@
         let filtroTipologias = '';
         const podeEditarTipologias = {{ 'true' if permissao_edicao_tipologias else 'false' }};
         const tipologiaModal = new bootstrap.Modal(document.getElementById('tipologiaModal'));
+        const manifestacaoDetalheModal = new bootstrap.Modal(document.getElementById('manifestacaoDetalheModal'));
+        const manifestacaoWizardForm = document.getElementById('manifestacaoWizardForm');
         const estilosGrupo = {
             'gestao de residuos e limpeza': {
                 icon: 'fas fa-recycle',
@@ -1157,7 +1230,9 @@
         const wizardPrevButton = document.getElementById('btnWizardPrev');
         const wizardNextButton = document.getElementById('btnWizardNext');
         const wizardSubmitButton = document.getElementById('btnWizardSubmit');
+        const manifestacaoEditBanner = document.getElementById('manifestacaoEditBanner');
         let wizardCurrentStep = 0;
+        let manifestacaoDetalheAtualId = null;
 
         function obterTextoSelect(selectId) {
             const select = document.getElementById(selectId);
@@ -1241,6 +1316,252 @@
             }
         }
 
+        function formatarDataHora(valor) {
+            if (!valor) return 'Não informado';
+            const data = new Date(valor);
+            if (Number.isNaN(data.getTime())) return valor;
+            return data.toLocaleString('pt-BR');
+        }
+
+        function montarClassificacaoManifestacao(manifestacao) {
+            return [
+                manifestacao.grupo_nome,
+                manifestacao.subgrupo_nome,
+                manifestacao.tipo_nome,
+                manifestacao.subtipo_nome,
+            ].filter(Boolean).join(' / ') || 'Não informado';
+        }
+
+        function resetarFormularioManifestacao(limparCampos = true) {
+            manifestacaoWizardForm.action = "{{ url_for('cadastrar_manifestacao_ouvidoria') }}";
+            if (limparCampos) {
+                manifestacaoWizardForm.reset();
+            }
+            document.getElementById('manifestacaoIdInput').value = '';
+            manifestacaoEditBanner.classList.add('d-none');
+            document.getElementById('btnWizardSubmit').innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Registrar manifestação';
+            document.getElementById('fotosExistentesContainer').innerHTML = '';
+            document.getElementById('fotosExistentesWrapper').classList.add('d-none');
+            preencherSelect(document.getElementById('subgrupoSelect'), [], 'Selecione primeiro o grupo...');
+            preencherSelect(document.getElementById('tipoSelect'), [], 'Selecione primeiro o subgrupo...');
+            preencherSelect(document.getElementById('subtipoSelect'), [], 'Selecione primeiro o tipo...');
+            atualizarCamposManifestante();
+            atualizarWizardStep(0);
+        }
+
+        async function preencherFormularioManifestacao(manifestacao) {
+            manifestacaoWizardForm.action = `/ouvidoria/manifestacoes/${manifestacao.id}/editar`;
+            document.getElementById('manifestacaoIdInput').value = manifestacao.id;
+            manifestacaoEditBanner.classList.remove('d-none');
+            document.getElementById('btnWizardSubmit').innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Salvar alterações';
+
+            document.getElementById('grupoSelect').value = manifestacao.grupo_id || '';
+            await carregarSubgrupos(manifestacao.grupo_id || '', manifestacao.subgrupo_id || '');
+            await carregarTipos(manifestacao.subgrupo_id || '', manifestacao.tipo_id || '');
+            await carregarSubtipos(manifestacao.tipo_id || '', manifestacao.subtipo_id || '');
+
+            document.querySelector('[name="status"]').value = manifestacao.status || '';
+            document.querySelector('[name="prioridade"]').value = manifestacao.prioridade || 'Normal';
+            document.querySelector('[name="origem"]').value = manifestacao.origem || 'Web';
+            document.querySelector('[name="descricao"]').value = manifestacao.descricao || '';
+            document.querySelector('[name="observacoes_internas"]').value = manifestacao.observacoes_internas || '';
+            document.querySelector('[name="associacao"]').value = manifestacao.associacao || '';
+            document.querySelector('[name="inscricao_imobiliaria"]').value = manifestacao.inscricao_imobiliaria || '';
+            document.querySelector('[name="cep"]').value = manifestacao.cep || '';
+            document.querySelector('[name="logradouro"]').value = manifestacao.logradouro || '';
+            document.querySelector('[name="numero"]').value = manifestacao.numero || '';
+            document.querySelector('[name="complemento"]').value = manifestacao.complemento || '';
+            document.querySelector('[name="bairro"]').value = manifestacao.bairro || '';
+            document.querySelector('[name="uf"]').value = manifestacao.uf || '';
+            document.querySelector('[name="cidade"]').value = manifestacao.cidade || '';
+            document.querySelector('[name="ponto_referencia"]').value = manifestacao.ponto_referencia || '';
+            document.querySelector('[name="latitude"]').value = manifestacao.latitude || '';
+            document.querySelector('[name="longitude"]').value = manifestacao.longitude || '';
+            document.querySelector('[name="nome_manifestante"]').value = manifestacao.nome_manifestante || '';
+            document.querySelector('[name="telefone_manifestante"]').value = manifestacao.telefone_manifestante || '';
+            document.querySelector('[name="email_manifestante"]').value = manifestacao.email_manifestante || '';
+
+            const radioAnonimo = document.getElementById('manifestanteAnonimo');
+            const radioIdentificado = document.getElementById('manifestanteIdentificado');
+            if (manifestacao.manifestacao_anonima) {
+                radioAnonimo.checked = true;
+            } else {
+                radioIdentificado.checked = true;
+            }
+            atualizarCamposManifestante();
+            if (!manifestacao.manifestacao_anonima) {
+                document.querySelector('[name="nome_manifestante"]').value = manifestacao.nome_manifestante || '';
+                document.querySelector('[name="telefone_manifestante"]').value = manifestacao.telefone_manifestante || '';
+                document.querySelector('[name="email_manifestante"]').value = manifestacao.email_manifestante || '';
+            }
+
+            const fotosExistentesWrapper = document.getElementById('fotosExistentesWrapper');
+            const fotosExistentesContainer = document.getElementById('fotosExistentesContainer');
+            const fotos = manifestacao.fotos || [];
+            if (fotos.length) {
+                fotosExistentesWrapper.classList.remove('d-none');
+                fotosExistentesContainer.innerHTML = fotos.map(foto => `
+                    <label class="border rounded-3 p-2 bg-light" style="width: 180px;">
+                        <input type="checkbox" class="form-check-input me-2" name="fotos_existentes" value="${foto.id}" checked>
+                        <span class="small fw-semibold d-inline-block mb-2">${escapeHtml(foto.nome_original || 'Foto')}</span>
+                        <img src="${escapeHtml(foto.url_arquivo)}" alt="Foto vinculada" class="img-fluid rounded mb-2" style="height:120px; width:100%; object-fit:cover;">
+                        <div class="small text-muted">${formatarDataHora(foto.data_hora_cadastro)}</div>
+                    </label>
+                `).join('');
+            } else {
+                fotosExistentesContainer.innerHTML = '';
+                fotosExistentesWrapper.classList.add('d-none');
+            }
+
+            atualizarResumoManifestacao();
+            atualizarWizardStep(0);
+            document.getElementById('cadastro-tab').click();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function carregarManifestacao(id) {
+            const response = await fetch(`/ouvidoria/api/manifestacoes/${id}`);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.erro || 'Não foi possível carregar a manifestação.');
+            }
+            return data;
+        }
+
+        async function visualizarManifestacao(id) {
+            manifestacaoDetalheAtualId = id;
+            document.getElementById('manifestacaoDetalheSubtitulo').textContent = 'Carregando...';
+            document.getElementById('manifestacaoDetalheConteudo').innerHTML = '<div class="text-center text-muted py-4">Carregando informações...</div>';
+            manifestacaoDetalheModal.show();
+            try {
+                const manifestacao = await carregarManifestacao(id);
+                document.getElementById('manifestacaoDetalheSubtitulo').textContent = `${manifestacao.protocolo} • ${formatarDataHora(manifestacao.data_registro)}`;
+                document.getElementById('manifestacaoDetalheConteudo').innerHTML = `
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <div class="wizard-summary-card h-100">
+                                <div class="section-title mb-3">Classificação e atendimento</div>
+                                <div class="wizard-summary-list">
+                                    <div class="wizard-summary-item"><strong>Classificação</strong><span>${escapeHtml(montarClassificacaoManifestacao(manifestacao))}</span></div>
+                                    <div class="wizard-summary-item"><strong>Status</strong><span>${escapeHtml(manifestacao.status || 'Não informado')}</span></div>
+                                    <div class="wizard-summary-item"><strong>Origem</strong><span>${escapeHtml(manifestacao.origem || 'Não informado')}</span></div>
+                                    <div class="wizard-summary-item"><strong>Prioridade</strong><span>${escapeHtml(manifestacao.prioridade || 'Não informado')}</span></div>
+                                    <div class="wizard-summary-item"><strong>Registrado por</strong><span>${escapeHtml(manifestacao.usuario_registro || 'Não informado')}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="wizard-summary-card h-100">
+                                <div class="section-title mb-3">Manifestante</div>
+                                <div class="wizard-summary-list">
+                                    <div class="wizard-summary-item"><strong>Nome</strong><span>${escapeHtml(manifestacao.manifestacao_anonima ? 'Manifestação anônima' : (manifestacao.nome_manifestante || 'Não informado'))}</span></div>
+                                    <div class="wizard-summary-item"><strong>Telefone</strong><span>${escapeHtml(manifestacao.telefone_manifestante || 'Não informado')}</span></div>
+                                    <div class="wizard-summary-item"><strong>E-mail</strong><span>${escapeHtml(manifestacao.email_manifestante || 'Não informado')}</span></div>
+                                    <div class="wizard-summary-item"><strong>Associação/Origem interna</strong><span>${escapeHtml(manifestacao.associacao || 'Não informado')}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="wizard-summary-card">
+                                <div class="section-title mb-3">Descrição e localização</div>
+                                <div class="row g-3">
+                                    <div class="col-lg-6"><strong>Descrição</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.descricao || 'Não informado')}</div></div>
+                                    <div class="col-lg-6"><strong>Observações internas</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.observacoes_internas || 'Não informado')}</div></div>
+                                    <div class="col-lg-6"><strong>Endereço</strong><div class="text-muted mt-1">${escapeHtml([manifestacao.logradouro, manifestacao.numero, manifestacao.complemento, manifestacao.bairro, manifestacao.cidade, manifestacao.uf].filter(Boolean).join(', ') || 'Não informado')}</div></div>
+                                    <div class="col-lg-3"><strong>CEP</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.cep || 'Não informado')}</div></div>
+                                    <div class="col-lg-3"><strong>Inscrição imobiliária</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.inscricao_imobiliaria || 'Não informado')}</div></div>
+                                    <div class="col-lg-6"><strong>Ponto de referência</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.ponto_referencia || 'Não informado')}</div></div>
+                                    <div class="col-lg-3"><strong>Latitude</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.latitude || 'Não informado')}</div></div>
+                                    <div class="col-lg-3"><strong>Longitude</strong><div class="text-muted mt-1">${escapeHtml(manifestacao.longitude || 'Não informado')}</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="wizard-summary-card">
+                                <div class="section-title mb-3">Fotos vinculadas</div>
+                                ${(manifestacao.fotos || []).length ? `
+                                    <div class="row g-3">
+                                        ${manifestacao.fotos.map(foto => `
+                                            <div class="col-md-4 col-lg-3">
+                                                <a href="${escapeHtml(foto.url_arquivo)}" target="_blank" class="text-decoration-none">
+                                                    <img src="${escapeHtml(foto.url_arquivo)}" alt="Foto da manifestação" class="img-fluid rounded shadow-sm mb-2" style="height:180px; width:100%; object-fit:cover;">
+                                                    <div class="small text-muted">${escapeHtml(foto.nome_original || 'Foto')}</div>
+                                                </a>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : '<div class="text-muted">Nenhuma foto vinculada.</div>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('manifestacaoDetalheSubtitulo').textContent = 'Erro ao carregar';
+                document.getElementById('manifestacaoDetalheConteudo').innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        async function editarManifestacao(id) {
+            try {
+                const manifestacao = await carregarManifestacao(id);
+                manifestacaoDetalheModal.hide();
+                await preencherFormularioManifestacao(manifestacao);
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function excluirManifestacao(id, protocolo) {
+            if (!confirm(`Deseja realmente excluir a manifestação ${protocolo}? Esta ação não poderá ser desfeita.`)) return;
+            const form = document.getElementById('manifestacaoExcluirForm');
+            form.action = `/ouvidoria/manifestacoes/${id}/excluir`;
+            form.submit();
+        }
+
+        async function atualizarStatusPrioridadeManifestacao(id) {
+            const statusSelect = document.querySelector(`[data-quick-status="${id}"]`);
+            const prioridadeSelect = document.querySelector(`[data-quick-prioridade="${id}"]`);
+            const feedback = document.querySelector(`[data-quick-feedback="${id}"]`);
+            if (!statusSelect || !prioridadeSelect) return;
+
+            const statusAnterior = statusSelect.dataset.valorAnterior || statusSelect.value;
+            const prioridadeAnterior = prioridadeSelect.dataset.valorAnterior || prioridadeSelect.value;
+            statusSelect.disabled = true;
+            prioridadeSelect.disabled = true;
+            if (feedback) feedback.textContent = 'Salvando...';
+
+            try {
+                const response = await fetch(`/ouvidoria/api/manifestacoes/${id}/atualizacao-rapida`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: statusSelect.value,
+                        prioridade: prioridadeSelect.value,
+                    }),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.erro || 'Não foi possível atualizar a manifestação.');
+                }
+                statusSelect.dataset.valorAnterior = statusSelect.value;
+                prioridadeSelect.dataset.valorAnterior = prioridadeSelect.value;
+                if (feedback) {
+                    feedback.textContent = 'Atualizado';
+                    window.setTimeout(() => {
+                        if (feedback.textContent === 'Atualizado') feedback.textContent = '';
+                    }, 2000);
+                }
+            } catch (error) {
+                statusSelect.value = statusAnterior;
+                prioridadeSelect.value = prioridadeAnterior;
+                alert(error.message);
+                if (feedback) feedback.textContent = 'Falha ao salvar';
+            } finally {
+                statusSelect.disabled = false;
+                prioridadeSelect.disabled = false;
+            }
+        }
+
         wizardStepButtons.forEach((button, index) => {
             button.addEventListener('click', () => {
                 if (index > wizardCurrentStep && !validarEtapa()) {
@@ -1267,8 +1588,7 @@
 
         document.getElementById('manifestacaoWizardForm')?.addEventListener('reset', () => {
             window.setTimeout(() => {
-                atualizarCamposManifestante();
-                atualizarWizardStep(0);
+                resetarFormularioManifestacao(false);
             }, 0);
         });
 
@@ -1277,6 +1597,12 @@
         document.getElementById('tipoSelect')?.addEventListener('change', e => carregarSubtipos(e.target.value));
         document.querySelectorAll('input[name="tipo_manifestante"]').forEach(input => {
             input.addEventListener('change', atualizarCamposManifestante);
+        });
+        document.getElementById('btnCancelarEdicaoManifestacao')?.addEventListener('click', resetarFormularioManifestacao);
+        document.getElementById('btnEditarNoModal')?.addEventListener('click', () => {
+            if (manifestacaoDetalheAtualId) {
+                editarManifestacao(manifestacaoDetalheAtualId);
+            }
         });
         atualizarCamposManifestante();
 
