@@ -810,6 +810,56 @@ def _coluna_existe(cur, tabela, coluna):
     return cur.fetchone() is not None
 
 
+def _listar_colunas_tabela(cur, tabela):
+    cur.execute(
+        """
+        SELECT column_name, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+        """,
+        (tabela,),
+    )
+    colunas = {}
+    for registro in cur.fetchall():
+        if isinstance(registro, dict):
+            nome = registro.get("column_name")
+            if not nome:
+                continue
+            colunas[nome] = {
+                "is_nullable": registro.get("is_nullable"),
+                "column_default": registro.get("column_default"),
+            }
+        else:
+            nome = registro[0]
+            if not nome:
+                continue
+            colunas[nome] = {
+                "is_nullable": registro[1] if len(registro) > 1 else None,
+                "column_default": registro[2] if len(registro) > 2 else None,
+            }
+    return colunas
+
+
+def _obter_classificacao_manifestacao_ouvidoria(cur, grupo_id, subgrupo_id=None, tipo_id=None, subtipo_id=None):
+    cur.execute(
+        """
+        SELECT
+            g.nome AS grupo_nome,
+            sg.nome AS subgrupo_nome,
+            t.nome AS tipo_nome,
+            st.nome AS subtipo_nome
+        FROM ouvidoria_grupos g
+        LEFT JOIN ouvidoria_subgrupos sg ON sg.id = %s
+        LEFT JOIN ouvidoria_tipos t ON t.id = %s
+        LEFT JOIN ouvidoria_subtipos st ON st.id = %s
+        WHERE g.id = %s
+        """,
+        (subgrupo_id, tipo_id, subtipo_id, grupo_id),
+    )
+    return cur.fetchone() or {}
+
+
 def _migrar_manifestacoes_ouvidoria_legadas(cur):
     if not _coluna_existe(cur, "ouvidoria_manifestacoes", "id_grupo"):
         return
@@ -1043,13 +1093,18 @@ def _gerar_protocolo_ouvidoria(cur):
     prefixo = datetime.now().strftime("OUV%Y%m%d")
     cur.execute(
         """
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS total
         FROM ouvidoria_manifestacoes
         WHERE protocolo LIKE %s
         """,
         (f"{prefixo}%",),
     )
-    sequencia = (cur.fetchone()[0] or 0) + 1
+    resultado = cur.fetchone()
+    if isinstance(resultado, dict):
+        total = resultado.get("total", 0)
+    else:
+        total = resultado[0] if resultado else 0
+    sequencia = (total or 0) + 1
     return f"{prefixo}-{sequencia:04d}"
 
 
@@ -2414,55 +2469,95 @@ def cadastrar_manifestacao_ouvidoria():
         nome_manifestante = None if manifestacao_anonima else ((request.form.get("nome_manifestante") or "").strip() or None)
         telefone_manifestante = None if manifestacao_anonima else ((request.form.get("telefone_manifestante") or "").strip() or None)
         email_manifestante = None if manifestacao_anonima else ((request.form.get("email_manifestante") or "").strip() or None)
+        classificacao = _obter_classificacao_manifestacao_ouvidoria(cur, grupo_id, subgrupo_id, tipo_id, subtipo_id)
+        metadados_manifestacoes = _listar_colunas_tabela(cur, "ouvidoria_manifestacoes")
+        colunas_manifestacoes = set(metadados_manifestacoes.keys())
+        tipo_manifestacao_legado = (
+            classificacao.get("subtipo_nome")
+            or classificacao.get("tipo_nome")
+            or classificacao.get("subgrupo_nome")
+            or classificacao.get("grupo_nome")
+            or "Manifestação"
+        )
 
         protocolo = _gerar_protocolo_ouvidoria(cur)
+        colunas_insert = [
+            "protocolo", "id_grupo", "id_subgrupo", "id_tipo", "id_subtipo",
+            "status", "prioridade", "origem", "nome_manifestante", "telefone_manifestante",
+            "email_manifestante", "descricao", "observacoes_internas", "inscricao_imobiliaria",
+            "cep", "logradouro", "numero", "complemento", "bairro", "cidade", "uf",
+            "ponto_referencia", "latitude", "longitude", "usuario_registro", "uvr", "associacao",
+        ]
+        valores_insert = [
+            protocolo,
+            grupo_id,
+            subgrupo_id,
+            tipo_id,
+            subtipo_id,
+            request.form.get("status") or "pendente",
+            request.form.get("prioridade") or "Normal",
+            request.form.get("origem") or "Web",
+            nome_manifestante,
+            telefone_manifestante,
+            email_manifestante,
+            descricao,
+            (request.form.get("observacoes_internas") or "").strip() or None,
+            (request.form.get("inscricao_imobiliaria") or "").strip() or None,
+            re.sub(r"[^0-9]", "", request.form.get("cep") or "") or None,
+            (request.form.get("logradouro") or "").strip() or None,
+            (request.form.get("numero") or "").strip() or None,
+            (request.form.get("complemento") or "").strip() or None,
+            (request.form.get("bairro") or "").strip() or None,
+            (request.form.get("cidade") or "").strip() or None,
+            (request.form.get("uf") or "").strip() or None,
+            (request.form.get("ponto_referencia") or "").strip() or None,
+            (request.form.get("latitude") or "").strip() or None,
+            (request.form.get("longitude") or "").strip() or None,
+            getattr(current_user, "username", None),
+            getattr(current_user, "uvr_acesso", None),
+            request.form.get("associacao") or None,
+        ]
+
+        colunas_legadas = {
+            "tipo_manifestacao": tipo_manifestacao_legado,
+            "categoria": classificacao.get("grupo_nome") or classificacao.get("subgrupo_nome") or tipo_manifestacao_legado,
+            "assunto": descricao or tipo_manifestacao_legado,
+            "titulo": tipo_manifestacao_legado,
+            "tema": classificacao.get("grupo_nome") or tipo_manifestacao_legado,
+            "demanda": tipo_manifestacao_legado,
+            "solicitacao": tipo_manifestacao_legado,
+            "grupo": classificacao.get("grupo_nome"),
+            "subgrupo": classificacao.get("subgrupo_nome"),
+            "tipo": classificacao.get("tipo_nome"),
+            "subtipo": classificacao.get("subtipo_nome"),
+            "manifestacao_anonima": manifestacao_anonima,
+            "anonima": manifestacao_anonima,
+            "origem_manifestacao": request.form.get("origem") or "Web",
+        }
+
+        for coluna, valor in colunas_legadas.items():
+            if coluna in colunas_manifestacoes and coluna not in colunas_insert:
+                colunas_insert.append(coluna)
+                valores_insert.append(valor)
+
+        for coluna, metadados in metadados_manifestacoes.items():
+            if coluna in colunas_insert:
+                continue
+            obrigatoria_sem_default = metadados.get("is_nullable") == "NO" and metadados.get("column_default") is None
+            valor_fallback = colunas_legadas.get(coluna)
+            if obrigatoria_sem_default and valor_fallback is not None:
+                colunas_insert.append(coluna)
+                valores_insert.append(valor_fallback)
+
+        placeholders = ", ".join(["%s"] * len(colunas_insert))
+        colunas_sql = ", ".join(colunas_insert)
         cur.execute(
-            """
-            INSERT INTO ouvidoria_manifestacoes (
-                protocolo, id_grupo, id_subgrupo, id_tipo, id_subtipo,
-                status, prioridade, origem, nome_manifestante, telefone_manifestante,
-                email_manifestante, descricao, observacoes_internas, inscricao_imobiliaria,
-                cep, logradouro, numero, complemento, bairro, cidade, uf,
-                ponto_referencia, latitude, longitude, usuario_registro, uvr, associacao
-            )
-            VALUES (
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s
-            )
+            f"""
+            INSERT INTO ouvidoria_manifestacoes ({colunas_sql})
+            VALUES ({placeholders})
             RETURNING id, protocolo
             """,
-            (
-                protocolo,
-                grupo_id,
-                subgrupo_id,
-                tipo_id,
-                subtipo_id,
-                request.form.get("status") or "pendente",
-                request.form.get("prioridade") or "Normal",
-                request.form.get("origem") or "Web",
-                nome_manifestante,
-                telefone_manifestante,
-                email_manifestante,
-                descricao,
-                (request.form.get("observacoes_internas") or "").strip() or None,
-                (request.form.get("inscricao_imobiliaria") or "").strip() or None,
-                re.sub(r"[^0-9]", "", request.form.get("cep") or "") or None,
-                (request.form.get("logradouro") or "").strip() or None,
-                (request.form.get("numero") or "").strip() or None,
-                (request.form.get("complemento") or "").strip() or None,
-                (request.form.get("bairro") or "").strip() or None,
-                (request.form.get("cidade") or "").strip() or None,
-                (request.form.get("uf") or "").strip() or None,
-                (request.form.get("ponto_referencia") or "").strip() or None,
-                (request.form.get("latitude") or "").strip() or None,
-                (request.form.get("longitude") or "").strip() or None,
-                getattr(current_user, "username", None),
-                getattr(current_user, "uvr_acesso", None),
-                request.form.get("associacao") or None,
-            ),
+            tuple(valores_insert),
         )
         manifestacao = cur.fetchone()
 
@@ -2494,7 +2589,7 @@ def cadastrar_manifestacao_ouvidoria():
         flash(f"Manifestação {manifestacao['protocolo']} registrada com sucesso.", "success")
     except Exception as e:
         conn.rollback()
-        app.logger.error(f"Erro ao cadastrar manifestação da ouvidoria: {e}")
+        app.logger.exception("Erro ao cadastrar manifestação da ouvidoria: %s", e)
         flash(f"Não foi possível registrar a manifestação: {e}", "danger")
     finally:
         cur.close()

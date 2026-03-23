@@ -190,6 +190,114 @@
             padding-left: 38px;
             border-radius: 999px;
         }
+        .wizard-shell {
+            border: 1px solid #dbe6ff;
+            border-radius: 24px;
+            background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+            padding: 22px;
+        }
+        .wizard-progress {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .wizard-step-button {
+            width: 100%;
+            border: 1px solid #dbe3f3;
+            border-radius: 18px;
+            background: #fff;
+            padding: 14px 16px;
+            text-align: left;
+            transition: all .2s ease;
+        }
+        .wizard-step-button:hover {
+            border-color: #93c5fd;
+            transform: translateY(-1px);
+        }
+        .wizard-step-button.active {
+            border-color: #0d6efd;
+            background: #eff6ff;
+            box-shadow: 0 16px 28px rgba(13, 110, 253, 0.14);
+        }
+        .wizard-step-button.completed {
+            border-color: #86efac;
+            background: #f0fdf4;
+        }
+        .wizard-step-number {
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            background: #e2e8f0;
+            color: #334155;
+            flex-shrink: 0;
+        }
+        .wizard-step-button.active .wizard-step-number {
+            background: #0d6efd;
+            color: #fff;
+        }
+        .wizard-step-button.completed .wizard-step-number {
+            background: #16a34a;
+            color: #fff;
+        }
+        .wizard-stage {
+            display: none;
+        }
+        .wizard-stage.active {
+            display: block;
+        }
+        .wizard-stage-header {
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 16px;
+            margin-bottom: 22px;
+        }
+        .wizard-stage-meta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            padding: 6px 12px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: .85rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .wizard-stage-actions {
+            border-top: 1px solid #e2e8f0;
+            margin-top: 24px;
+            padding-top: 18px;
+        }
+        .wizard-summary-card {
+            border: 1px solid #dbe6ff;
+            border-radius: 18px;
+            background: #f8fbff;
+            padding: 18px;
+            height: 100%;
+        }
+        .wizard-summary-list {
+            display: grid;
+            gap: 10px;
+        }
+        .wizard-summary-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            background: #fff;
+            padding: 12px 14px;
+        }
+        .wizard-summary-item strong {
+            display: block;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+        @media (max-width: 991.98px) {
+            .wizard-shell {
+                padding: 18px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -255,194 +363,291 @@
 
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="cadastro-pane" role="tabpanel" tabindex="0">
-                        <form method="POST" action="{{ url_for('cadastrar_manifestacao_ouvidoria') }}" enctype="multipart/form-data">
-                            <div class="row g-4">
-                                <div class="col-xl-7">
-                                    <div class="form-section">
-                                        <div class="section-title">1. Classificação da manifestação</div>
-                                        <div class="row g-3">
-                                            <div class="col-md-6">
-                                                <label class="form-label required-label">Grupo</label>
-                                                <select class="form-select" name="grupo_id" id="grupoSelect" required>
-                                                    <option value="">Selecione...</option>
-                                                    {% for grupo in hierarquia_tipologias %}
-                                                        <option value="{{ grupo.id }}">{{ grupo.nome }}</option>
-                                                    {% endfor %}
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label">Subgrupo</label>
-                                                <select class="form-select" name="subgrupo_id" id="subgrupoSelect">
-                                                    <option value="">Selecione primeiro o grupo...</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label">Tipo</label>
-                                                <select class="form-select" name="tipo_id" id="tipoSelect">
-                                                    <option value="">Selecione primeiro o subgrupo...</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label">Subtipo</label>
-                                                <select class="form-select" name="subtipo_id" id="subtipoSelect">
-                                                    <option value="">Selecione primeiro o tipo...</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label">Status inicial</label>
-                                                <select class="form-select" name="status">
-                                                    <option value="" selected>Salvar como pendente</option>
-                                                    <option value="em análise">Em análise</option>
-                                                    <option value="Não resolvida">Não resolvida</option>
-                                                    <option value="Encaminhada">Encaminhada</option>
-                                                    <option value="Arquivada">Arquivada</option>
-                                                </select>
-                                                <div class="form-text">Se nada for selecionado, a manifestação será registrada como pendente.</div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label">Prioridade</label>
-                                                <input type="text" class="form-control" value="Normal" readonly>
-                                                <div class="form-text">A prioridade inicial é salva automaticamente como Normal.</div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label">Origem</label>
-                                                <select class="form-select" name="origem">
-                                                    <option selected>Web</option>
-                                                    <option>Telefone</option>
-                                                    <option>Presencial</option>
-                                                    <option>E-mail</option>
-                                                    <option>WhatsApp</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label required-label">Descrição da ocorrência</label>
-                                                <textarea class="form-control" rows="4" name="descricao" required placeholder="Descreva o problema, impacto observado e qualquer detalhe relevante para a fiscalização."></textarea>
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label">Observações internas</label>
-                                                <textarea class="form-control" rows="3" name="observacoes_internas" placeholder="Campo útil para orientar a equipe responsável pelo atendimento."></textarea>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-xl-5">
-                                    <div class="form-section">
-                                        <div class="section-title">2. Dados do manifestante</div>
-                                        <div class="row g-3">
-                                            <div class="col-12">
-                                                <label class="form-label d-block">Identificação do manifestante</label>
-                                                <div class="d-flex flex-wrap gap-3 pt-1">
-                                                    <div class="form-check">
-                                                        <input class="form-check-input" type="radio" name="tipo_manifestante" id="manifestanteIdentificado" value="identificado" checked>
-                                                        <label class="form-check-label" for="manifestanteIdentificado">Quero me identificar</label>
+                        <form method="POST" action="{{ url_for('cadastrar_manifestacao_ouvidoria') }}" enctype="multipart/form-data" id="manifestacaoWizardForm">
+                            <div class="wizard-shell">
+                                <div class="row g-4">
+                                    <div class="col-xl-4 col-xxl-3">
+                                        <div class="wizard-progress">
+                                            <button type="button" class="wizard-step-button active" data-step-trigger="0">
+                                                <div class="d-flex gap-3 align-items-start">
+                                                    <span class="wizard-step-number">1</span>
+                                                    <div>
+                                                        <div class="fw-semibold text-primary">Classificação</div>
+                                                        <div class="small text-muted">Defina grupo, tipologia, origem e descrição da manifestação.</div>
                                                     </div>
-                                                    <div class="form-check">
-                                                        <input class="form-check-input" type="radio" name="tipo_manifestante" id="manifestanteAnonimo" value="anonimo">
-                                                        <label class="form-check-label" for="manifestanteAnonimo">Anônimo</label>
+                                                    </div>
+                                            </button>
+                                            <button type="button" class="wizard-step-button" data-step-trigger="1">
+                                                <div class="d-flex gap-3 align-items-start">
+                                                    <span class="wizard-step-number">2</span>
+                                                    <div>
+                                                        <div class="fw-semibold text-primary">Manifestante</div>
+                                                        <div class="small text-muted">Informe se o atendimento é identificado ou anônimo.</div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div id="dadosIdentificacaoManifestante" class="row g-3">
-                                                <div class="col-12">
-                                                    <label class="form-label">Nome</label>
-                                                    <input type="text" class="form-control" name="nome_manifestante" placeholder="Opcional">
+                                            </button>
+                                            <button type="button" class="wizard-step-button" data-step-trigger="2">
+                                                <div class="d-flex gap-3 align-items-start">
+                                                    <span class="wizard-step-number">3</span>
+                                                    <div>
+                                                        <div class="fw-semibold text-primary">Imóvel e localização</div>
+                                                        <div class="small text-muted">Registre endereço, CEP, inscrição e pontos de referência.</div>
+                                                    </div>
                                                 </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label">Telefone</label>
-                                                    <input type="text" class="form-control" name="telefone_manifestante" placeholder="(00) 00000-0000">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label">E-mail</label>
-                                                    <input type="email" class="form-control" name="email_manifestante" placeholder="Opcional">
-                                                </div>
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label">Associação/Origem interna</label>
-                                                <input type="text" class="form-control" name="associacao" placeholder="Opcional para identificar origem ou setor">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-xl-8">
-                                    <div class="form-section">
-                                        <div class="section-title">3. Imóvel e localização</div>
-                                        <div class="row g-3">
-                                            <div class="col-md-4">
-                                                <label class="form-label">Inscrição imobiliária</label>
-                                                <input type="text" class="form-control" name="inscricao_imobiliaria" placeholder="Cadastro do imóvel">
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label">CEP</label>
-                                                <div class="input-group">
-                                                    <input type="text" class="form-control" name="cep" id="cepInput" maxlength="9" placeholder="00000-000">
-                                                    <button class="btn btn-outline-secondary" type="button" id="btnBuscarCep"><i class="fas fa-search"></i></button>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label">Logradouro</label>
-                                                <input type="text" class="form-control" name="logradouro" id="logradouroInput">
-                                            </div>
-                                            <div class="col-md-2">
-                                                <label class="form-label">Número</label>
-                                                <input type="text" class="form-control" name="numero" id="numeroInput">
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label">Complemento</label>
-                                                <input type="text" class="form-control" name="complemento">
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label">Bairro</label>
-                                                <input type="text" class="form-control" name="bairro" id="bairroInput">
-                                            </div>
-                                            <div class="col-md-2">
-                                                <label class="form-label">UF</label>
-                                                <input type="text" class="form-control" name="uf" id="ufInput" maxlength="2">
-                                            </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label">Cidade</label>
-                                                <input type="text" class="form-control" name="cidade" id="cidadeInput">
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label">Ponto de referência</label>
-                                                <input type="text" class="form-control" name="ponto_referencia" placeholder="Ex.: ao lado da escola, próximo à praça, fundos do lote 12">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-xl-4">
-                                    <div class="form-section">
-                                        <div class="section-title">4. Coordenadas e fotos</div>
-                                        <div class="row g-3">
-                                            <div class="col-md-6 col-xl-12">
-                                                <label class="form-label">Latitude</label>
-                                                <input type="text" class="form-control" name="latitude" id="latitudeInput" placeholder="-16.123456">
-                                            </div>
-                                            <div class="col-md-6 col-xl-12">
-                                                <label class="form-label">Longitude</label>
-                                                <input type="text" class="form-control" name="longitude" id="longitudeInput" placeholder="-49.123456">
-                                            </div>
-                                            <div class="col-12 d-grid gap-2">
-                                                <button type="button" class="btn btn-outline-primary" id="btnCapturarCoordenadas">
-                                                    <i class="fas fa-crosshairs me-1"></i> Usar minha localização atual
                                                 </button>
+                                            <button type="button" class="wizard-step-button" data-step-trigger="3">
+                                                <div class="d-flex gap-3 align-items-start">
+                                                    <span class="wizard-step-number">4</span>
+                                                    <div>
+                                                        <div class="fw-semibold text-primary">Coordenadas e fotos</div>
+                                                        <div class="small text-muted">Anexe evidências e, se quiser, capture geolocalização.</div>
+                                                    </div>
+                                                </div>
+                                                </button>
+                                            <button type="button" class="wizard-step-button" data-step-trigger="4">
+                                                <div class="d-flex gap-3 align-items-start">
+                                                    <span class="wizard-step-number">5</span>
+                                                    <div>
+                                                        <div class="fw-semibold text-primary">Revisão e envio</div>
+                                                        <div class="small text-muted">Confira o resumo final antes de registrar o protocolo.</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                <div class="col-xl-8 col-xxl-9">
+                                        <div class="form-section">
+                                            <div class="wizard-stage active" data-step-index="0">
+                                                <div class="wizard-stage-header">
+                                                    <div class="wizard-stage-meta"><i class="fas fa-diagram-project"></i> Passo 1 de 5</div>
+                                                    <h2 class="h4 fw-bold mb-2">Classificação da manifestação</h2>
+                                                    <p class="text-muted mb-0">Fluxo guiado no estilo SAIP: preencha este bloco e avance para o próximo passo usando o botão <strong>Próximo</strong>.</p>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label required-label">Grupo</label>
+                                                        <select class="form-select" name="grupo_id" id="grupoSelect" required>
+                                                            <option value="">Selecione...</option>
+                                                            {% for grupo in hierarquia_tipologias %}
+                                                                <option value="{{ grupo.id }}">{{ grupo.nome }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Subgrupo</label>
+                                                        <select class="form-select" name="subgrupo_id" id="subgrupoSelect">
+                                                            <option value="">Selecione primeiro o grupo...</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Tipo</label>
+                                                        <select class="form-select" name="tipo_id" id="tipoSelect">
+                                                            <option value="">Selecione primeiro o subgrupo...</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Subtipo</label>
+                                                        <select class="form-select" name="subtipo_id" id="subtipoSelect">
+                                                            <option value="">Selecione primeiro o tipo...</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Status inicial</label>
+                                                        <select class="form-select" name="status">
+                                                            <option value="" selected>Salvar como pendente</option>
+                                                            <option value="em análise">Em análise</option>
+                                                            <option value="Não resolvida">Não resolvida</option>
+                                                            <option value="Encaminhada">Encaminhada</option>
+                                                            <option value="Arquivada">Arquivada</option>
+                                                        </select>
+                                                        <div class="form-text">Se nada for selecionado, a manifestação será registrada como pendente.</div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Prioridade</label>
+                                                        <input type="text" class="form-control" value="Normal" readonly>
+                                                        <div class="form-text">A prioridade inicial é salva automaticamente como Normal.</div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Origem</label>
+                                                        <select class="form-select" name="origem">
+                                                            <option selected>Web</option>
+                                                            <option>Telefone</option>
+                                                            <option>Presencial</option>
+                                                            <option>E-mail</option>
+                                                            <option>WhatsApp</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label required-label">Descrição da ocorrência</label>
+                                                        <textarea class="form-control" rows="4" name="descricao" required placeholder="Descreva o problema, impacto observado e qualquer detalhe relevante para a fiscalização."></textarea>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label">Observações internas</label>
+                                                        <textarea class="form-control" rows="3" name="observacoes_internas" placeholder="Campo útil para orientar a equipe responsável pelo atendimento."></textarea>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="col-12">
-                                                <label class="form-label">Fotos da situação</label>
-                                                <input type="file" class="form-control" name="fotos" multiple accept="image/*">
-                                                <div class="photo-hint mt-2">Envie uma ou mais imagens do local, fachada, ponto impactado ou evidências complementares.</div>
+                                            <div class="wizard-stage" data-step-index="1">
+                                                <div class="wizard-stage-header">
+                                                    <div class="wizard-stage-meta"><i class="fas fa-id-card"></i> Passo 2 de 5</div>
+                                                    <h2 class="h4 fw-bold mb-2">Dados do manifestante</h2>
+                                                    <p class="text-muted mb-0">Permita prosseguir com identificação completa ou registro anônimo, mantendo o fluxo mais claro para o atendimento.</p>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-12">
+                                                        <label class="form-label d-block">Identificação do manifestante</label>
+                                                        <div class="d-flex flex-wrap gap-3 pt-1">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="radio" name="tipo_manifestante" id="manifestanteIdentificado" value="identificado" checked>
+                                                                <label class="form-check-label" for="manifestanteIdentificado">Quero me identificar</label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="radio" name="tipo_manifestante" id="manifestanteAnonimo" value="anonimo">
+                                                                <label class="form-check-label" for="manifestanteAnonimo">Anônimo</label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div id="dadosIdentificacaoManifestante" class="row g-3">
+                                                        <div class="col-12">
+                                                            <label class="form-label">Nome</label>
+                                                            <input type="text" class="form-control" name="nome_manifestante" placeholder="Opcional">
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="form-label">Telefone</label>
+                                                            <input type="text" class="form-control" name="telefone_manifestante" placeholder="(00) 00000-0000">
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="form-label">E-mail</label>
+                                                            <input type="email" class="form-control" name="email_manifestante" placeholder="Opcional">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label">Associação/Origem interna</label>
+                                                        <input type="text" class="form-control" name="associacao" placeholder="Opcional para identificar origem ou setor">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <div class="wizard-stage" data-step-index="2">
+                                                <div class="wizard-stage-header">
+                                                    <div class="wizard-stage-meta"><i class="fas fa-location-dot"></i> Passo 3 de 5</div>
+                                                    <h2 class="h4 fw-bold mb-2">Imóvel e localização</h2>
+                                                    <p class="text-muted mb-0">Centralize o endereço da ocorrência em uma etapa dedicada, com apoio de busca por CEP e campos de referência.</p>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Inscrição imobiliária</label>
+                                                        <input type="text" class="form-control" name="inscricao_imobiliaria" placeholder="Cadastro do imóvel">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">CEP</label>
+                                                        <div class="input-group">
+                                                            <input type="text" class="form-control" name="cep" id="cepInput" maxlength="9" placeholder="00000-000">
+                                                            <button class="btn btn-outline-secondary" type="button" id="btnBuscarCep"><i class="fas fa-search"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label">Logradouro</label>
+                                                        <input type="text" class="form-control" name="logradouro" id="logradouroInput">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="form-label">Número</label>
+                                                        <input type="text" class="form-control" name="numero" id="numeroInput">
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Complemento</label>
+                                                        <input type="text" class="form-control" name="complemento">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Bairro</label>
+                                                        <input type="text" class="form-control" name="bairro" id="bairroInput">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="form-label">UF</label>
+                                                        <input type="text" class="form-control" name="uf" id="ufInput" maxlength="2">
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label">Cidade</label>
+                                                        <input type="text" class="form-control" name="cidade" id="cidadeInput">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label">Ponto de referência</label>
+                                                        <input type="text" class="form-control" name="ponto_referencia" placeholder="Ex.: ao lado da escola, próximo à praça, fundos do lote 12">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="wizard-stage" data-step-index="3">
+                                                <div class="wizard-stage-header">
+                                                    <div class="wizard-stage-meta"><i class="fas fa-camera"></i> Passo 4 de 5</div>
+                                                    <h2 class="h4 fw-bold mb-2">Coordenadas e fotos</h2>
+                                                    <p class="text-muted mb-0">Colete evidências de campo antes da finalização, mantendo tudo pronto para a fiscalização.</p>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Latitude</label>
+                                                        <input type="text" class="form-control" name="latitude" id="latitudeInput" placeholder="-16.123456">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Longitude</label>
+                                                        <input type="text" class="form-control" name="longitude" id="longitudeInput" placeholder="-49.123456">
+                                                    </div>
+                                                    <div class="col-12 d-grid gap-2">
+                                                        <button type="button" class="btn btn-outline-primary" id="btnCapturarCoordenadas">
+                                                            <i class="fas fa-crosshairs me-1"></i> Usar minha localização atual
+                                                        </button>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label">Fotos da situação</label>
+                                                        <input type="file" class="form-control" name="fotos" id="fotosInput" multiple accept="image/*">
+                                                        <div class="photo-hint mt-2">Envie uma ou mais imagens do local, fachada, ponto impactado ou evidências complementares.</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="wizard-stage" data-step-index="4">
+                                                <div class="wizard-stage-header">
+                                                    <div class="wizard-stage-meta"><i class="fas fa-clipboard-check"></i> Passo 5 de 5</div>
+                                                    <h2 class="h4 fw-bold mb-2">Revisão e finalização</h2>
+                                                    <p class="text-muted mb-0">Revise as principais informações preenchidas. Ao confirmar, o sistema registrará a manifestação e gerará o protocolo.</p>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <div class="wizard-summary-card">
+                                                            <div class="section-title mb-3">Resumo da classificação</div>
+                                                            <div class="wizard-summary-list">
+                                                                <div class="wizard-summary-item"><strong>Grupo</strong><span data-review="grupo">Não informado</span></div>
+                                                                <div class="wizard-summary-item"><strong>Subgrupo / Tipo / Subtipo</strong><span data-review="tipologia">Não informado</span></div>
+                                                                <div class="wizard-summary-item"><strong>Origem e status</strong><span data-review="origem_status">Não informado</span></div>
+                                                                <div class="wizard-summary-item"><strong>Descrição</strong><span data-review="descricao">Não informado</span></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="wizard-summary-card">
+                                                            <div class="section-title mb-3">Manifestante e localização</div>
+                                                            <div class="wizard-summary-list">
+                                                                <div class="wizard-summary-item"><strong>Manifestante</strong><span data-review="manifestante">Não informado</span></div>
+                                                                <div class="wizard-summary-item"><strong>Contato</strong><span data-review="contato">Não informado</span></div>
+                                                                <div class="wizard-summary-item"><strong>Endereço</strong><span data-review="endereco">Não informado</span></div>
+                                                                <div class="wizard-summary-item"><strong>Coordenadas / fotos</strong><span data-review="coordenadas_fotos">Não informado</span></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="wizard-stage-actions d-flex flex-wrap justify-content-between gap-2">
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <button type="button" class="btn btn-outline-secondary" id="btnWizardPrev" disabled><i class="fas fa-arrow-left me-1"></i> Voltar</button>
+                                                    <button type="reset" class="btn btn-outline-secondary"><i class="fas fa-eraser me-1"></i> Limpar</button>
+                                                </div>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <button type="button" class="btn btn-primary" id="btnWizardNext">Próximo <i class="fas fa-arrow-right ms-1"></i></button>
+                                                    <button type="submit" class="btn btn-success d-none" id="btnWizardSubmit"><i class="fas fa-floppy-disk me-1"></i> Registrar manifestação</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
-                                <button type="reset" class="btn btn-outline-secondary"><i class="fas fa-eraser me-1"></i> Limpar</button>
-                                <button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk me-1"></i> Registrar manifestação</button>
-                            </div>
                         </form>
 
                         <div class="mt-5">
@@ -947,6 +1152,126 @@
             }
         }
 
+        const wizardStages = Array.from(document.querySelectorAll('.wizard-stage'));
+        const wizardStepButtons = Array.from(document.querySelectorAll('.wizard-step-button'));
+        const wizardPrevButton = document.getElementById('btnWizardPrev');
+        const wizardNextButton = document.getElementById('btnWizardNext');
+        const wizardSubmitButton = document.getElementById('btnWizardSubmit');
+        let wizardCurrentStep = 0;
+
+        function obterTextoSelect(selectId) {
+            const select = document.getElementById(selectId);
+            return select?.selectedOptions?.[0]?.textContent?.trim() || 'Não informado';
+        }
+
+        function obterValorCampo(selector, fallback = 'Não informado') {
+            const campo = document.querySelector(selector);
+            const valor = campo?.value?.trim();
+            return valor || fallback;
+        }
+
+        function atualizarResumoManifestacao() {
+            const grupo = obterTextoSelect('grupoSelect');
+            const subgrupo = obterTextoSelect('subgrupoSelect');
+            const tipo = obterTextoSelect('tipoSelect');
+            const subtipo = obterTextoSelect('subtipoSelect');
+            const origem = document.querySelector('[name="origem"]')?.value || 'Web';
+            const status = document.querySelector('[name="status"]')?.value || 'Pendente';
+            const descricao = obterValorCampo('[name="descricao"]');
+            const anonimo = document.getElementById('manifestanteAnonimo')?.checked;
+            const nome = anonimo ? 'Manifestação anônima' : obterValorCampo('[name="nome_manifestante"]', 'Manifestante não identificado');
+            const telefone = obterValorCampo('[name="telefone_manifestante"]', 'Telefone não informado');
+            const email = obterValorCampo('[name="email_manifestante"]', 'E-mail não informado');
+            const logradouro = obterValorCampo('#logradouroInput', '');
+            const numero = obterValorCampo('#numeroInput', 's/n');
+            const bairro = obterValorCampo('#bairroInput', '');
+            const cidade = obterValorCampo('#cidadeInput', '');
+            const uf = obterValorCampo('#ufInput', '');
+            const pontoReferencia = obterValorCampo('[name="ponto_referencia"]', 'Sem ponto de referência');
+            const latitude = obterValorCampo('#latitudeInput', 'Latitude não informada');
+            const longitude = obterValorCampo('#longitudeInput', 'Longitude não informada');
+            const totalFotos = document.getElementById('fotosInput')?.files?.length || 0;
+
+            document.querySelector('[data-review="grupo"]').textContent = grupo;
+            document.querySelector('[data-review="tipologia"]').textContent = [subgrupo, tipo, subtipo].filter(valor => valor && valor !== 'Não informado').join(' / ') || 'Não informado';
+            document.querySelector('[data-review="origem_status"]').textContent = `${origem} • ${status}`;
+            document.querySelector('[data-review="descricao"]').textContent = descricao;
+            document.querySelector('[data-review="manifestante"]').textContent = nome;
+            document.querySelector('[data-review="contato"]').textContent = `${telefone} • ${email}`;
+            document.querySelector('[data-review="endereco"]').textContent = [logradouro, numero, bairro, cidade, uf].filter(Boolean).join(', ') || pontoReferencia;
+            document.querySelector('[data-review="coordenadas_fotos"]').textContent = `${latitude} / ${longitude} • ${totalFotos} foto(s) selecionada(s)`;
+        }
+
+        function validarEtapa(etapaIndex = wizardCurrentStep) {
+            const etapa = wizardStages[etapaIndex];
+            if (!etapa) return true;
+            const campos = Array.from(etapa.querySelectorAll('input, select, textarea'));
+            for (const campo of campos) {
+                if (campo.disabled || campo.type === 'hidden') continue;
+                const estiloAnterior = etapa.style.display;
+                if (etapaIndex !== wizardCurrentStep && !etapa.classList.contains('active')) {
+                    etapa.style.display = 'block';
+                }
+                if (!campo.checkValidity()) {
+                    etapa.style.display = estiloAnterior;
+                    campo.reportValidity();
+                    campo.focus();
+                    return false;
+                }
+                etapa.style.display = estiloAnterior;
+            }
+            return true;
+        }
+
+        function atualizarWizardStep(targetStep) {
+            wizardCurrentStep = Math.min(Math.max(targetStep, 0), wizardStages.length - 1);
+            wizardStages.forEach((stage, index) => {
+                stage.classList.toggle('active', index === wizardCurrentStep);
+            });
+            wizardStepButtons.forEach((button, index) => {
+                button.classList.toggle('active', index === wizardCurrentStep);
+                button.classList.toggle('completed', index < wizardCurrentStep);
+            });
+            wizardPrevButton.disabled = wizardCurrentStep === 0;
+            const ultimaEtapa = wizardCurrentStep === wizardStages.length - 1;
+            wizardNextButton.classList.toggle('d-none', ultimaEtapa);
+            wizardSubmitButton.classList.toggle('d-none', !ultimaEtapa);
+            if (ultimaEtapa) {
+                atualizarResumoManifestacao();
+            }
+        }
+
+        wizardStepButtons.forEach((button, index) => {
+            button.addEventListener('click', () => {
+                if (index > wizardCurrentStep && !validarEtapa()) {
+                    return;
+                }
+                atualizarWizardStep(index);
+            });
+        });
+
+        wizardPrevButton?.addEventListener('click', () => atualizarWizardStep(wizardCurrentStep - 1));
+        wizardNextButton?.addEventListener('click', () => {
+            if (!validarEtapa()) return;
+            atualizarWizardStep(wizardCurrentStep + 1);
+        });
+
+        document.getElementById('manifestacaoWizardForm')?.addEventListener('submit', event => {
+            atualizarResumoManifestacao();
+            const etapaInvalida = wizardStages.findIndex((_, index) => !validarEtapa(index));
+            if (etapaInvalida !== -1) {
+                event.preventDefault();
+                atualizarWizardStep(etapaInvalida);
+            }
+        });
+
+        document.getElementById('manifestacaoWizardForm')?.addEventListener('reset', () => {
+            window.setTimeout(() => {
+                atualizarCamposManifestante();
+                atualizarWizardStep(0);
+            }, 0);
+        });
+
         document.getElementById('grupoSelect')?.addEventListener('change', e => carregarSubgrupos(e.target.value));
         document.getElementById('subgrupoSelect')?.addEventListener('change', e => carregarTipos(e.target.value));
         document.getElementById('tipoSelect')?.addEventListener('change', e => carregarSubtipos(e.target.value));
@@ -1036,6 +1361,8 @@
             }
             await recarregarHierarquia();
         }
+
+        atualizarWizardStep(0);
 
         renderizarGestaoTipologias();
     </script>
