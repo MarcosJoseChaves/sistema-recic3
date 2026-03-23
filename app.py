@@ -828,7 +828,7 @@ def _coluna_existe(cur, tabela, coluna):
 def _listar_colunas_tabela(cur, tabela):
     cur.execute(
         """
-        SELECT column_name, is_nullable, column_default
+        SELECT column_name, is_nullable, column_default, data_type, character_maximum_length
         FROM information_schema.columns
         WHERE table_schema = current_schema()
           AND table_name = %s
@@ -844,6 +844,8 @@ def _listar_colunas_tabela(cur, tabela):
             colunas[nome] = {
                 "is_nullable": registro.get("is_nullable"),
                 "column_default": registro.get("column_default"),
+                "data_type": registro.get("data_type"),
+                "character_maximum_length": registro.get("character_maximum_length"),
             }
         else:
             nome = registro[0]
@@ -852,8 +854,38 @@ def _listar_colunas_tabela(cur, tabela):
             colunas[nome] = {
                 "is_nullable": registro[1] if len(registro) > 1 else None,
                 "column_default": registro[2] if len(registro) > 2 else None,
+                "data_type": registro[3] if len(registro) > 3 else None,
+                "character_maximum_length": registro[4] if len(registro) > 4 else None,
             }
     return colunas
+
+
+def _ajustar_valores_para_limites_colunas(valores_por_coluna, metadados_colunas, contexto_log):
+    valores_ajustados = {}
+    truncamentos = []
+
+    for coluna, valor in valores_por_coluna.items():
+        metadados = metadados_colunas.get(coluna) or {}
+        limite = metadados.get("character_maximum_length")
+        data_type = (metadados.get("data_type") or "").lower()
+
+        if valor == "":
+            valor = None
+
+        if isinstance(valor, str) and limite and data_type in {"character varying", "character", "varchar", "char"} and len(valor) > limite:
+            valor = valor[:limite].rstrip()
+            truncamentos.append(f"{coluna}({limite})")
+
+        valores_ajustados[coluna] = valor
+
+    if truncamentos:
+        app.logger.warning(
+            "Ouvidoria: valores truncados em %s para respeitar o schema legado: %s",
+            contexto_log,
+            ", ".join(truncamentos),
+        )
+
+    return valores_ajustados
 
 
 def _obter_classificacao_manifestacao_ouvidoria(cur, grupo_id, subgrupo_id=None, tipo_id=None, subtipo_id=None):
@@ -2622,19 +2654,28 @@ def cadastrar_manifestacao_ouvidoria():
             "origem_manifestacao": request.form.get("origem") or "Web",
         }
 
+        valores_por_coluna = dict(zip(colunas_insert, valores_insert))
+
         for coluna, valor in colunas_legadas.items():
-            if coluna in colunas_manifestacoes and coluna not in colunas_insert:
-                colunas_insert.append(coluna)
-                valores_insert.append(valor)
+            if coluna in colunas_manifestacoes and coluna not in valores_por_coluna:
+                valores_por_coluna[coluna] = valor
 
         for coluna, metadados in metadados_manifestacoes.items():
-            if coluna in colunas_insert:
+            if coluna in valores_por_coluna:
                 continue
             obrigatoria_sem_default = metadados.get("is_nullable") == "NO" and metadados.get("column_default") is None
             valor_fallback = colunas_legadas.get(coluna)
             if obrigatoria_sem_default and valor_fallback is not None:
-                colunas_insert.append(coluna)
-                valores_insert.append(valor_fallback)
+                valores_por_coluna[coluna] = valor_fallback
+
+        valores_por_coluna = _ajustar_valores_para_limites_colunas(
+            valores_por_coluna,
+            metadados_manifestacoes,
+            "cadastro de manifestação",
+        )
+
+        colunas_insert = list(valores_por_coluna.keys())
+        valores_insert = list(valores_por_coluna.values())
 
         placeholders = ", ".join(["%s"] * len(colunas_insert))
         colunas_sql = ", ".join(colunas_insert)
@@ -2788,6 +2829,12 @@ def editar_manifestacao_ouvidoria(manifestacao_id):
         for coluna, valor in colunas_legadas.items():
             if coluna in metadados_manifestacoes:
                 valores_update[coluna] = valor
+
+        valores_update = _ajustar_valores_para_limites_colunas(
+            valores_update,
+            metadados_manifestacoes,
+            f"edição da manifestação {manifestacao_id}",
+        )
 
         colunas_sql = ", ".join(f"{coluna} = %s" for coluna in valores_update.keys())
         cur.execute(
