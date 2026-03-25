@@ -168,6 +168,109 @@
             background: #f8fbff;
             font-size: .92rem;
         }
+        .classificacao-visual-card {
+            border: 1px solid #dbe6ff;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+            padding: 16px 18px;
+        }
+        .classificacao-visual-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .classificacao-visual-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+        .classificacao-visual-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid currentColor;
+            flex-shrink: 0;
+            font-size: 1rem;
+        }
+        .classificacao-visual-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+        .classificacao-visual-pill {
+            border: 1px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: #f8fafc;
+            min-height: 78px;
+        }
+        .classificacao-visual-pill.active {
+            border-style: solid;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        }
+        .classificacao-visual-pill-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: .8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+        .classificacao-visual-pill-value {
+            font-weight: 600;
+            color: #334155;
+            line-height: 1.35;
+        }
+        .classificacao-visual-pill-placeholder {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        .classificacao-registrada {
+            border: 1px solid #dbe6ff;
+            border-radius: 14px;
+            background: #f8fbff;
+            padding: 10px 12px;
+        }
+        .classificacao-registrada-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .classificacao-registrada-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            min-width: 0;
+        }
+        .classificacao-registrada-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid currentColor;
+            flex-shrink: 0;
+            font-size: .85rem;
+        }
+        .classificacao-registrada-trilha {
+            font-size: .84rem;
+            color: #475569;
+            line-height: 1.35;
+        }
         .empty-state {
             border: 2px dashed #dbe3f3;
             border-radius: 18px;
@@ -463,6 +566,9 @@
                                                             <option value="">Selecione primeiro o tipo...</option>
                                                         </select>
                                                     </div>
+                                                    <div class="col-12">
+                                                        <div id="classificacaoVisual" class="classificacao-visual-card"></div>
+                                                    </div>
                                                     <div class="col-md-4">
                                                         <label class="form-label">Status inicial</label>
                                                         <select class="form-select" name="status">
@@ -692,7 +798,11 @@
                                             <tr>
                                                 <td class="fw-semibold">{{ item.protocolo }}</td>
                                                 <td>{{ item.data_registro.strftime('%d/%m/%Y %H:%M') if item.data_registro else '' }}</td>
-                                                <td>
+                                                <td class="js-classificacao-registrada"
+                                                    data-grupo="{{ item.grupo_nome or '' }}"
+                                                    data-subgrupo="{{ item.subgrupo_nome or '' }}"
+                                                    data-tipo="{{ item.tipo_nome or '' }}"
+                                                    data-subtipo="{{ item.subtipo_nome or '' }}">
                                                     <div>{{ item.grupo_nome }}</div>
                                                     <small class="text-muted">{{ item.subgrupo_nome or '—' }} / {{ item.tipo_nome or '—' }} / {{ item.subtipo_nome or '—' }}</small>
                                                 </td>
@@ -919,6 +1029,99 @@
             });
         }
 
+        function obterGrupoPorId(grupoId) {
+            return hierarquiaAtual.find(item => String(item.id) === String(grupoId));
+        }
+
+        function obterSubgrupoPorId(grupo, subgrupoId) {
+            return (grupo?.subgrupos || []).find(item => String(item.id) === String(subgrupoId));
+        }
+
+        function obterTipoPorId(subgrupo, tipoId) {
+            return (subgrupo?.tipos || []).find(item => String(item.id) === String(tipoId));
+        }
+
+        function montarPillClassificacao({ label, icon, valor, estilo, placeholder }) {
+            const ativo = Boolean(valor);
+            const estiloInline = ativo
+                ? `color:${estilo.color}; background:${estilo.background}; border-color:${estilo.border};`
+                : '';
+            return `
+                <div class="classificacao-visual-pill ${ativo ? 'active' : ''}" style="${estiloInline}">
+                    <div class="classificacao-visual-pill-label" ${ativo ? `style="color:${estilo.color};"` : ''}>
+                        <i class="${icon}"></i>
+                        <span>${label}</span>
+                    </div>
+                    <div class="classificacao-visual-pill-value ${ativo ? '' : 'classificacao-visual-pill-placeholder'}">${escapeHtml(valor || placeholder)}</div>
+                </div>
+            `;
+        }
+
+        function renderizarClassificacaoVisual() {
+            const container = document.getElementById('classificacaoVisual');
+            if (!container) return;
+
+            const grupoId = document.getElementById('grupoSelect')?.value;
+            const subgrupoId = document.getElementById('subgrupoSelect')?.value;
+            const tipoId = document.getElementById('tipoSelect')?.value;
+            const subtipoNome = document.getElementById('subtipoSelect')?.selectedOptions?.[0]?.textContent?.trim();
+            const grupo = obterGrupoPorId(grupoId);
+            const subgrupo = obterSubgrupoPorId(grupo, subgrupoId);
+            const tipo = obterTipoPorId(subgrupo, tipoId);
+            const estilo = obterEstiloGrupo(grupo?.nome);
+            const grupoNome = grupo?.nome || '';
+            const subtipoValor = subtipoNome && subtipoNome !== 'Selecione primeiro o tipo...' && subtipoNome !== 'Selecione...' ? subtipoNome : '';
+
+            container.innerHTML = `
+                <div class="classificacao-visual-header">
+                    <div class="classificacao-visual-title">
+                        <span class="classificacao-visual-icon" style="color:${estilo.color}; background:${estilo.background}; border-color:${estilo.border};">
+                            <i class="${estilo.icon}"></i>
+                        </span>
+                        <div>
+                            <div class="small text-muted text-uppercase fw-semibold">Identificação visual da tipologia</div>
+                            <div class="fw-bold ${grupoNome ? 'text-primary' : 'text-muted'}">${escapeHtml(grupoNome || 'Selecione um grupo para carregar o padrão visual')}</div>
+                        </div>
+                    </div>
+                    <span class="badge rounded-pill" style="color:${estilo.color}; background:${estilo.background}; border:1px solid ${estilo.border};">${escapeHtml(grupoNome ? estilo.etiqueta : 'Tipologia')}</span>
+                </div>
+                <div class="classificacao-visual-steps">
+                    ${montarPillClassificacao({ label: 'Subgrupo', icon: 'fas fa-folder-tree', valor: subgrupo?.nome, estilo, placeholder: 'Selecione um subgrupo' })}
+                    ${montarPillClassificacao({ label: 'Tipo', icon: 'fas fa-sitemap', valor: tipo?.nome, estilo, placeholder: 'Selecione um tipo' })}
+                    ${montarPillClassificacao({ label: 'Subtipo', icon: 'fas fa-tag', valor: subtipoValor, estilo, placeholder: 'Selecione um subtipo' })}
+                </div>
+            `;
+        }
+
+        function montarClassificacaoRegistrada(grupoNome, subgrupoNome, tipoNome, subtipoNome) {
+            const estilo = obterEstiloGrupo(grupoNome);
+            const trilha = [subgrupoNome, tipoNome, subtipoNome].filter(Boolean).join(' / ') || 'Sem subgrupo/tipo/subtipo';
+            return `
+                <div class="classificacao-registrada">
+                    <div class="classificacao-registrada-head">
+                        <div class="classificacao-registrada-title">
+                            <span class="classificacao-registrada-icon" style="color:${estilo.color}; background:${estilo.background}; border-color:${estilo.border};">
+                                <i class="${estilo.icon}"></i>
+                            </span>
+                            <span class="text-truncate">${escapeHtml(grupoNome || 'Grupo não informado')}</span>
+                        </div>
+                        <span class="badge rounded-pill" style="color:${estilo.color}; background:${estilo.background}; border:1px solid ${estilo.border};">${escapeHtml(estilo.etiqueta)}</span>
+                    </div>
+                    <div class="classificacao-registrada-trilha">${escapeHtml(trilha)}</div>
+                </div>
+            `;
+        }
+
+        function aplicarClassificacaoNasManifestacoesRegistradas() {
+            document.querySelectorAll('.js-classificacao-registrada').forEach(celula => {
+                const grupo = celula.dataset.grupo || '';
+                const subgrupo = celula.dataset.subgrupo || '';
+                const tipo = celula.dataset.tipo || '';
+                const subtipo = celula.dataset.subtipo || '';
+                celula.innerHTML = montarClassificacaoRegistrada(grupo, subgrupo, tipo, subtipo);
+            });
+        }
+
         async function carregarSubgrupos(grupoId, selectedValue = '') {
             const select = document.getElementById('subgrupoSelect');
             const tipoSelect = document.getElementById('tipoSelect');
@@ -927,11 +1130,13 @@
             preencherSelect(subtipoSelect, [], 'Selecione primeiro o tipo...');
             if (!grupoId) {
                 preencherSelect(select, [], 'Selecione primeiro o grupo...');
+                renderizarClassificacaoVisual();
                 return;
             }
             const response = await fetch(`/ouvidoria/api/subgrupos/${grupoId}`);
             const dados = await response.json();
             preencherSelect(select, dados, 'Selecione...', selectedValue);
+            renderizarClassificacaoVisual();
         }
 
         async function carregarTipos(subgrupoId, selectedValue = '') {
@@ -940,22 +1145,26 @@
             preencherSelect(subtipoSelect, [], 'Selecione primeiro o tipo...');
             if (!subgrupoId) {
                 preencherSelect(select, [], 'Selecione primeiro o subgrupo...');
+                renderizarClassificacaoVisual();
                 return;
             }
             const response = await fetch(`/ouvidoria/api/tipos/${subgrupoId}`);
             const dados = await response.json();
             preencherSelect(select, dados, 'Selecione...', selectedValue);
+            renderizarClassificacaoVisual();
         }
 
         async function carregarSubtipos(tipoId, selectedValue = '') {
             const select = document.getElementById('subtipoSelect');
             if (!tipoId) {
                 preencherSelect(select, [], 'Selecione primeiro o tipo...');
+                renderizarClassificacaoVisual();
                 return;
             }
             const response = await fetch(`/ouvidoria/api/subtipos/${tipoId}`);
             const dados = await response.json();
             preencherSelect(select, dados, 'Selecione...', selectedValue);
+            renderizarClassificacaoVisual();
         }
 
         function contarDescendentes(grupo) {
@@ -1327,15 +1536,6 @@
             return data.toLocaleString('pt-BR');
         }
 
-        function montarClassificacaoManifestacao(manifestacao) {
-            return [
-                manifestacao.grupo_nome,
-                manifestacao.subgrupo_nome,
-                manifestacao.tipo_nome,
-                manifestacao.subtipo_nome,
-            ].filter(Boolean).join(' / ') || 'Não informado';
-        }
-
         function resetarFormularioManifestacao(limparCampos = true) {
             manifestacaoWizardForm.action = "{{ url_for('cadastrar_manifestacao_ouvidoria') }}";
             if (limparCampos) {
@@ -1350,6 +1550,7 @@
             preencherSelect(document.getElementById('tipoSelect'), [], 'Selecione primeiro o subgrupo...');
             preencherSelect(document.getElementById('subtipoSelect'), [], 'Selecione primeiro o tipo...');
             atualizarCamposManifestante();
+            renderizarClassificacaoVisual();
             atualizarWizardStep(0);
         }
 
@@ -1446,7 +1647,10 @@
                             <div class="wizard-summary-card h-100">
                                 <div class="section-title mb-3">Classificação e atendimento</div>
                                 <div class="wizard-summary-list">
-                                    <div class="wizard-summary-item"><strong>Classificação</strong><span>${escapeHtml(montarClassificacaoManifestacao(manifestacao))}</span></div>
+                                    <div class="wizard-summary-item">
+                                        <strong>Classificação</strong>
+                                        <div class="w-100">${montarClassificacaoRegistrada(manifestacao.grupo_nome, manifestacao.subgrupo_nome, manifestacao.tipo_nome, manifestacao.subtipo_nome)}</div>
+                                    </div>
                                     <div class="wizard-summary-item"><strong>Status</strong><span>${escapeHtml(manifestacao.status || 'Não informado')}</span></div>
                                     <div class="wizard-summary-item"><strong>Origem</strong><span>${escapeHtml(manifestacao.origem || 'Não informado')}</span></div>
                                     <div class="wizard-summary-item"><strong>Prioridade</strong><span>${escapeHtml(manifestacao.prioridade || 'Não informado')}</span></div>
@@ -1599,6 +1803,7 @@
         document.getElementById('grupoSelect')?.addEventListener('change', e => carregarSubgrupos(e.target.value));
         document.getElementById('subgrupoSelect')?.addEventListener('change', e => carregarTipos(e.target.value));
         document.getElementById('tipoSelect')?.addEventListener('change', e => carregarSubtipos(e.target.value));
+        document.getElementById('subtipoSelect')?.addEventListener('change', renderizarClassificacaoVisual);
         document.querySelectorAll('input[name="tipo_manifestante"]').forEach(input => {
             input.addEventListener('change', atualizarCamposManifestante);
         });
@@ -1609,6 +1814,8 @@
             }
         });
         atualizarCamposManifestante();
+        renderizarClassificacaoVisual();
+        aplicarClassificacaoNasManifestacoesRegistradas();
 
         document.getElementById('btnBuscarCep')?.addEventListener('click', async () => {
             const cepInput = document.getElementById('cepInput');
