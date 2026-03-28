@@ -2381,6 +2381,208 @@ def api_hierarquia_ouvidoria():
         conn.close()
 
 
+def _resolver_caminhos_cadastro_pessoa_fisica():
+    caminhos = []
+    caminho_env = (os.getenv("CADASTRO_PESSOA_FISICA_CSV") or "").strip()
+    if caminho_env:
+        caminhos.append(caminho_env)
+    caminhos.extend([
+        r"C:\sistema_web32_novo\cadastro_pessoa_fisica.csv",
+        os.path.join(app.root_path, "cadastro_pessoa_fisica.csv"),
+        os.path.join(os.getcwd(), "cadastro_pessoa_fisica.csv"),
+    ])
+    caminhos_unicos = []
+    for caminho in caminhos:
+        if caminho and caminho not in caminhos_unicos:
+            caminhos_unicos.append(caminho)
+    return caminhos_unicos
+
+
+def _carregar_manifestantes_csv():
+    aliases_nome = {
+        "nome",
+        "nome_civil",
+        "nome civil",
+        "nome_completo",
+        "nome completo",
+        "nome_pf",
+    }
+    aliases_cpf = {
+        "cpf",
+        "cpf_pf",
+        "cpf pf",
+        "cpf_pessoa_fisica",
+        "cpf pessoa fisica",
+    }
+
+    for caminho in _resolver_caminhos_cadastro_pessoa_fisica():
+        if not os.path.exists(caminho):
+            continue
+        for encoding in ("utf-8-sig", "latin-1"):
+            try:
+                with open(caminho, "r", encoding=encoding, newline="") as arquivo_csv:
+                    leitor = csv.DictReader(arquivo_csv, delimiter=";")
+                    if not leitor.fieldnames:
+                        continue
+
+                    campos = {str(coluna).strip().lower(): coluna for coluna in leitor.fieldnames}
+                    campo_nome = next((campos[chave] for chave in aliases_nome if chave in campos), None)
+                    campo_cpf = next((campos[chave] for chave in aliases_cpf if chave in campos), None)
+
+                    # Fallback por posição para layouts sem cabeçalho padrão:
+                    # ex.: codigo;nome_civil;cpf_pf
+                    if not campo_nome and len(leitor.fieldnames) >= 2:
+                        campo_nome = leitor.fieldnames[1]
+                    elif not campo_nome and len(leitor.fieldnames) == 1:
+                        campo_nome = leitor.fieldnames[0]
+
+                    if not campo_cpf and len(leitor.fieldnames) >= 3:
+                        campo_cpf = leitor.fieldnames[2]
+                    elif not campo_cpf and len(leitor.fieldnames) >= 2:
+                        campo_cpf = leitor.fieldnames[1]
+
+                    registros = []
+                    for linha in leitor:
+                        if not linha:
+                            continue
+                        nome = (linha.get(campo_nome) if campo_nome else "") or ""
+                        cpf = (linha.get(campo_cpf) if campo_cpf else "") or ""
+                        nome = nome.strip()
+                        cpf = re.sub(r"[^0-9]", "", cpf)
+                        if not nome and not cpf:
+                            continue
+                        registros.append({"nome": nome, "cpf": cpf})
+                    return registros, caminho
+            except Exception:
+                continue
+    return [], None
+
+
+def _buscar_manifestantes_neondb(termo_consulta, limite=20):
+    termo = (termo_consulta or "").strip()
+    if len(termo) < 2:
+        return []
+
+    termo_cpf = re.sub(r"[^0-9]", "", termo)
+    termo_nome = f"%{termo}%"
+    termo_cpf_like = f"%{termo_cpf}%"
+
+    conn = None
+    cur = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # compatível com os 2 nomes de tabela
+        tabelas_candidatas = ["cadastro_pessoa_fisica", "cadastro_pessoa_fisica_municipal"]
+        tabela_encontrada = None
+        for nome_tabela in tabelas_candidatas:
+            cur.execute("SELECT to_regclass(%s) AS tabela", (f"public.{nome_tabela}",))
+            resultado = cur.fetchone()
+            if resultado and resultado.get("tabela"):
+                tabela_encontrada = nome_tabela
+                break
+
+        if not tabela_encontrada:
+            return []
+
+        cur.execute(
+            f"""
+            SELECT
+                TRIM(COALESCE(nome_civil, '')) AS nome,
+                REGEXP_REPLACE(COALESCE(cpf_pf, ''), '[^0-9]', '', 'g') AS cpf
+            FROM {tabela_encontrada}
+            WHERE
+                (COALESCE(nome_civil, '') ILIKE %s)
+                OR (%s <> '' AND REGEXP_REPLACE(COALESCE(cpf_pf, ''), '[^0-9]', '', 'g') LIKE %s)
+            ORDER BY nome_civil ASC
+            LIMIT %s
+            """,
+            (termo_nome, termo_cpf, termo_cpf_like, limite),
+        )
+        resultados = cur.fetchall() or []
+        return [{
+            "nome": (r.get("nome") or "").strip(),
+            "cpf": re.sub(r"[^0-9]", "", r.get("cpf") or ""),
+            "tabela_origem": tabela_encontrada,
+        } for r in resultados]
+    except Exception:
+        return []
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _manifestante_existe_no_cadastro(nome_manifestante, cpf_manifestante):
+    nome_informado = (nome_manifestante or "").strip().lower()
+    cpf_informado = re.sub(r"[^0-9]", "", cpf_manifestante or "")
+    if not nome_informado or len(cpf_informado) != 11:
+        return False, "Informe nome e CPF válidos para identificação."
+
+    # tenta banco primeiro
+    registros = _buscar_manifestantes_neondb(cpf_informado, limite=5)
+    # fallback CSV
+    if not registros:
+        registros, _ = _carregar_manifestantes_csv()
+
+    if not registros:
+        return False, "Cadastro municipal indisponível para validação no momento (banco/CSV)."
+
+    for registro in registros:
+        nome_csv = (registro.get("nome") or "").strip().lower()
+        cpf_csv = re.sub(r"[^0-9]", "", registro.get("cpf") or "")
+        if cpf_csv == cpf_informado and nome_csv == nome_informado:
+            return True, None
+
+    return False, "Manifestante não encontrado na listagem municipal (nome/CPF)."
+
+
+@app.route("/ouvidoria/api/manifestantes/buscar", methods=["GET"])
+@login_required
+def api_buscar_manifestantes_csv():
+    termo_consulta = (request.args.get("q") or "").strip()
+    if len(termo_consulta) < 2:
+        return jsonify({"resultados": [], "mensagem": "Informe pelo menos 2 caracteres."})
+
+    # tenta NeonDB primeiro
+    resultados = _buscar_manifestantes_neondb(termo_consulta, limite=20)
+    if resultados:
+        tabela_origem = resultados[0].get("tabela_origem") or "cadastro_pessoa_fisica"
+        resultados_limpos = [{"nome": r.get("nome"), "cpf": r.get("cpf")} for r in resultados]
+        return jsonify({
+            "origem": f"neondb:{tabela_origem}",
+            "resultados": resultados_limpos,
+        })
+
+    # fallback CSV
+    registros, caminho_origem = _carregar_manifestantes_csv()
+    if not caminho_origem:
+        return jsonify({
+            "erro": "Cadastro municipal não encontrado no NeonDB nem no arquivo CSV.",
+            "caminhos_tentados": _resolver_caminhos_cadastro_pessoa_fisica(),
+        }), 404
+
+    termo_nome = termo_consulta.lower()
+    termo_cpf = re.sub(r"[^0-9]", "", termo_consulta)
+    resultados = []
+    for registro in registros:
+        nome = (registro.get("nome") or "").strip()
+        cpf = re.sub(r"[^0-9]", "", registro.get("cpf") or "")
+        corresponde_nome = termo_nome in nome.lower()
+        corresponde_cpf = bool(termo_cpf) and termo_cpf in cpf
+        if corresponde_nome or corresponde_cpf:
+            resultados.append({"nome": nome, "cpf": cpf})
+        if len(resultados) >= 20:
+            break
+
+    return jsonify({
+        "origem": caminho_origem,
+        "resultados": resultados,
+    })
+
+
 @app.route("/ouvidoria/api/subgrupos/<int:grupo_id>", methods=["GET"])
 @login_required
 def api_subgrupos_ouvidoria(grupo_id):
@@ -2586,8 +2788,19 @@ def cadastrar_manifestacao_ouvidoria():
         tipo_manifestante = (request.form.get("tipo_manifestante") or "identificado").strip().lower()
         manifestacao_anonima = tipo_manifestante == "anonimo"
         nome_manifestante = None if manifestacao_anonima else ((request.form.get("nome_manifestante") or "").strip() or None)
+        cpf_manifestante = None if manifestacao_anonima else ((request.form.get("cpf_manifestante") or "").strip() or None)
         telefone_manifestante = None if manifestacao_anonima else ((request.form.get("telefone_manifestante") or "").strip() or None)
         email_manifestante = None if manifestacao_anonima else ((request.form.get("email_manifestante") or "").strip() or None)
+        if not manifestacao_anonima:
+            manifestante_valido, erro_manifestante = _manifestante_existe_no_csv(nome_manifestante, cpf_manifestante)
+            if not manifestante_valido:
+                flash(erro_manifestante, "danger")
+                return redirect(url_for("ouvidoria"))
+        if not manifestacao_anonima:
+            manifestante_valido, erro_manifestante = _manifestante_existe_no_csv(nome_manifestante, cpf_manifestante)
+            if not manifestante_valido:
+                flash(erro_manifestante, "danger")
+                return redirect(url_for("ouvidoria"))
         classificacao = _obter_classificacao_manifestacao_ouvidoria(cur, grupo_id, subgrupo_id, tipo_id, subtipo_id)
         metadados_manifestacoes = _listar_colunas_tabela(cur, "ouvidoria_manifestacoes")
         colunas_manifestacoes = set(metadados_manifestacoes.keys())
@@ -2772,6 +2985,7 @@ def editar_manifestacao_ouvidoria(manifestacao_id):
         tipo_manifestante = (request.form.get("tipo_manifestante") or "identificado").strip().lower()
         manifestacao_anonima = tipo_manifestante == "anonimo"
         nome_manifestante = None if manifestacao_anonima else ((request.form.get("nome_manifestante") or "").strip() or None)
+        cpf_manifestante = None if manifestacao_anonima else ((request.form.get("cpf_manifestante") or "").strip() or None)
         telefone_manifestante = None if manifestacao_anonima else ((request.form.get("telefone_manifestante") or "").strip() or None)
         email_manifestante = None if manifestacao_anonima else ((request.form.get("email_manifestante") or "").strip() or None)
         classificacao = _obter_classificacao_manifestacao_ouvidoria(cur, grupo_id, subgrupo_id, tipo_id, subtipo_id)

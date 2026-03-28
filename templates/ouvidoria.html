@@ -628,9 +628,25 @@
                                                         </div>
                                                     </div>
                                                     <div id="dadosIdentificacaoManifestante" class="row g-3">
+                                                        <input type="hidden" name="manifestante_validado_lista" id="manifestanteValidadoListaInput" value="0">
+                                                        <div class="col-12">
+                                                            <label class="form-label">Buscar cadastro municipal (nome ou CPF)</label>
+                                                            <div class="input-group">
+                                                                <input type="text" class="form-control" id="buscaManifestanteCsvInput" placeholder="Digite nome e/ou CPF para buscar">
+                                                                <button class="btn btn-outline-secondary" type="button" id="btnBuscarManifestanteCsv">
+                                                                    <i class="fas fa-search me-1"></i> Buscar
+                                                                </button>
+                                                            </div>
+                                                            <div id="buscaManifestanteCsvFeedback" class="small mt-2 text-muted"></div>
+                                                            <div id="buscaManifestanteCsvResultados" class="list-group mt-2"></div>
+                                                        </div>
                                                         <div class="col-12">
                                                             <label class="form-label">Nome</label>
                                                             <input type="text" class="form-control" name="nome_manifestante" placeholder="Opcional">
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="form-label">CPF</label>
+                                                           <input type="text" class="form-control" name="cpf_manifestante" id="cpfManifestanteInput" placeholder="000.000.000-00" maxlength="14" inputmode="numeric">
                                                         </div>
                                                         <div class="col-md-6">
                                                             <label class="form-label">Telefone</label>
@@ -1426,15 +1442,135 @@
             tipologiaModal.show();
         }
 
-        function atualizarCamposManifestante() {
+       function atualizarCamposManifestante() {
             const anonimoSelecionado = document.getElementById('manifestanteAnonimo')?.checked;
             const container = document.getElementById('dadosIdentificacaoManifestante');
+            const cpfInput = document.getElementById('cpfManifestanteInput');
+            const nomeInput = document.querySelector('[name="nome_manifestante"]');
             if (!container) return;
             container.style.display = anonimoSelecionado ? 'none' : '';
+            if (cpfInput) cpfInput.required = !anonimoSelecionado;
+            if (nomeInput) nomeInput.required = !anonimoSelecionado;
             if (anonimoSelecionado) {
                 container.querySelectorAll('input').forEach(input => {
                     input.value = '';
                 });
+                const inputValidado = document.getElementById('manifestanteValidadoListaInput');
+                if (inputValidado) inputValidado.value = '0';
+            }
+        }
+
+        let debounceBuscaManifestanteTimer = null;
+
+        function normalizarCpf(valor) {
+            return (valor || '').replace(/\D/g, '').slice(0, 11);
+        }
+
+        function formatarCpfMascara(valor) {
+            const numeros = normalizarCpf(valor);
+            if (numeros.length <= 3) return numeros;
+            if (numeros.length <= 6) return `${numeros.slice(0, 3)}.${numeros.slice(3)}`;
+            if (numeros.length <= 9) return `${numeros.slice(0, 3)}.${numeros.slice(3, 6)}.${numeros.slice(6)}`;
+            return `${numeros.slice(0, 3)}.${numeros.slice(3, 6)}.${numeros.slice(6, 9)}-${numeros.slice(9)}`;
+        }
+
+        function cpfFormatadoCompleto(valor) {
+            return /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test((valor || '').trim());
+        }
+
+        function marcarManifestanteComoNaoValidado() {
+            const inputValidado = document.getElementById('manifestanteValidadoListaInput');
+            if (inputValidado) inputValidado.value = '0';
+        }
+
+        function marcarManifestanteComoValidado() {
+            const inputValidado = document.getElementById('manifestanteValidadoListaInput');
+            if (inputValidado) inputValidado.value = '1';
+        }
+
+        function formatarCpfDisplay(cpf) {
+            const numeros = (cpf || '').replace(/\D/g, '').slice(0, 11);
+            if (numeros.length !== 11) return cpf || '';
+            return numeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        }
+
+        function limparResultadosBuscaManifestante() {
+            const containerResultados = document.getElementById('buscaManifestanteCsvResultados');
+            if (containerResultados) {
+                containerResultados.innerHTML = '';
+            }
+        }
+
+        function atualizarFeedbackBuscaManifestante(mensagem, classe = 'text-muted') {
+            const feedback = document.getElementById('buscaManifestanteCsvFeedback');
+            if (!feedback) return;
+            feedback.className = `small mt-2 ${classe}`;
+            feedback.textContent = mensagem || '';
+        }
+
+        function preencherManifestanteComRegistro(registro) {
+            const nomeInput = document.querySelector('[name="nome_manifestante"]');
+            const cpfInput = document.getElementById('cpfManifestanteInput');
+            if (nomeInput) nomeInput.value = registro.nome || '';
+            if (cpfInput) cpfInput.value = formatarCpfDisplay(registro.cpf || '');
+            marcarManifestanteComoValidado();
+            atualizarFeedbackBuscaManifestante('Cadastro municipal selecionado e identificação preenchida.', 'text-success');
+            limparResultadosBuscaManifestante();
+        }
+
+        function renderizarResultadosBuscaManifestante(resultados = []) {
+            const containerResultados = document.getElementById('buscaManifestanteCsvResultados');
+            if (!containerResultados) return;
+            containerResultados.innerHTML = '';
+            resultados.forEach(registro => {
+                const botao = document.createElement('button');
+                botao.type = 'button';
+                botao.className = 'list-group-item list-group-item-action';
+                botao.textContent = `${registro.nome || 'Sem nome'} • CPF: ${formatarCpfDisplay(registro.cpf || '')}`;
+                botao.addEventListener('click', () => preencherManifestanteComRegistro(registro));
+                containerResultados.appendChild(botao);
+            });
+        }
+
+        async function buscarManifestantesCsv(termoBruto) {
+            const termo = (termoBruto || '').trim();
+            if (termo.length < 2) {
+                atualizarFeedbackBuscaManifestante('Digite pelo menos 2 caracteres para buscar no cadastro municipal.');
+                limparResultadosBuscaManifestante();
+                return;
+            }
+
+            atualizarFeedbackBuscaManifestante('Buscando cadastro municipal...');
+            try {
+                const response = await fetch(`/ouvidoria/api/manifestantes/buscar?q=${encodeURIComponent(termo)}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.erro || 'Não foi possível consultar o cadastro municipal.');
+                }
+
+                const resultados = data.resultados || [];
+                if (!resultados.length) {
+                    atualizarFeedbackBuscaManifestante('Nenhum cadastro encontrado para o termo informado.', 'text-warning');
+                    limparResultadosBuscaManifestante();
+                    marcarManifestanteComoNaoValidado();
+                    return;
+                }
+
+                const cpfDigitado = normalizarCpf(termo);
+                const matchExatoCpf = cpfDigitado.length === 11
+                    ? resultados.find(item => normalizarCpf(item.cpf) === cpfDigitado)
+                    : null;
+                if (matchExatoCpf) {
+                    preencherManifestanteComRegistro(matchExatoCpf);
+                    return;
+                }
+
+                atualizarFeedbackBuscaManifestante(`${resultados.length} cadastro(s) encontrado(s). Clique em um nome para preencher.`, 'text-success');
+                renderizarResultadosBuscaManifestante(resultados);
+            } catch (error) {
+                atualizarFeedbackBuscaManifestante(error.message, 'text-danger');
+                limparResultadosBuscaManifestante();
+                marcarManifestanteComoNaoValidado();
             }
         }
 
@@ -1583,8 +1719,10 @@
             document.querySelector('[name="latitude"]').value = manifestacao.latitude || '';
             document.querySelector('[name="longitude"]').value = manifestacao.longitude || '';
             document.querySelector('[name="nome_manifestante"]').value = manifestacao.nome_manifestante || '';
+            document.getElementById('cpfManifestanteInput').value = '';
             document.querySelector('[name="telefone_manifestante"]').value = manifestacao.telefone_manifestante || '';
             document.querySelector('[name="email_manifestante"]').value = manifestacao.email_manifestante || '';
+            marcarManifestanteComoNaoValidado();
 
             const radioAnonimo = document.getElementById('manifestanteAnonimo');
             const radioIdentificado = document.getElementById('manifestanteIdentificado');
@@ -1787,6 +1925,24 @@
 
         document.getElementById('manifestacaoWizardForm')?.addEventListener('submit', event => {
             atualizarResumoManifestacao();
+            const anonimo = document.getElementById('manifestanteAnonimo')?.checked;
+            const cpfInput = document.getElementById('cpfManifestanteInput');
+            const cpfValor = cpfInput?.value || '';
+            if (!anonimo && cpfInput && !cpfFormatadoCompleto(cpfValor)) {
+                event.preventDefault();
+                cpfInput.setCustomValidity('Informe o CPF no formato 000.000.000-00.');
+                cpfInput.reportValidity();
+                cpfInput.focus();
+                return;
+            }
+            if (cpfInput) cpfInput.setCustomValidity('');
+            const validadoLista = document.getElementById('manifestanteValidadoListaInput')?.value === '1';
+            if (!anonimo && !validadoLista) {
+                event.preventDefault();
+                atualizarFeedbackBuscaManifestante('Para identificar, selecione um cadastro retornado da lista municipal.', 'text-danger');
+                document.getElementById('buscaManifestanteCsvInput')?.focus();
+                return;
+            }
             const etapaInvalida = wizardStages.findIndex((_, index) => !validarEtapa(index));
             if (etapaInvalida !== -1) {
                 event.preventDefault();
@@ -1806,6 +1962,33 @@
         document.getElementById('subtipoSelect')?.addEventListener('change', renderizarClassificacaoVisual);
         document.querySelectorAll('input[name="tipo_manifestante"]').forEach(input => {
             input.addEventListener('change', atualizarCamposManifestante);
+        });
+        document.getElementById('cpfManifestanteInput')?.addEventListener('input', event => {
+            event.target.value = formatarCpfMascara(event.target.value);
+            if (event.target.value && !cpfFormatadoCompleto(event.target.value)) {
+                event.target.setCustomValidity('Use o formato 000.000.000-00.');
+            } else {
+                event.target.setCustomValidity('');
+            }
+            marcarManifestanteComoNaoValidado();
+        });
+        document.querySelector('[name="nome_manifestante"]')?.addEventListener('input', () => {
+            marcarManifestanteComoNaoValidado();
+        });
+        document.getElementById('btnBuscarManifestanteCsv')?.addEventListener('click', () => {
+            const valor = document.getElementById('buscaManifestanteCsvInput')?.value || '';
+            buscarManifestantesCsv(valor);
+        });
+        document.getElementById('buscaManifestanteCsvInput')?.addEventListener('input', event => {
+            const valorOriginal = event.target.value || '';
+            const possuiLetras = /[A-Za-zÀ-ÿ]/.test(valorOriginal);
+            const valor = possuiLetras ? valorOriginal : formatarCpfMascara(valorOriginal);
+            event.target.value = valor;
+            marcarManifestanteComoNaoValidado();
+            if (debounceBuscaManifestanteTimer) {
+                window.clearTimeout(debounceBuscaManifestanteTimer);
+            }
+            debounceBuscaManifestanteTimer = window.setTimeout(() => buscarManifestantesCsv(valor), 350);
         });
         document.getElementById('btnCancelarEdicaoManifestacao')?.addEventListener('click', resetarFormularioManifestacao);
         document.getElementById('btnEditarNoModal')?.addEventListener('click', () => {
