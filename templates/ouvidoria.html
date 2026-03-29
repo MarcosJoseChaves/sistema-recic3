@@ -6,6 +6,7 @@
     <title>Módulo Ouvidoria</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <style>
         body {
             min-height: 100vh;
@@ -53,6 +54,46 @@
         .photo-hint {
             font-size: .85rem;
             color: #475569;
+        }
+        .mapa-coordenadas {
+            width: 100%;
+            min-height: 320px;
+            border: 1px solid #dbe3f3;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .mapa-coordenadas-wrapper {
+            position: relative;
+        }
+        .mapa-coordenadas.maximizado {
+            position: fixed;
+            inset: 12px;
+            z-index: 2000;
+            min-height: auto;
+            height: calc(100vh - 24px);
+            border-radius: 14px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .35);
+        }
+        .mapa-coordenadas.maximizado::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, .45);
+            z-index: -1;
+        }
+        .btn-mapa-maximizar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 2100;
+        }
+        .mapa-coordenadas-wrapper:fullscreen {
+            background: #0f172a;
+            padding: 8px;
+        }
+        .mapa-coordenadas-wrapper:fullscreen .mapa-coordenadas {
+            height: calc(100vh - 16px);
+            min-height: calc(100vh - 16px);
         }
         .tipologia-sidebar {
             border: 1px solid #dbe6ff;
@@ -731,6 +772,17 @@
                                                             <i class="fas fa-crosshairs me-1"></i> Usar minha localização atual
                                                         </button>
                                                     </div>
+                                                    <div class="col-12">
+                                                        <div class="mapa-coordenadas-wrapper" id="mapaCoordenadasWrapper">
+                                                            <button type="button" class="btn btn-sm btn-dark btn-mapa-maximizar" id="btnMaximizarMapaOuvidoria">
+                                                                <i class="fas fa-expand me-1"></i> Maximizar
+                                                            </button>
+                                                            <div id="mapaCoordenadasOuvidoria" class="mapa-coordenadas" aria-label="Mapa para marcação de coordenadas"></div>
+                                                        </div>
+                                                        <div class="form-text">
+                                                            Clique no mapa para definir o ponto exato, alterne entre camadas Mapa/Satélite e use Maximizar para facilitar a marcação.
+                                                        </div>
+                                                    </div>
                                                    <div class="col-12">
                                                         <label class="form-label">Fotos da situação</label>
                                                         <input type="file" class="form-control" name="fotos" id="fotosInput" multiple accept="image/*">
@@ -951,6 +1003,7 @@
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
         const hierarquiaInicial = {{ hierarquia_tipologias|tojson }};
         let hierarquiaAtual = hierarquiaInicial;
@@ -1580,8 +1633,138 @@
         const wizardNextButton = document.getElementById('btnWizardNext');
         const wizardSubmitButton = document.getElementById('btnWizardSubmit');
         const manifestacaoEditBanner = document.getElementById('manifestacaoEditBanner');
+        const latitudeInput = document.getElementById('latitudeInput');
+        const longitudeInput = document.getElementById('longitudeInput');
+        const mapaCoordenadasContainer = document.getElementById('mapaCoordenadasOuvidoria');
+        const mapaCoordenadasWrapper = document.getElementById('mapaCoordenadasWrapper');
+        const btnMaximizarMapaOuvidoria = document.getElementById('btnMaximizarMapaOuvidoria');
         let wizardCurrentStep = 0;
         let manifestacaoDetalheAtualId = null;
+        let mapaCoordenadas = null;
+        let marcadorCoordenadas = null;
+        let mapaMaximizado = false;
+        const coordenadasPadrao = { lat: -15.7801, lng: -47.9292 };
+
+        function parseCoordenada(valor) {
+            if (valor === null || valor === undefined) return null;
+            const normalizado = String(valor).trim().replace(',', '.');
+            if (!normalizado) return null;
+            const numero = Number(normalizado);
+            return Number.isFinite(numero) ? numero : null;
+        }
+
+        function coordenadasValidas(latitude, longitude) {
+            return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+        }
+
+        function atualizarCamposCoordenadas(latitude, longitude) {
+            if (!latitudeInput || !longitudeInput) return;
+            latitudeInput.value = latitude.toFixed(6);
+            longitudeInput.value = longitude.toFixed(6);
+        }
+
+        function garantirMarcadorMapa(latitude, longitude, centralizar = false) {
+            if (!mapaCoordenadas) return;
+            const latLng = [latitude, longitude];
+            if (!marcadorCoordenadas) {
+                marcadorCoordenadas = L.marker(latLng).addTo(mapaCoordenadas);
+            } else {
+                marcadorCoordenadas.setLatLng(latLng);
+            }
+            if (centralizar) {
+                mapaCoordenadas.setView(latLng, Math.max(mapaCoordenadas.getZoom(), 16));
+            }
+        }
+
+        function posicionarMarcadorPorCampos(centralizar = false) {
+            const latitude = parseCoordenada(latitudeInput?.value);
+            const longitude = parseCoordenada(longitudeInput?.value);
+            if (latitude === null || longitude === null || !coordenadasValidas(latitude, longitude)) {
+                return false;
+            }
+            garantirMarcadorMapa(latitude, longitude, centralizar);
+            return true;
+        }
+
+        function inicializarMapaCoordenadas() {
+            if (!mapaCoordenadasContainer || typeof L === 'undefined') return;
+            mapaCoordenadas = L.map(mapaCoordenadasContainer).setView([coordenadasPadrao.lat, coordenadasPadrao.lng], 4);
+            const camadaMapa = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors',
+            });
+            const camadaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri',
+            });
+            camadaMapa.addTo(mapaCoordenadas);
+            L.control.layers(
+                {
+                    'Mapa': camadaMapa,
+                    'Satélite': camadaSatelite,
+                },
+                {},
+                { collapsed: false },
+            ).addTo(mapaCoordenadas);
+
+            mapaCoordenadas.on('click', event => {
+                const { lat, lng } = event.latlng;
+                atualizarCamposCoordenadas(lat, lng);
+                garantirMarcadorMapa(lat, lng);
+                atualizarResumoManifestacao();
+            });
+
+            mapaCoordenadas.whenReady(() => {
+                mapaCoordenadas.invalidateSize();
+            });
+        }
+
+        function atualizarBotaoMaximizarMapa() {
+            if (!btnMaximizarMapaOuvidoria) return;
+            btnMaximizarMapaOuvidoria.innerHTML = mapaMaximizado
+                ? '<i class="fas fa-compress me-1"></i> Minimizar'
+                : '<i class="fas fa-expand me-1"></i> Maximizar';
+        }
+
+        function obterElementoFullscreenAtual() {
+            return document.fullscreenElement
+                || document.webkitFullscreenElement
+                || document.msFullscreenElement
+                || null;
+        }
+
+        function alternarMapaMaximizado(forcarEstado = null) {
+            if (!mapaCoordenadasContainer || !mapaCoordenadasWrapper) return;
+
+            const fullscreenAtivo = Boolean(obterElementoFullscreenAtual());
+            const proximoEstado = typeof forcarEstado === 'boolean' ? forcarEstado : !fullscreenAtivo;
+
+            if (proximoEstado) {
+                const requestFullscreen = mapaCoordenadasWrapper.requestFullscreen
+                    || mapaCoordenadasWrapper.webkitRequestFullscreen
+                    || mapaCoordenadasWrapper.msRequestFullscreen;
+                if (requestFullscreen) {
+                    requestFullscreen.call(mapaCoordenadasWrapper);
+                    return;
+                }
+                mapaMaximizado = true;
+                mapaCoordenadasContainer.classList.add('maximizado');
+                document.body.classList.add('overflow-hidden');
+            } else {
+                const exitFullscreen = document.exitFullscreen
+                    || document.webkitExitFullscreen
+                    || document.msExitFullscreen;
+                if (fullscreenAtivo && exitFullscreen) {
+                    exitFullscreen.call(document);
+                    return;
+                }
+                mapaMaximizado = false;
+                mapaCoordenadasContainer.classList.remove('maximizado');
+                document.body.classList.remove('overflow-hidden');
+            }
+            atualizarBotaoMaximizarMapa();
+            if (mapaCoordenadas) window.setTimeout(() => mapaCoordenadas.invalidateSize(), 120);
+        }
 
         function obterTextoSelect(selectId) {
             const select = document.getElementById(selectId);
@@ -1656,12 +1839,15 @@
                 button.classList.toggle('active', index === wizardCurrentStep);
                 button.classList.toggle('completed', index < wizardCurrentStep);
             });
-            wizardPrevButton.disabled = wizardCurrentStep === 0;
+           wizardPrevButton.disabled = wizardCurrentStep === 0;
             const ultimaEtapa = wizardCurrentStep === wizardStages.length - 1;
             wizardNextButton.classList.toggle('d-none', ultimaEtapa);
             wizardSubmitButton.classList.toggle('d-none', !ultimaEtapa);
             if (ultimaEtapa) {
                 atualizarResumoManifestacao();
+            }
+            if (wizardCurrentStep === 3 && mapaCoordenadas) {
+                window.setTimeout(() => mapaCoordenadas.invalidateSize(), 120);
             }
         }
 
@@ -1686,6 +1872,14 @@
             preencherSelect(document.getElementById('tipoSelect'), [], 'Selecione primeiro o subgrupo...');
             preencherSelect(document.getElementById('subtipoSelect'), [], 'Selecione primeiro o tipo...');
             atualizarCamposManifestante();
+            if (mapaCoordenadas) {
+                if (marcadorCoordenadas) {
+                    mapaCoordenadas.removeLayer(marcadorCoordenadas);
+                    marcadorCoordenadas = null;
+                }
+                mapaCoordenadas.setView([coordenadasPadrao.lat, coordenadasPadrao.lng], 4);
+                window.setTimeout(() => mapaCoordenadas.invalidateSize(), 80);
+            }
             renderizarClassificacaoVisual();
             atualizarWizardStep(0);
         }
@@ -1718,6 +1912,7 @@
             document.querySelector('[name="ponto_referencia"]').value = manifestacao.ponto_referencia || '';
             document.querySelector('[name="latitude"]').value = manifestacao.latitude || '';
             document.querySelector('[name="longitude"]').value = manifestacao.longitude || '';
+            posicionarMarcadorPorCampos(true);
             document.querySelector('[name="nome_manifestante"]').value = manifestacao.nome_manifestante || '';
             document.getElementById('cpfManifestanteInput').value = '';
             document.querySelector('[name="telefone_manifestante"]').value = manifestacao.telefone_manifestante || '';
@@ -2027,8 +2222,11 @@
             }
             navigator.geolocation.getCurrentPosition(
                 position => {
-                    document.getElementById('latitudeInput').value = position.coords.latitude.toFixed(6);
-                    document.getElementById('longitudeInput').value = position.coords.longitude.toFixed(6);
+                    const latitude = Number(position.coords.latitude);
+                    const longitude = Number(position.coords.longitude);
+                    atualizarCamposCoordenadas(latitude, longitude);
+                    garantirMarcadorMapa(latitude, longitude, true);
+                    atualizarResumoManifestacao();
                 },
                 error => {
                     alert(`Não foi possível capturar a localização: ${error.message}`);
@@ -2036,6 +2234,34 @@
                 { enableHighAccuracy: true, timeout: 10000 },
             );
         });
+
+        [latitudeInput, longitudeInput].forEach(campo => {
+            campo?.addEventListener('input', () => {
+                posicionarMarcadorPorCampos();
+                atualizarResumoManifestacao();
+            });
+            campo?.addEventListener('change', () => {
+                posicionarMarcadorPorCampos(true);
+                atualizarResumoManifestacao();
+            });
+        });
+
+        btnMaximizarMapaOuvidoria?.addEventListener('click', () => alternarMapaMaximizado());
+        document.addEventListener('fullscreenchange', () => {
+            mapaMaximizado = Boolean(obterElementoFullscreenAtual());
+            if (!mapaMaximizado) {
+                mapaCoordenadasContainer?.classList.remove('maximizado');
+                document.body.classList.remove('overflow-hidden');
+            }
+            atualizarBotaoMaximizarMapa();
+            if (mapaCoordenadas) window.setTimeout(() => mapaCoordenadas.invalidateSize(), 120);
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && mapaMaximizado) {
+                alternarMapaMaximizado(false);
+            }
+        });
+
 
         document.getElementById('filtroTipologiasInput')?.addEventListener('input', event => {
             filtroTipologias = event.target.value.trim();
@@ -2081,6 +2307,9 @@
             }
             await recarregarHierarquia();
         }
+
+        inicializarMapaCoordenadas();
+        posicionarMarcadorPorCampos(true);
 
         atualizarWizardStep(0);
 

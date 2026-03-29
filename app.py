@@ -2521,14 +2521,10 @@ def _manifestante_existe_no_cadastro(nome_manifestante, cpf_manifestante):
     if not nome_informado or len(cpf_informado) != 11:
         return False, "Informe nome e CPF válidos para identificação."
 
-    # tenta banco primeiro
+    # validação exclusivamente no NeonDB (cadastro_pessoa_fisica)
     registros = _buscar_manifestantes_neondb(cpf_informado, limite=5)
-    # fallback CSV
     if not registros:
-        registros, _ = _carregar_manifestantes_csv()
-
-    if not registros:
-        return False, "Cadastro municipal indisponível para validação no momento (banco/CSV)."
+        return False, "Cadastro municipal indisponível para validação no momento (NeonDB)."
 
     for registro in registros:
         nome_csv = (registro.get("nome") or "").strip().lower()
@@ -2555,31 +2551,10 @@ def api_buscar_manifestantes_csv():
             "origem": f"neondb:{tabela_origem}",
             "resultados": resultados_limpos,
         })
-
-    # fallback CSV
-    registros, caminho_origem = _carregar_manifestantes_csv()
-    if not caminho_origem:
-        return jsonify({
-            "erro": "Cadastro municipal não encontrado no NeonDB nem no arquivo CSV.",
-            "caminhos_tentados": _resolver_caminhos_cadastro_pessoa_fisica(),
-        }), 404
-
-    termo_nome = termo_consulta.lower()
-    termo_cpf = re.sub(r"[^0-9]", "", termo_consulta)
-    resultados = []
-    for registro in registros:
-        nome = (registro.get("nome") or "").strip()
-        cpf = re.sub(r"[^0-9]", "", registro.get("cpf") or "")
-        corresponde_nome = termo_nome in nome.lower()
-        corresponde_cpf = bool(termo_cpf) and termo_cpf in cpf
-        if corresponde_nome or corresponde_cpf:
-            resultados.append({"nome": nome, "cpf": cpf})
-        if len(resultados) >= 20:
-            break
-
     return jsonify({
-        "origem": caminho_origem,
-        "resultados": resultados,
+        "origem": "neondb",
+        "resultados": [],
+        "mensagem": "Nenhum manifestante encontrado no cadastro municipal (NeonDB).",
     })
 
 
@@ -2792,12 +2767,7 @@ def cadastrar_manifestacao_ouvidoria():
         telefone_manifestante = None if manifestacao_anonima else ((request.form.get("telefone_manifestante") or "").strip() or None)
         email_manifestante = None if manifestacao_anonima else ((request.form.get("email_manifestante") or "").strip() or None)
         if not manifestacao_anonima:
-            manifestante_valido, erro_manifestante = _manifestante_existe_no_csv(nome_manifestante, cpf_manifestante)
-            if not manifestante_valido:
-                flash(erro_manifestante, "danger")
-                return redirect(url_for("ouvidoria"))
-        if not manifestacao_anonima:
-            manifestante_valido, erro_manifestante = _manifestante_existe_no_csv(nome_manifestante, cpf_manifestante)
+            manifestante_valido, erro_manifestante = _manifestante_existe_no_cadastro(nome_manifestante, cpf_manifestante)
             if not manifestante_valido:
                 flash(erro_manifestante, "danger")
                 return redirect(url_for("ouvidoria"))
