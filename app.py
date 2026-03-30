@@ -2809,6 +2809,39 @@ def api_excluir_tipologia_ouvidoria(nivel, registro_id):
         conn.close()
 
 
+
+
+def _validar_campos_obrigatorios_manifestacao_ouvidoria(form, permitir_anonimo=True):
+    tipo_manifestante = (form.get("tipo_manifestante") or "identificado").strip().lower()
+    manifestacao_anonima = permitir_anonimo and tipo_manifestante == "anonimo"
+
+    campos_obrigatorios = {
+        "cep": "Informe o CEP da ocorrência.",
+        "logradouro": "Informe o logradouro da ocorrência.",
+        "numero": "Informe o número do endereço da ocorrência.",
+        "bairro": "Informe o bairro da ocorrência.",
+        "uf": "Informe a UF da ocorrência.",
+        "cidade": "Informe a cidade da ocorrência.",
+        "latitude": "Informe a latitude da ocorrência.",
+        "longitude": "Informe a longitude da ocorrência.",
+    }
+
+    for campo, mensagem in campos_obrigatorios.items():
+        valor = (form.get(campo) or "").strip()
+        if not valor:
+            return False, mensagem
+
+    if not manifestacao_anonima:
+        nome_manifestante = (form.get("nome_manifestante") or "").strip()
+        cpf_manifestante = (form.get("cpf_manifestante") or "").strip()
+        if not nome_manifestante:
+            return False, "Informe o nome do manifestante identificado."
+        if not cpf_manifestante:
+            return False, "Informe o CPF do manifestante identificado."
+
+    return True, ""
+
+
 @app.route("/ouvidoria/manifestacoes", methods=["POST"])
 @login_required
 def cadastrar_manifestacao_ouvidoria():
@@ -2826,6 +2859,11 @@ def cadastrar_manifestacao_ouvidoria():
             return redirect(url_for("ouvidoria"))
         if not descricao:
             flash("Descreva a ocorrência para registrar a manifestação.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        validacao_ok, mensagem_validacao = _validar_campos_obrigatorios_manifestacao_ouvidoria(request.form)
+        if not validacao_ok:
+            flash(mensagem_validacao, "danger")
             return redirect(url_for("ouvidoria"))
 
         tipo_manifestante = (request.form.get("tipo_manifestante") or "identificado").strip().lower()
@@ -3018,6 +3056,11 @@ def editar_manifestacao_ouvidoria(manifestacao_id):
             return redirect(url_for("ouvidoria"))
         if not descricao:
             flash("Descreva a ocorrência para atualizar a manifestação.", "danger")
+            return redirect(url_for("ouvidoria"))
+
+        validacao_ok, mensagem_validacao = _validar_campos_obrigatorios_manifestacao_ouvidoria(request.form)
+        if not validacao_ok:
+            flash(mensagem_validacao, "danger")
             return redirect(url_for("ouvidoria"))
 
         tipo_manifestante = (request.form.get("tipo_manifestante") or "identificado").strip().lower()

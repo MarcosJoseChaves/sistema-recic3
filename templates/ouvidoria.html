@@ -733,11 +733,11 @@
                                                             <div id="buscaManifestanteCsvResultados" class="list-group mt-2"></div>
                                                         </div>
                                                         <div class="col-12">
-                                                            <label class="form-label">Nome</label>
-                                                            <input type="text" class="form-control" name="nome_manifestante" placeholder="Opcional">
+                                                            <label class="form-label required-label">Nome</label>
+                                                            <input type="text" class="form-control" name="nome_manifestante" placeholder="Obrigatório para manifestante identificado">
                                                         </div>
                                                         <div class="col-md-6">
-                                                            <label class="form-label">CPF</label>
+                                                            <label class="form-label required-label">CPF</label>
                                                            <input type="text" class="form-control" name="cpf_manifestante" id="cpfManifestanteInput" placeholder="000.000.000-00" maxlength="14" inputmode="numeric">
                                                         </div>
                                                         <div class="col-md-6">
@@ -767,35 +767,35 @@
                                                         <input type="text" class="form-control" name="inscricao_imobiliaria" placeholder="Cadastro do imóvel">
                                                     </div>
                                                     <div class="col-md-3">
-                                                        <label class="form-label">CEP</label>
+                                                        <label class="form-label required-label">CEP</label>
                                                         <div class="input-group">
-                                                            <input type="text" class="form-control" name="cep" id="cepInput" maxlength="9" placeholder="00000-000">
+                                                            <input type="text" class="form-control" name="cep" id="cepInput" maxlength="9" placeholder="00000-000" required>
                                                             <button class="btn btn-outline-secondary" type="button" id="btnBuscarCep"><i class="fas fa-search"></i></button>
                                                         </div>
                                                     </div>
                                                     <div class="col-md-5">
-                                                        <label class="form-label">Logradouro</label>
-                                                        <input type="text" class="form-control" name="logradouro" id="logradouroInput">
+                                                        <label class="form-label required-label">Logradouro</label>
+                                                        <input type="text" class="form-control" name="logradouro" id="logradouroInput" required>
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <label class="form-label">Número</label>
-                                                        <input type="text" class="form-control" name="numero" id="numeroInput">
+                                                        <label class="form-label required-label">Número</label>
+                                                        <input type="text" class="form-control" name="numero" id="numeroInput" required>
                                                     </div>
                                                     <div class="col-md-4">
                                                         <label class="form-label">Complemento</label>
                                                         <input type="text" class="form-control" name="complemento">
                                                     </div>
                                                     <div class="col-md-3">
-                                                        <label class="form-label">Bairro</label>
-                                                        <input type="text" class="form-control" name="bairro" id="bairroInput">
+                                                        <label class="form-label required-label">Bairro</label>
+                                                        <input type="text" class="form-control" name="bairro" id="bairroInput" required>
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <label class="form-label">UF</label>
-                                                        <input type="text" class="form-control" name="uf" id="ufInput" maxlength="2">
+                                                        <label class="form-label required-label">UF</label>
+                                                        <input type="text" class="form-control" name="uf" id="ufInput" maxlength="2" required>
                                                     </div>
                                                     <div class="col-md-5">
-                                                        <label class="form-label">Cidade</label>
-                                                        <input type="text" class="form-control" name="cidade" id="cidadeInput">
+                                                        <label class="form-label required-label">Cidade</label>
+                                                        <input type="text" class="form-control" name="cidade" id="cidadeInput" required>
                                                     </div>
                                                     <div class="col-12">
                                                         <label class="form-label">Ponto de referência</label>
@@ -811,21 +811,22 @@
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
-                                                        <label class="form-label">Latitude</label>
-                                                        <input type="text" class="form-control" name="latitude" id="latitudeInput" placeholder="-16.123456">
+                                                        <label class="form-label required-label">Latitude</label>
+                                                        <input type="text" class="form-control" name="latitude" id="latitudeInput" placeholder="-16.123456" required>
                                                     </div>
                                                     <div class="col-md-6">
-                                                        <label class="form-label">Longitude</label>
-                                                        <input type="text" class="form-control" name="longitude" id="longitudeInput" placeholder="-49.123456">
+                                                        <label class="form-label required-label">Longitude</label>
+                                                        <input type="text" class="form-control" name="longitude" id="longitudeInput" placeholder="-49.123456" required>
                                                     </div>
                                                     <div class="col-12 d-grid gap-2">
                                                         <button type="button" class="btn btn-outline-primary" id="btnCapturarCoordenadas">
                                                             <i class="fas fa-crosshairs me-1"></i> Usar minha localização atual
                                                         </button>
                                                     </div>
-                                                    <div class="col-12">
+                                                    <div class="col-12">                                                        
                                                         <div class="mapa-coordenadas-wrapper" id="mapaCoordenadasWrapper">
                                                             <button type="button" class="btn btn-sm btn-dark btn-mapa-maximizar" id="btnMaximizarMapaOuvidoria">
+
                                                                 <i class="fas fa-expand me-1"></i> Maximizar
                                                             </button>
                                                             <div id="mapaCoordenadasOuvidoria" class="mapa-coordenadas" aria-label="Mapa para marcação de coordenadas"></div>
@@ -836,8 +837,15 @@
                                                     </div>
                                                    <div class="col-12">
                                                         <label class="form-label">Fotos da situação</label>
-                                                        <input type="file" class="form-control" name="fotos" id="fotosInput" multiple accept="image/*">
-                                                        <div class="photo-hint mt-2">Envie uma ou mais imagens do local, fachada, ponto impactado ou evidências complementares.</div>
+                                                        <div id="fotosInputsContainer" class="d-grid gap-2">
+                                                            <div class="input-group" data-foto-input-row="1">
+                                                                <input type="file" class="form-control" name="fotos" id="fotosInput" multiple accept="image/*">
+                                                                <button type="button" class="btn btn-outline-primary" id="btnAdicionarFotoInput" title="Adicionar mais campos de foto" aria-label="Adicionar mais campos de foto">
+                                                                    <i class="fas fa-plus"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div class="photo-hint mt-2">Envie uma ou mais imagens do local, fachada, ponto impactado ou evidências complementares. Use o botão + para adicionar novos campos de upload quando necessário.</div>
                                                     </div>
                                                     <div class="col-12 d-none" id="fotosExistentesWrapper">
                                                         <label class="form-label">Fotos já vinculadas</label>
@@ -1747,6 +1755,9 @@
         const mapaListagemContainer = document.getElementById('mapaManifestacoesListadas');
         const mapaListagemWrapper = document.getElementById('mapaListagemWrapper');
         const btnMaximizarMapaListagem = document.getElementById('btnMaximizarMapaListagem');
+        const fotosInputsContainer = document.getElementById('fotosInputsContainer');
+        const btnAdicionarFotoInput = document.getElementById('btnAdicionarFotoInput');
+        let contadorFotoInput = 1;
         let wizardCurrentStep = 0;
         let manifestacaoDetalheAtualId = null;
         let mapaCoordenadas = null;
@@ -1981,6 +1992,47 @@
             return valor || fallback;
         }
 
+        function obterTotalFotosSelecionadas() {
+            return Array.from(document.querySelectorAll('input[name="fotos"]')).reduce((total, input) => {
+                return total + (input?.files?.length || 0);
+            }, 0);
+        }
+
+        function adicionarCampoFoto() {
+            if (!fotosInputsContainer) return;
+            contadorFotoInput += 1;
+            const row = document.createElement('div');
+            row.className = 'input-group';
+            row.dataset.fotoInputRow = String(contadorFotoInput);
+            row.innerHTML = `
+                <input type="file" class="form-control" name="fotos" accept="image/*" multiple>
+                <button type="button" class="btn btn-outline-danger" data-remove-foto-row="1" title="Remover este campo" aria-label="Remover este campo">
+                    <i class="fas fa-minus"></i>
+                </button>
+            `;
+            fotosInputsContainer.appendChild(row);
+            const input = row.querySelector('input[name="fotos"]');
+            input?.addEventListener('change', atualizarResumoManifestacao);
+            row.querySelector('[data-remove-foto-row]')?.addEventListener('click', () => {
+                row.remove();
+                atualizarResumoManifestacao();
+            });
+        }
+
+        function resetarCamposFoto() {
+            if (!fotosInputsContainer) return;
+            const linhas = Array.from(fotosInputsContainer.querySelectorAll('[data-foto-input-row]'));
+            linhas.forEach((linha, indice) => {
+                if (indice === 0) {
+                    const input = linha.querySelector('input[name="fotos"]');
+                    if (input) input.value = '';
+                    return;
+                }
+                linha.remove();
+            });
+            contadorFotoInput = 1;
+        }
+
         function atualizarResumoManifestacao() {
             const grupo = obterTextoSelect('grupoSelect');
             const subgrupo = obterTextoSelect('subgrupoSelect');
@@ -2001,7 +2053,7 @@
             const pontoReferencia = obterValorCampo('[name="ponto_referencia"]', 'Sem ponto de referência');
             const latitude = obterValorCampo('#latitudeInput', 'Latitude não informada');
             const longitude = obterValorCampo('#longitudeInput', 'Longitude não informada');
-            const totalFotos = document.getElementById('fotosInput')?.files?.length || 0;
+            const totalFotos = obterTotalFotosSelecionadas();
 
             document.querySelector('[data-review="grupo"]').textContent = grupo;
             document.querySelector('[data-review="tipologia"]').textContent = [subgrupo, tipo, subtipo].filter(valor => valor && valor !== 'Não informado').join(' / ') || 'Não informado';
@@ -2072,6 +2124,7 @@
             document.getElementById('btnWizardSubmit').innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Registrar manifestação';
             document.getElementById('fotosExistentesContainer').innerHTML = '';
             document.getElementById('fotosExistentesWrapper').classList.add('d-none');
+            resetarCamposFoto();
             preencherSelect(document.getElementById('subgrupoSelect'), [], 'Selecione primeiro o grupo...');
             preencherSelect(document.getElementById('tipoSelect'), [], 'Selecione primeiro o subgrupo...');
             preencherSelect(document.getElementById('subtipoSelect'), [], 'Selecione primeiro o tipo...');
@@ -2090,6 +2143,7 @@
 
         async function preencherFormularioManifestacao(manifestacao) {
             manifestacaoWizardForm.action = `/ouvidoria/manifestacoes/${manifestacao.id}/editar`;
+            resetarCamposFoto();
             document.getElementById('manifestacaoIdInput').value = manifestacao.id;
             manifestacaoEditBanner.classList.remove('d-none');
             document.getElementById('btnWizardSubmit').innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Salvar alterações';
@@ -2391,6 +2445,10 @@
             debounceBuscaManifestanteTimer = window.setTimeout(() => buscarManifestantesCsv(valor), 350);
         });
         document.getElementById('btnCancelarEdicaoManifestacao')?.addEventListener('click', resetarFormularioManifestacao);
+        btnAdicionarFotoInput?.addEventListener('click', adicionarCampoFoto);
+        document.querySelectorAll('input[name="fotos"]').forEach(input => {
+            input.addEventListener('change', atualizarResumoManifestacao);
+        });
         document.getElementById('btnEditarNoModal')?.addEventListener('click', () => {
             if (manifestacaoDetalheAtualId) {
                 editarManifestacao(manifestacaoDetalheAtualId);
