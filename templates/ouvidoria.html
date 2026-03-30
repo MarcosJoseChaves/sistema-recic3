@@ -65,16 +65,18 @@
         .mapa-coordenadas-wrapper {
             position: relative;
         }
-        .mapa-coordenadas.maximizado {
+        .mapa-coordenadas.maximizado,
+        .mapa-listagem.maximizado {
             position: fixed;
             inset: 12px;
-            z-index: 2000;
+            z-index: 1030;
             min-height: auto;
             height: calc(100vh - 24px);
             border-radius: 14px;
             box-shadow: 0 28px 80px rgba(15, 23, 42, .35);
         }
-        .mapa-coordenadas.maximizado::before {
+        .mapa-coordenadas.maximizado::before,
+        .mapa-listagem.maximizado::before {
             content: '';
             position: fixed;
             inset: 0;
@@ -85,15 +87,64 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            z-index: 2100;
+            z-index: 1040;
         }
         .mapa-coordenadas-wrapper:fullscreen {
             background: #0f172a;
             padding: 8px;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: stretch;
         }
-        .mapa-coordenadas-wrapper:fullscreen .mapa-coordenadas {
+        .mapa-coordenadas-wrapper:fullscreen .mapa-coordenadas,
+        .mapa-coordenadas-wrapper:fullscreen .mapa-listagem {
             height: calc(100vh - 16px);
             min-height: calc(100vh - 16px);
+            width: 100%;
+            flex: 1 1 auto;
+        }
+        .mapa-listagem {
+            width: 100%;
+            min-height: 280px;
+            border: 1px solid #dbe3f3;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .status-tipologia,
+        .status-tipologia-select {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: .82rem;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 4px 10px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .status-tipologia.status-pendente, .status-tipologia-select.status-pendente { background: #fff3cd; border-color: #ffe69c; color: #664d03; }
+        .status-tipologia.status-em-analise, .status-tipologia-select.status-em-analise { background: #cff4fc; border-color: #9eeaf9; color: #055160; }
+        .status-tipologia.status-nao-resolvida, .status-tipologia-select.status-nao-resolvida { background: #f8d7da; border-color: #f1aeb5; color: #842029; }
+        .status-tipologia.status-encaminhada, .status-tipologia-select.status-encaminhada { background: #d1e7dd; border-color: #a3cfbb; color: #0f5132; }
+        .status-tipologia.status-arquivada, .status-tipologia-select.status-arquivada { background: #e2e3e5; border-color: #c4c8cb; color: #41464b; }
+        .status-tipologia.status-default, .status-tipologia-select.status-default { background: #eef2f7; border-color: #d8e0eb; color: #334155; }
+        .status-tipologia-select {
+            display: block;
+            width: 100%;
+            border-width: 1px;
+            border-style: solid;
+        }
+        .map-marker-grupo {
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, .35);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
         }
         .tipologia-sidebar {
             border: 1px solid #dbe6ff;
@@ -843,10 +894,59 @@
 
                         </form>
 
-                        <div class="mt-5">
+                        <div class="mt-5" id="painelManifestacoesOuvidoria">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h2 class="h5 fw-bold mb-0">Últimas manifestações registradas</h2>
-                                <span class="text-muted small">Mostrando até 20 protocolos</span>
+                                <span class="text-muted small">Ordenação: prioridade, status e data (mais antigas primeiro)</span>
+                            </div>
+                            <form method="GET" action="{{ url_for('ouvidoria') }}#painelManifestacoesOuvidoria" class="form-section mb-3">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1">Data inicial</label>
+                                        <input type="date" name="data_inicio" class="form-control" value="{{ filtros_manifestacoes.data_inicio }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1">Data final</label>
+                                        <input type="date" name="data_fim" class="form-control" value="{{ filtros_manifestacoes.data_fim }}">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label mb-1">Grupo</label>
+                                        <select name="grupo_id" class="form-select">
+                                            <option value="">Todos</option>
+                                            {% for grupo in hierarquia_tipologias %}
+                                                <option value="{{ grupo.id }}" {% if filtros_manifestacoes.grupo_id == (grupo.id|string) %}selected{% endif %}>{{ grupo.nome }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label mb-1">Subgrupo</label>
+                                        <select name="subgrupo_id" class="form-select">
+                                            <option value="">Todos</option>
+                                            {% for subgrupo in subgrupos_filtro %}
+                                                <option value="{{ subgrupo.id }}" {% if filtros_manifestacoes.subgrupo_id == (subgrupo.id|string) %}selected{% endif %}>{{ subgrupo.nome }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label mb-1">Status</label>
+                                        <select name="status" class="form-select">
+                                            <option value="">Todos</option>
+                                            {% for status in ouvidoria_status_opcoes %}
+                                                <option value="{{ status }}" {% if filtros_manifestacoes.status|lower == status|lower %}selected{% endif %}>{{ status|capitalize }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter me-1"></i>Filtrar</button>
+                                        <a href="{{ url_for('ouvidoria') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-eraser me-1"></i>Limpar filtros</a>
+                                    </div>
+                                </div>
+                            </form>
+                            <div class="mapa-coordenadas-wrapper mb-3" id="mapaListagemWrapper">
+                                <button type="button" class="btn btn-sm btn-dark btn-mapa-maximizar" id="btnMaximizarMapaListagem">
+                                    <i class="fas fa-expand me-1"></i> Maximizar
+                                </button>
+                                <div id="mapaManifestacoesListadas" class="mapa-listagem" aria-label="Mapa das manifestações listadas"></div>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-striped table-hover align-middle">
@@ -863,7 +963,13 @@
                                     </thead>
                                     <tbody>
                                         {% for item in manifestacoes_recentes %}
-                                            <tr>
+                                            <tr data-mapa-manifestacao="1"
+                                                data-id="{{ item.id }}"
+                                                data-protocolo="{{ item.protocolo }}"
+                                                data-status="{{ item.status }}"
+                                                data-grupo="{{ item.grupo_nome or '' }}"
+                                                data-latitude="{{ item.latitude or '' }}"
+                                                data-longitude="{{ item.longitude or '' }}">
                                                 <td class="fw-semibold">{{ item.protocolo }}</td>
                                                 <td>{{ item.data_registro.strftime('%d/%m/%Y %H:%M') if item.data_registro else '' }}</td>
                                                 <td class="js-classificacao-registrada"
@@ -875,7 +981,7 @@
                                                     <small class="text-muted">{{ item.subgrupo_nome or '—' }} / {{ item.tipo_nome or '—' }} / {{ item.subtipo_nome or '—' }}</small>
                                                 </td>
                                                 <td style="min-width: 170px;">
-                                                    <select class="form-select form-select-sm" onchange="atualizarStatusPrioridadeManifestacao({{ item.id }})" data-quick-status="{{ item.id }}" data-valor-anterior="{{ item.status }}">
+                                                    <select class="form-select form-select-sm status-tipologia-select js-status-select" onchange="atualizarStatusPrioridadeManifestacao({{ item.id }})" data-quick-status="{{ item.id }}" data-valor-anterior="{{ item.status }}">
                                                         {% for status in ouvidoria_status_opcoes %}
                                                             <option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status|capitalize }}</option>
                                                         {% endfor %}
@@ -1638,11 +1744,16 @@
         const mapaCoordenadasContainer = document.getElementById('mapaCoordenadasOuvidoria');
         const mapaCoordenadasWrapper = document.getElementById('mapaCoordenadasWrapper');
         const btnMaximizarMapaOuvidoria = document.getElementById('btnMaximizarMapaOuvidoria');
+        const mapaListagemContainer = document.getElementById('mapaManifestacoesListadas');
+        const mapaListagemWrapper = document.getElementById('mapaListagemWrapper');
+        const btnMaximizarMapaListagem = document.getElementById('btnMaximizarMapaListagem');
         let wizardCurrentStep = 0;
         let manifestacaoDetalheAtualId = null;
         let mapaCoordenadas = null;
+        let mapaListagem = null;
         let marcadorCoordenadas = null;
         let mapaMaximizado = false;
+        let mapaFullscreenAlvo = null;
         const coordenadasPadrao = { lat: -15.7801, lng: -47.9292 };
 
         function parseCoordenada(valor) {
@@ -1655,6 +1766,40 @@
 
         function coordenadasValidas(latitude, longitude) {
             return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+        }
+
+        function normalizarStatusParaClasse(status) {
+            const valor = (status || '').toString().trim().toLowerCase();
+            if (valor === 'em análise' || valor === 'em analise') return 'status-em-analise';
+            if (valor === 'não resolvida' || valor === 'nao resolvida') return 'status-nao-resolvida';
+            if (valor === 'encaminhada') return 'status-encaminhada';
+            if (valor === 'arquivada') return 'status-arquivada';
+            if (valor === 'pendente') return 'status-pendente';
+            return 'status-default';
+        }
+
+        function montarStatusTipologia(status) {
+            const classe = normalizarStatusParaClasse(status);
+            const rotulo = (status || 'Não informado').toString();
+            const icones = {
+                'status-pendente': 'fa-clock',
+                'status-em-analise': 'fa-magnifying-glass',
+                'status-nao-resolvida': 'fa-triangle-exclamation',
+                'status-encaminhada': 'fa-share-nodes',
+                'status-arquivada': 'fa-box-archive',
+                'status-default': 'fa-circle-info',
+            };
+            return {
+                classe,
+                html: `<i class="fas ${icones[classe] || icones['status-default']}"></i><span>${escapeHtml(rotulo)}</span>`,
+            };
+        }
+
+        function renderizarStatusFormatado() {
+            document.querySelectorAll('.js-status-select').forEach(elemento => {
+                const { classe } = montarStatusTipologia(elemento.value || elemento.dataset.valorAnterior);
+                elemento.className = `form-select form-select-sm status-tipologia-select js-status-select ${classe}`;
+            });
         }
 
         function atualizarCamposCoordenadas(latitude, longitude) {
@@ -1719,9 +1864,63 @@
             });
         }
 
+        function inicializarMapaManifestacoesListadas() {
+            if (!mapaListagemContainer || typeof L === 'undefined') return;
+            mapaListagem = L.map(mapaListagemContainer).setView([coordenadasPadrao.lat, coordenadasPadrao.lng], 4);
+            const camadaMapa = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors',
+            });
+            const camadaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri',
+            });
+            camadaMapa.addTo(mapaListagem);
+            L.control.layers({ 'Mapa': camadaMapa, 'Satélite': camadaSatelite }, {}, { collapsed: false }).addTo(mapaListagem);
+
+            const bounds = [];
+            document.querySelectorAll('tr[data-mapa-manifestacao="1"]').forEach(linha => {
+                const latitude = parseCoordenada(linha.dataset.latitude);
+                const longitude = parseCoordenada(linha.dataset.longitude);
+                if (latitude === null || longitude === null || !coordenadasValidas(latitude, longitude)) return;
+
+                const manifestacaoId = Number(linha.dataset.id || 0);
+
+                const status = linha.dataset.status || '';
+                const { classe, html } = montarStatusTipologia(status);
+                const estiloGrupo = obterEstiloGrupo(linha.dataset.grupo || '');
+                const marcador = L.marker([latitude, longitude], {
+                    icon: L.divIcon({
+                        className: 'map-marker-wrapper',
+                        html: `<div class="map-marker-grupo ${classe}" style="background:${estiloGrupo.background}; color:${estiloGrupo.color}; border-color:${estiloGrupo.border};"><i class="${estiloGrupo.icon}"></i></div>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                    }),
+                }).addTo(mapaListagem);
+                marcador.bindPopup(`
+                    <strong>${escapeHtml(linha.dataset.protocolo || 'Sem protocolo')}</strong><br>
+                    ${escapeHtml(linha.dataset.grupo || 'Grupo não informado')}<br>
+                    <span class="status-tipologia ${classe}" style="margin-top:4px;">${html}</span><br>
+                    <button type="button" class="btn btn-link btn-sm p-0 mt-1" onclick="visualizarManifestacao(${manifestacaoId})">Ver detalhes completos</button>
+                `);
+                bounds.push([latitude, longitude]);
+            });
+
+            mapaListagem.whenReady(() => mapaListagem.invalidateSize());
+            if (bounds.length === 1) {
+                mapaListagem.setView(bounds[0], 16);
+            } else if (bounds.length > 1) {
+                mapaListagem.fitBounds(bounds, { padding: [30, 30] });
+            }
+        }
+
         function atualizarBotaoMaximizarMapa() {
             if (!btnMaximizarMapaOuvidoria) return;
             btnMaximizarMapaOuvidoria.innerHTML = mapaMaximizado
+                ? '<i class="fas fa-compress me-1"></i> Minimizar'
+                : '<i class="fas fa-expand me-1"></i> Maximizar';
+            if (!btnMaximizarMapaListagem) return;
+            btnMaximizarMapaListagem.innerHTML = mapaMaximizado
                 ? '<i class="fas fa-compress me-1"></i> Minimizar'
                 : '<i class="fas fa-expand me-1"></i> Maximizar';
         }
@@ -1733,22 +1932,25 @@
                 || null;
         }
 
-        function alternarMapaMaximizado(forcarEstado = null) {
-            if (!mapaCoordenadasContainer || !mapaCoordenadasWrapper) return;
+        function alternarMapaMaximizado(container, wrapper, forcarEstado = null) {
+            if (!container || !wrapper) return;
 
             const fullscreenAtivo = Boolean(obterElementoFullscreenAtual());
             const proximoEstado = typeof forcarEstado === 'boolean' ? forcarEstado : !fullscreenAtivo;
 
             if (proximoEstado) {
-                const requestFullscreen = mapaCoordenadasWrapper.requestFullscreen
-                    || mapaCoordenadasWrapper.webkitRequestFullscreen
-                    || mapaCoordenadasWrapper.msRequestFullscreen;
+                mapaFullscreenAlvo = { container, wrapper };
+                const requestFullscreen = document.documentElement.requestFullscreen
+                    || document.documentElement.webkitRequestFullscreen
+                    || document.documentElement.msRequestFullscreen;
                 if (requestFullscreen) {
-                    requestFullscreen.call(mapaCoordenadasWrapper);
+                    container.classList.add('maximizado');
+                    document.body.classList.add('overflow-hidden');
+                    requestFullscreen.call(document.documentElement);
                     return;
                 }
                 mapaMaximizado = true;
-                mapaCoordenadasContainer.classList.add('maximizado');
+                container.classList.add('maximizado');
                 document.body.classList.add('overflow-hidden');
             } else {
                 const exitFullscreen = document.exitFullscreen
@@ -1759,11 +1961,13 @@
                     return;
                 }
                 mapaMaximizado = false;
-                mapaCoordenadasContainer.classList.remove('maximizado');
+                container.classList.remove('maximizado');
                 document.body.classList.remove('overflow-hidden');
+                mapaFullscreenAlvo = null;
             }
             atualizarBotaoMaximizarMapa();
             if (mapaCoordenadas) window.setTimeout(() => mapaCoordenadas.invalidateSize(), 120);
+            if (mapaListagem) window.setTimeout(() => mapaListagem.invalidateSize(), 120);
         }
 
         function obterTextoSelect(selectId) {
@@ -2086,6 +2290,7 @@
                 }
                 statusSelect.dataset.valorAnterior = statusSelect.value;
                 prioridadeSelect.dataset.valorAnterior = prioridadeSelect.value;
+                renderizarStatusFormatado();
                 if (feedback) {
                     feedback.textContent = 'Atualizado';
                     window.setTimeout(() => {
@@ -2246,19 +2451,28 @@
             });
         });
 
-        btnMaximizarMapaOuvidoria?.addEventListener('click', () => alternarMapaMaximizado());
+        btnMaximizarMapaOuvidoria?.addEventListener('click', () => alternarMapaMaximizado(mapaCoordenadasContainer, mapaCoordenadasWrapper));
+        btnMaximizarMapaListagem?.addEventListener('click', () => alternarMapaMaximizado(mapaListagemContainer, mapaListagemWrapper));
         document.addEventListener('fullscreenchange', () => {
             mapaMaximizado = Boolean(obterElementoFullscreenAtual());
-            if (!mapaMaximizado) {
+            if (mapaMaximizado && mapaFullscreenAlvo?.container) {
+                mapaFullscreenAlvo.container.classList.add('maximizado');
+                document.body.classList.add('overflow-hidden');
+            } else {
                 mapaCoordenadasContainer?.classList.remove('maximizado');
+                mapaListagemContainer?.classList.remove('maximizado');
                 document.body.classList.remove('overflow-hidden');
+                mapaFullscreenAlvo = null;
             }
             atualizarBotaoMaximizarMapa();
             if (mapaCoordenadas) window.setTimeout(() => mapaCoordenadas.invalidateSize(), 120);
+            if (mapaListagem) window.setTimeout(() => mapaListagem.invalidateSize(), 120);
         });
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && mapaMaximizado) {
-                alternarMapaMaximizado(false);
+                const containerAtivo = mapaFullscreenAlvo?.container || mapaCoordenadasContainer;
+                const wrapperAtivo = mapaFullscreenAlvo?.wrapper || mapaCoordenadasWrapper;
+                alternarMapaMaximizado(containerAtivo, wrapperAtivo, false);
             }
         });
 
@@ -2308,7 +2522,9 @@
             await recarregarHierarquia();
         }
 
+        renderizarStatusFormatado();
         inicializarMapaCoordenadas();
+        inicializarMapaManifestacoesListadas();
         posicionarMarcadorPorCampos(true);
 
         atualizarWizardStep(0);

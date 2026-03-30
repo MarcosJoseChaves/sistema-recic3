@@ -2329,8 +2329,42 @@ def ouvidoria():
     garantir_tipologias_ouvidoria_iniciais()
     try:
         hierarquia = _listar_hierarquia_ouvidoria(cur)
+        filtros = {
+            "data_inicio": (request.args.get("data_inicio") or "").strip(),
+            "data_fim": (request.args.get("data_fim") or "").strip(),
+            "grupo_id": (request.args.get("grupo_id") or "").strip(),
+            "subgrupo_id": (request.args.get("subgrupo_id") or "").strip(),
+            "status": (request.args.get("status") or "").strip(),
+        }
+        status_para_ordem = {status.lower(): idx for idx, status in enumerate(OUVIDORIA_STATUS_OPCOES, start=1)}
+        filtros_sql = []
+        parametros = []
+
+        if filtros["data_inicio"]:
+            filtros_sql.append("m.data_registro >= %s::date")
+            parametros.append(filtros["data_inicio"])
+
+        if filtros["data_fim"]:
+            filtros_sql.append("m.data_registro < (%s::date + INTERVAL '1 day')")
+            parametros.append(filtros["data_fim"])
+
+        grupo_id = int(filtros["grupo_id"]) if filtros["grupo_id"].isdigit() else None
+        if grupo_id:
+            filtros_sql.append("m.id_grupo = %s")
+            parametros.append(grupo_id)
+
+        subgrupo_id = int(filtros["subgrupo_id"]) if filtros["subgrupo_id"].isdigit() else None
+        if subgrupo_id:
+            filtros_sql.append("m.id_subgrupo = %s")
+            parametros.append(subgrupo_id)
+
+        if filtros["status"] and filtros["status"].lower() in status_para_ordem:
+            filtros_sql.append("LOWER(m.status) = LOWER(%s)")
+            parametros.append(filtros["status"])
+
+        clausula_where = f"WHERE {' AND '.join(filtros_sql)}" if filtros_sql else ""
         cur.execute(
-            """
+            f"""
             SELECT
                 m.id,
                 m.protocolo,
@@ -2343,17 +2377,49 @@ def ouvidoria():
                 st.nome AS subtipo_nome,
                 COALESCE(m.logradouro, '') AS logradouro,
                 COALESCE(m.numero, '') AS numero,
-                COALESCE(m.bairro, '') AS bairro
+                COALESCE(m.bairro, '') AS bairro,
+                COALESCE(m.latitude, '') AS latitude,
+                COALESCE(m.longitude, '') AS longitude
             FROM ouvidoria_manifestacoes m
             LEFT JOIN ouvidoria_grupos g ON g.id = m.id_grupo
             LEFT JOIN ouvidoria_subgrupos sg ON sg.id = m.id_subgrupo
             LEFT JOIN ouvidoria_tipos t ON t.id = m.id_tipo
             LEFT JOIN ouvidoria_subtipos st ON st.id = m.id_subtipo
-            ORDER BY m.data_registro DESC
-            LIMIT 20
-            """
+            {clausula_where}
+            ORDER BY
+                CASE LOWER(m.prioridade)
+                    WHEN 'urgente' THEN 1
+                    WHEN 'alta' THEN 2
+                    WHEN 'normal' THEN 3
+                    WHEN 'baixa' THEN 4
+                    ELSE 5
+                END,
+                CASE LOWER(m.status)
+                    WHEN 'pendente' THEN 1
+                    WHEN 'em análise' THEN 2
+                    WHEN 'não resolvida' THEN 3
+                    WHEN 'encaminhada' THEN 4
+                    WHEN 'arquivada' THEN 5
+                    ELSE 6
+                END,
+                m.data_registro ASC
+            LIMIT 150
+            """,
+            parametros,
         )
         manifestacoes = cur.fetchall()
+        subgrupos_filtro = []
+        if grupo_id:
+            cur.execute(
+                """
+                SELECT id, nome
+                FROM ouvidoria_subgrupos
+                WHERE id_grupo = %s
+                ORDER BY nome
+                """,
+                (grupo_id,),
+            )
+            subgrupos_filtro = cur.fetchall()
     finally:
         cur.close()
         conn.close()
@@ -2363,6 +2429,8 @@ def ouvidoria():
         usuario=current_user,
         hierarquia_tipologias=hierarquia,
         manifestacoes_recentes=manifestacoes,
+        filtros_manifestacoes=filtros,
+        subgrupos_filtro=subgrupos_filtro,
         permissao_edicao_tipologias=not usuario_visitante(),
         ouvidoria_status_opcoes=OUVIDORIA_STATUS_OPCOES,
         ouvidoria_prioridade_opcoes=OUVIDORIA_PRIORIDADE_OPCOES,
