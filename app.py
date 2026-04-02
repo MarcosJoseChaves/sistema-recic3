@@ -654,12 +654,14 @@ def criar_tabelas_se_nao_existir():
                 id SERIAL PRIMARY KEY, uvr VARCHAR(10) NOT NULL, id_tipo INTEGER REFERENCES tipos_documentos(id),
                 caminho_arquivo VARCHAR(255), nome_original VARCHAR(255), competencia DATE, data_validade DATE,
                 valor DECIMAL(12, 2), numero_referencia VARCHAR(100), observacoes TEXT, enviado_por VARCHAR(100),
-                data_envio TIMESTAMP DEFAULT NOW(), status VARCHAR(20) DEFAULT 'Pendente', motivo_rejeicao TEXT
+                data_envio TIMESTAMP DEFAULT NOW(), status VARCHAR(20) DEFAULT 'Pendente', motivo_rejeicao TEXT,
+                id_transacao_origem INTEGER REFERENCES transacoes_financeiras(id)
             )
         """)
 
         try:
             cur.execute("ALTER TABLE documentos ADD COLUMN IF NOT EXISTS motivo_rejeicao TEXT;")
+            cur.execute("ALTER TABLE documentos ADD COLUMN IF NOT EXISTS id_transacao_origem INTEGER REFERENCES transacoes_financeiras(id);")
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
@@ -4752,12 +4754,12 @@ def registrar_transacao_financeira():
             INSERT INTO documentos
             (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
              data_validade, valor, numero_referencia, observacoes,
-             enviado_por, status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+             enviado_por, status, id_transacao_origem)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente',%s)
         """, (
             dados["uvr_transacao"], id_tipo_documento, nome_arquivo_salvo, nome_original,
             competencia, None, valor_total_documento_calculado,
-            numero_referencia, observacoes_doc, enviado_por
+            numero_referencia, observacoes_doc, enviado_por, id_transacao_criada
         ))
 
         if arquivo_comprovante and arquivo_comprovante.filename:
@@ -4773,8 +4775,8 @@ def registrar_transacao_financeira():
                 INSERT INTO documentos
                 (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
                  data_validade, valor, numero_referencia, observacoes,
-                 enviado_por, status)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+                 enviado_por, status, id_transacao_origem)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente',%s)
             """, (
                 dados["uvr_transacao"],
                 comprovante_anexo["id_tipo_documento"],
@@ -4786,6 +4788,7 @@ def registrar_transacao_financeira():
                 comprovante_anexo["numero_referencia"],
                 comprovante_anexo["observacoes"],
                 comprovante_anexo["enviado_por"],
+                id_transacao_criada,
             ))
 
         if arquivo_mtr and arquivo_mtr.filename:
@@ -4804,8 +4807,8 @@ def registrar_transacao_financeira():
                 INSERT INTO documentos
                 (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
                  data_validade, valor, numero_referencia, observacoes,
-                 enviado_por, status)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+                 enviado_por, status, id_transacao_origem)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente',%s)
             """, (
                 dados["uvr_transacao"],
                 mtr_anexo["id_tipo_documento"],
@@ -4817,6 +4820,7 @@ def registrar_transacao_financeira():
                 mtr_anexo["numero_referencia"],
                 mtr_anexo["observacoes"],
                 mtr_anexo["enviado_por"],
+                id_transacao_criada,
             ))
 
         if arquivo_relatorio_fotografico and arquivo_relatorio_fotografico.filename:
@@ -4835,8 +4839,8 @@ def registrar_transacao_financeira():
                 INSERT INTO documentos
                 (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
                  data_validade, valor, numero_referencia, observacoes,
-                 enviado_por, status)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+                 enviado_por, status, id_transacao_origem)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente',%s)
             """, (
                 dados["uvr_transacao"],
                 relatorio_anexo["id_tipo_documento"],
@@ -4848,6 +4852,7 @@ def registrar_transacao_financeira():
                 relatorio_anexo["numero_referencia"],
                 relatorio_anexo["observacoes"],
                 relatorio_anexo["enviado_por"],
+                id_transacao_criada,
             ))
         conn.commit()
         return redirect(url_for("sucesso_transacao"))
@@ -5093,6 +5098,7 @@ def editar_transacao():
                     anexo["numero_referencia"],
                     anexo["enviado_por"],
                     anexo["observacoes"],
+                    id_transacao,
                 )
 
             if anexar_comprovante:
@@ -5110,6 +5116,7 @@ def editar_transacao():
                     comprovante_anexo["numero_referencia"],
                     comprovante_anexo["enviado_por"],
                     comprovante_anexo["observacoes"],
+                    id_transacao,
                 )
 
             if anexar_mtr:
@@ -5125,6 +5132,7 @@ def editar_transacao():
                     mtr_anexo["numero_referencia"],
                     mtr_anexo["enviado_por"],
                     mtr_anexo["observacoes"],
+                    id_transacao,
                 )
 
             if anexar_relatorio_fotografico:
@@ -5142,6 +5150,7 @@ def editar_transacao():
                     relatorio_anexo["numero_referencia"],
                     relatorio_anexo["enviado_por"],
                     relatorio_anexo["observacoes"],
+                    id_transacao,
                 )
             
             conn.commit()
@@ -5996,14 +6005,19 @@ def _format_decimal_quantidade(value_str):
         return value_str
 
 def _substituir_documento_transacao(cur, uvr, id_tipo_documento, caminho_arquivo, nome_original, competencia,
-                                    valor, numero_referencia, enviado_por, observacoes):
+                                    valor, numero_referencia, enviado_por, observacoes, id_transacao_origem=None):
     cur.execute("""
         SELECT id, caminho_arquivo
         FROM documentos
-        WHERE uvr = %s AND id_tipo = %s AND numero_referencia = %s
+        WHERE uvr = %s
+          AND id_tipo = %s
+          AND (
+                (%s IS NOT NULL AND id_transacao_origem = %s)
+                OR (%s IS NULL AND numero_referencia = %s)
+              )
         ORDER BY id DESC
         LIMIT 1
-    """, (uvr, id_tipo_documento, numero_referencia))
+    """, (uvr, id_tipo_documento, id_transacao_origem, id_transacao_origem, id_transacao_origem, numero_referencia))
     existente = cur.fetchone()
 
     if existente:
@@ -6029,24 +6043,25 @@ def _substituir_documento_transacao(cur, uvr, id_tipo_documento, caminho_arquivo
                 numero_referencia=%s,
                 observacoes=%s,
                 enviado_por=%s,
+                id_transacao_origem=%s,
                 status='Pendente',
                 motivo_rejeicao=NULL
             WHERE id=%s
         """, (
             caminho_arquivo, nome_original, competencia, None, valor,
-            numero_referencia, observacoes, enviado_por, doc_id
+            numero_referencia, observacoes, enviado_por, id_transacao_origem, doc_id
         ))
     else:
         cur.execute("""
             INSERT INTO documentos
             (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
              data_validade, valor, numero_referencia, observacoes,
-             enviado_por, status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+             enviado_por, status, id_transacao_origem)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente',%s)
         """, (
             uvr, id_tipo_documento, caminho_arquivo, nome_original,
             competencia, None, valor, numero_referencia,
-            observacoes, enviado_por
+            observacoes, enviado_por, id_transacao_origem
         ))
 
 def _preparar_documento_anexo(arquivo_nf, cabecalho, valor_total, id_transacao, cur):
@@ -7230,6 +7245,7 @@ def responder_solicitacao():
                             documento_anexo.get("numero_referencia", ""),
                             documento_anexo.get("enviado_por", current_user.username),
                             documento_anexo.get("observacoes", ""),
+                            id_reg,
                         )
 
                     comprovante_anexo = d.get("comprovante_pagamento_anexo")
@@ -7248,6 +7264,7 @@ def responder_solicitacao():
                             comprovante_anexo.get("numero_referencia", ""),
                             comprovante_anexo.get("enviado_por", current_user.username),
                             comprovante_anexo.get("observacoes", ""),
+                            id_reg,
                         )
 
                     mtr_anexo = d.get("mtr_anexo")
@@ -7269,6 +7286,7 @@ def responder_solicitacao():
                             mtr_anexo.get("numero_referencia", ""),
                             mtr_anexo.get("enviado_por", current_user.username),
                             mtr_anexo.get("observacoes", ""),
+                            id_reg,
                         )
 
                     relatorio_anexo = d.get("relatorio_fotografico_anexo")
@@ -7290,6 +7308,7 @@ def responder_solicitacao():
                             relatorio_anexo.get("numero_referencia", ""),
                             relatorio_anexo.get("enviado_por", current_user.username),
                             relatorio_anexo.get("observacoes", ""),
+                            id_reg,
                         )
 
                 # --- LÓGICA PARA PATRIMÔNIO ---
@@ -9599,7 +9618,10 @@ def _montar_consulta_documentos(args, usuario):
         JOIN tipos_documentos t ON d.id_tipo = t.id
         LEFT JOIN transacoes_financeiras tf
             ON tf.uvr = d.uvr
-           AND tf.numero_documento = d.numero_referencia
+           AND (
+                (d.id_transacao_origem IS NOT NULL AND tf.id = d.id_transacao_origem)
+                OR (d.id_transacao_origem IS NULL AND tf.numero_documento = d.numero_referencia)
+           )
         LEFT JOIN cadastros c ON tf.id_cadastro_origem = c.id
         LEFT JOIN associados a ON tf.id_cadastro_origem = a.id
         WHERE 1=1
