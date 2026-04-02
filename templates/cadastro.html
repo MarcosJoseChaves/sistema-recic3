@@ -853,6 +853,44 @@
             </div>
         </div>
 
+        <div class="mt-3 p-3 bg-light rounded border">
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="aplicarDescontoMesmaNfToggle" name="aplicar_desconto_mesma_nf">
+                <label class="form-check-label" for="aplicarDescontoMesmaNfToggle">
+                    Registrar desconto na mesma nota (ex.: ISS retido)
+                </label>
+            </div>
+            <div class="row g-2" id="descontoMesmaNfContainer" style="display:none;">
+                <div class="col-md-4">
+                    <label class="form-label required-field">Valor do desconto (R$)</label>
+                    <input type="text" class="form-control mascara-dinheiro" id="valorDescontoTransacaoInput" name="valor_desconto_transacao" placeholder="0,00">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label required-field">Grupo (Despesa)</label>
+                    <select class="form-select" id="descontoGrupoTransacaoSelect" name="desconto_grupo_transacao">
+                        <option value="">Selecione...</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Subgrupo (Despesa)</label>
+                    <select class="form-select" id="descontoSubgrupoTransacaoSelect" name="desconto_subgrupo_transacao" disabled>
+                        <option value="">Selecione Grupo Primeiro</option>
+                    </select>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label required-field">Descrição Prod./Serv. (Despesa)</label>
+                    <select class="form-select" id="descricaoDescontoTransacaoInput" name="descricao_desconto_transacao" disabled>
+                        <option value="">Selecione Subgrupo Primeiro</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <small class="text-muted">
+                        Será criado um lançamento de <strong>Despesa paga</strong> automático com o mesmo número e data da nota.
+                    </small>
+                </div>
+            </div>
+        </div>
+
         <div class="mb-3 mt-3">
             <label class="form-label required-field" id="labelNotaFiscalTransacao">Anexar Nota Fiscal</label>
             <input type="file" class="form-control" name="nota_fiscal_upload" id="notaFiscalTransacaoUpload" accept="application/pdf,image/jpeg,image/png" required>
@@ -3008,6 +3046,132 @@ $('#fornecedorPrestadorTransacaoSelect').change(function() {
             });
             $('#valorTotalDocumentoCalculado').val(totalDocumento.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
         }
+
+        function parseMoeda(valor) {
+            if (!valor) return 0;
+            return parseFloat(String(valor).replace("R$", "").replace(/\./g, '').replace(',', '.')) || 0;
+        }
+
+        function getTipoContrapartidaDesconto() {
+            const tipoPrincipal = $('#tipoTransacaoSelect').val();
+            return tipoPrincipal === 'Despesa' ? 'Receita' : 'Despesa';
+        }
+
+        function atualizarLabelsContrapartidaDesconto() {
+            const tipoContrapartida = getTipoContrapartidaDesconto();
+            $('#labelGrupoDescontoContrapartida').text(`Grupo (${tipoContrapartida})`);
+            $('#labelSubgrupoDescontoContrapartida').text(`Subgrupo (${tipoContrapartida})`);
+            $('#labelDescricaoDescontoContrapartida').text(`Descrição Prod./Serv. (${tipoContrapartida})`);
+        }
+
+        function carregarGruposDesconto() {
+            const grupoSelect = $('#descontoGrupoTransacaoSelect');
+            const subgrupoSelect = $('#descontoSubgrupoTransacaoSelect');
+            const itemSelect = $('#descricaoDescontoTransacaoInput');
+            const tipoContrapartida = getTipoContrapartidaDesconto();
+
+            grupoSelect.empty().append('<option value="">Carregando grupos...</option>');
+            subgrupoSelect.empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+            itemSelect.empty().append('<option value="">Selecione Subgrupo Primeiro</option>').prop('disabled', true);
+
+            $.getJSON(`/get_distinct_grupos?tipo=${encodeURIComponent(tipoContrapartida)}`, function(data) {
+                grupoSelect.empty().append('<option value="">Selecione...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(grupo) {
+                        grupoSelect.append(`<option value="${grupo}">${grupo}</option>`);
+                    });
+                } else {
+                    grupoSelect.append('<option value="">Nenhum grupo encontrado</option>');
+                }
+            }).fail(function() {
+                grupoSelect.empty().append('<option value="">Erro ao carregar grupos</option>');
+            });
+        }
+
+        function carregarSubgruposDesconto(grupoSelecionado) {
+            const subgrupoSelect = $('#descontoSubgrupoTransacaoSelect');
+            const itemSelect = $('#descricaoDescontoTransacaoInput');
+            const tipoContrapartida = getTipoContrapartidaDesconto();
+
+            if (!grupoSelecionado) {
+                subgrupoSelect.empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+                itemSelect.empty().append('<option value="">Selecione Subgrupo Primeiro</option>').prop('disabled', true);
+                return;
+            }
+
+            subgrupoSelect.empty().append('<option value="">Carregando subgrupos...</option>').prop('disabled', true);
+            itemSelect.empty().append('<option value="">Selecione Subgrupo Primeiro</option>').prop('disabled', true);
+
+            $.getJSON(`/get_distinct_subgrupos?tipo=${encodeURIComponent(tipoContrapartida)}&grupo=${encodeURIComponent(grupoSelecionado)}`, function(data) {
+                subgrupoSelect.empty().append('<option value="">Selecione...</option>');
+                subgrupoSelect.append('<option value="">(Nenhum)</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(subgrupo) {
+                        subgrupoSelect.append(`<option value="${subgrupo}">${subgrupo}</option>`);
+                    });
+                }
+                subgrupoSelect.prop('disabled', false);
+            }).fail(function() {
+                subgrupoSelect.empty().append('<option value="">Erro ao carregar subgrupos</option>').prop('disabled', false);
+            });
+        }
+
+        function carregarItensDesconto(grupoSelecionado, subgrupoSelecionado) {
+            const itemSelect = $('#descricaoDescontoTransacaoInput');
+            const tipoContrapartida = getTipoContrapartidaDesconto();
+            if (!grupoSelecionado) {
+                itemSelect.empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+                return;
+            }
+            itemSelect.empty().append('<option value="">Carregando itens...</option>').prop('disabled', true);
+
+            const subgrupoParam = subgrupoSelecionado === null ? '' : (subgrupoSelecionado || '');
+            $.getJSON(`/get_items_for_filters?tipo=${encodeURIComponent(tipoContrapartida)}&grupo=${encodeURIComponent(grupoSelecionado)}&subgrupo=${encodeURIComponent(subgrupoParam)}`, function(data) {
+                itemSelect.empty().append('<option value="">Selecione...</option>');
+                if (data && data.length > 0) {
+                    data.forEach(function(item) {
+                        itemSelect.append(`<option value="${item}">${item}</option>`);
+                    });
+                } else {
+                    itemSelect.append('<option value="">Nenhum item encontrado</option>');
+                }
+                itemSelect.prop('disabled', false);
+            }).fail(function() {
+                itemSelect.empty().append('<option value="">Erro ao carregar itens</option>').prop('disabled', false);
+            });
+        }
+
+        $('#aplicarDescontoMesmaNfToggle').on('change', function() {
+            const ativo = $(this).is(':checked');
+            atualizarLabelsContrapartidaDesconto();
+            $('#descontoMesmaNfContainer').toggle(ativo);
+            $('#valorDescontoTransacaoInput').prop('required', ativo);
+            $('#descontoGrupoTransacaoSelect').prop('required', ativo);
+            $('#descricaoDescontoTransacaoInput').prop('required', ativo);
+            if (!ativo) {
+                $('#valorDescontoTransacaoInput').val('');
+                $('#descontoGrupoTransacaoSelect').empty().append('<option value="">Selecione...</option>');
+                $('#descontoSubgrupoTransacaoSelect').empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+                $('#descricaoDescontoTransacaoInput').empty().append('<option value="">Selecione Subgrupo Primeiro</option>').prop('disabled', true);
+            } else {
+                carregarGruposDesconto();
+            }
+        });
+
+        $('#tipoTransacaoSelect').on('change', function() {
+            if ($('#aplicarDescontoMesmaNfToggle').is(':checked')) {
+                atualizarLabelsContrapartidaDesconto();
+                carregarGruposDesconto();
+            }
+        });
+
+        $('#descontoGrupoTransacaoSelect').on('change', function() {
+            carregarSubgruposDesconto($(this).val());
+        });
+
+        $('#descontoSubgrupoTransacaoSelect').on('change', function() {
+            carregarItensDesconto($('#descontoGrupoTransacaoSelect').val(), $(this).val());
+        });
         
         $('#transacaoForm').on('submit', function(e) { 
             if ($('#itensDocumentoContainer .item-row').length === 0) {
@@ -3058,6 +3222,37 @@ $('#fornecedorPrestadorTransacaoSelect').change(function() {
                  alert("O campo 'Nome do Fornecedor/Prestador/Cliente/Associado' é obrigatório.");
                  e.preventDefault();
                  return false;
+            }
+
+            if ($('#aplicarDescontoMesmaNfToggle').is(':checked')) {
+                const valorTotalDocumento = parseMoeda($('#valorTotalDocumentoCalculado').val());
+                const valorDesconto = parseMoeda($('#valorDescontoTransacaoInput').val());
+                const grupoDesconto = $('#descontoGrupoTransacaoSelect').val();
+                const descricaoDesconto = $('#descricaoDescontoTransacaoInput').val();
+                if (valorDesconto <= 0) {
+                    alert("Informe um valor de desconto maior que zero.");
+                    $('#valorDescontoTransacaoInput').focus();
+                    e.preventDefault();
+                    return false;
+                }
+                if (valorDesconto > valorTotalDocumento) {
+                    alert("O valor do desconto não pode ser maior que o total da nota.");
+                    $('#valorDescontoTransacaoInput').focus();
+                    e.preventDefault();
+                    return false;
+                }
+                if (!grupoDesconto) {
+                    alert("Selecione o Grupo da despesa para o desconto.");
+                    $('#descontoGrupoTransacaoSelect').focus();
+                    e.preventDefault();
+                    return false;
+                }
+                if (!descricaoDesconto) {
+                    alert("Selecione a Descrição Prod./Serv. da despesa para o desconto.");
+                    $('#descricaoDescontoTransacaoInput').focus();
+                    e.preventDefault();
+                    return false;
+                }
             }
         });
 // --- FUNÇÃO BLINDADA: Preenchimento de Associação ---
@@ -5066,6 +5261,11 @@ SOLUÇÃO: Vá ao Fluxo de Caixa, exclua o(s) pagamento(s) referente(s) a esta n
         $('#idTransacaoHidden').val('');
         $('#btnSalvarTransacao').text('REGISTRAR TRANSAÇÃO').removeClass('btn-warning').addClass('btn-success');
         $('#btnCancelarEdicaoTransacao').hide();
+        $('#descontoMesmaNfContainer').hide();
+        $('#valorDescontoTransacaoInput').prop('required', false).val('');
+        $('#descontoGrupoTransacaoSelect').prop('required', false).empty().append('<option value="">Selecione...</option>');
+        $('#descontoSubgrupoTransacaoSelect').empty().append('<option value="">Selecione Grupo Primeiro</option>').prop('disabled', true);
+        $('#descricaoDescontoTransacaoInput').prop('required', false).empty().append('<option value="">Selecione Subgrupo Primeiro</option>').prop('disabled', true);
         atualizarPatrimonioTransacao();
         
         $('#itensDocumentoContainer').empty();

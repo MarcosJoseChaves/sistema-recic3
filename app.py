@@ -4455,6 +4455,11 @@ def registrar_transacao_financeira():
         garantia_data_input = dados.get("garantia_data_transacao")
         proxima_revisao_km_input = dados.get("proxima_revisao_km_transacao")
         proxima_revisao_data_input = dados.get("proxima_revisao_data_transacao")
+        aplicar_desconto_mesma_nf = dados.get("aplicar_desconto_mesma_nf") == "on"
+        valor_desconto_input = (dados.get("valor_desconto_transacao") or "").strip()
+        grupo_desconto = (dados.get("desconto_grupo_transacao") or "").strip()
+        subgrupo_desconto = (dados.get("desconto_subgrupo_transacao") or "").strip()
+        descricao_desconto = (dados.get("descricao_desconto_transacao") or "").strip()
 
         id_final_origem_fk = None
         nome_final_origem = ""
@@ -4569,6 +4574,26 @@ def registrar_transacao_financeira():
                 "valor_total_item": total_item_decimal
             })
             valor_total_documento_calculado += total_item_decimal
+
+        valor_desconto = Decimal('0.00')
+        if aplicar_desconto_mesma_nf:
+            if not valor_desconto_input:
+                return "Informe o valor do desconto para lançar crédito e débito na mesma nota.", 400
+            if not grupo_desconto:
+                return "Selecione o grupo da despesa para o desconto.", 400
+            if not descricao_desconto:
+                return "Selecione a descrição do produto/serviço para o desconto.", 400
+            try:
+                valor_desconto = Decimal(valor_desconto_input.replace("R$", "").replace(".", "").replace(",", "."))
+            except InvalidOperation:
+                return "Valor do desconto inválido.", 400
+            if valor_desconto <= Decimal('0.00'):
+                return "O valor do desconto deve ser maior que zero.", 400
+            if valor_desconto > valor_total_documento_calculado:
+                return "O desconto não pode ser maior que o total da nota.", 400
+        descricao_item_desconto = descricao_desconto
+        if aplicar_desconto_mesma_nf and subgrupo_desconto:
+            descricao_item_desconto = f"{descricao_desconto} ({subgrupo_desconto})"
         
         try:
             data_documento = datetime.strptime(dados["data_documento_transacao"], '%Y-%m-%d').date()
@@ -4628,23 +4653,28 @@ def registrar_transacao_financeira():
         numero_referencia = dados.get("numero_documento_transacao", "")
         enviado_por = current_user.username if current_user.is_authenticated else "sistema"
 
+        valor_pago_inicial = Decimal('0.00')
+        if aplicar_desconto_mesma_nf:
+            valor_pago_inicial = valor_desconto
+        status_pagamento_inicial = 'Pago' if valor_pago_inicial >= valor_total_documento_calculado else 'Aberto'
+
         cur.execute("""
             INSERT INTO transacoes_financeiras
             (uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
-             tipo_transacao, tipo_atividade, valor_total_documento, data_hora_registro, id_patrimonio, 
+             tipo_transacao, tipo_atividade, valor_total_documento, valor_pago_recebido, data_hora_registro, id_patrimonio, 
              categoria_despesa_patrimonio, medidor_atual, tipo_medidor, id_motorista, nome_motorista,
              litros, tipo_combustivel, tipo_manutencao, garantia_km, garantia_data, proxima_revisao_km,
              proxima_revisao_data, status_pagamento)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """, (
             dados["uvr_transacao"], dados.get("associacao_transacao",""),
             id_final_origem_fk, nome_final_origem,
             dados.get("numero_documento_transacao", ""), data_documento,
             dados["tipo_transacao"], dados["tipo_atividade_transacao"],
-            valor_total_documento_calculado, data_hora_registro, id_patrimonio,
+            valor_total_documento_calculado, valor_pago_inicial, data_hora_registro, id_patrimonio,
             categoria_despesa_patrimonio, medidor_atual, tipo_medidor, id_motorista, nome_motorista_input,
             litros, tipo_combustivel, tipo_manutencao, garantia_km, garantia_data, proxima_revisao_km,
-            proxima_revisao_data, 'Aberto' 
+            proxima_revisao_data, status_pagamento_inicial 
         ))
         id_transacao_criada = cur.fetchone()[0]
 
@@ -4656,6 +4686,39 @@ def registrar_transacao_financeira():
             """, (
                 id_transacao_criada, item_data['descricao'], item_data['unidade'],
                 item_data['quantidade'], item_data['valor_unitario'], item_data['valor_total_item']
+            ))
+
+        if aplicar_desconto_mesma_nf:
+            tipo_transacao_principal = dados["tipo_transacao"]
+            tipo_transacao_desconto = 'Despesa' if tipo_transacao_principal == 'Receita' else 'Receita'
+            cur.execute("""
+                INSERT INTO transacoes_financeiras
+                (uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
+                 tipo_transacao, tipo_atividade, valor_total_documento, valor_pago_recebido, data_hora_registro,
+                 status_pagamento)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Liquidado')
+                RETURNING id
+            """, (
+                dados["uvr_transacao"],
+                dados.get("associacao_transacao", ""),
+                id_final_origem_fk,
+                nome_final_origem,
+                dados.get("numero_documento_transacao", ""),
+                data_documento,
+                tipo_transacao_desconto,
+                grupo_desconto,
+                valor_desconto,
+                valor_desconto,
+                data_hora_registro
+            ))
+            id_transacao_desconto = cur.fetchone()[0]
+            cur.execute("""
+                INSERT INTO itens_transacao
+                (id_transacao, descricao, unidade, quantidade, valor_unitario, valor_total_item)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                id_transacao_desconto, descricao_item_desconto, "Serviço",
+                Decimal('1.00'), valor_desconto, valor_desconto
             ))
 
         cur.execute("SELECT id FROM tipos_documentos WHERE nome = %s", (nome_tipo_documento,))
