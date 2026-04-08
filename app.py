@@ -8960,11 +8960,22 @@ def excluir_transacao(id):
     conn = conectar_banco()
     cur = conn.cursor()
     try:
-        # 1. Primeiro exclui os itens da transação (para não dar erro de chave estrangeira)
+        # 1. Remove vínculos no fluxo de caixa (evita bloqueio por chave estrangeira)
+        cur.execute("DELETE FROM fluxo_caixa_transacoes_link WHERE id_transacao_financeira = %s", (id,))
+
+        # 2. Desvincula documentos gerados/anexados pela transação
+        # (mantém o histórico documental e evita erro de FK em documentos.id_transacao_origem)
+        cur.execute("UPDATE documentos SET id_transacao_origem = NULL WHERE id_transacao_origem = %s", (id,))
+
+        # 3. Exclui itens da transação
         cur.execute("DELETE FROM itens_transacao WHERE id_transacao = %s", (id,))
         
-        # 2. Depois exclui a transação principal
+        # 4. Exclui a transação principal
         cur.execute("DELETE FROM transacoes_financeiras WHERE id = %s", (id,))
+        
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({'error': 'Transação não encontrada.'}), 404
         
         conn.commit()
         return jsonify({'message': 'Transação excluída com sucesso!'}), 200
