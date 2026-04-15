@@ -260,6 +260,29 @@ def _build_cloudinary_delivery_url(url):
         return url
     return url
 
+
+def _obter_status_auditoria_transacao(cur, id_transacao):
+    """Deriva o status de auditoria da transação com base nos documentos vinculados."""
+    cur.execute("""
+        SELECT
+            COUNT(*) AS total_documentos,
+            SUM(CASE WHEN status = 'Aprovado' THEN 1 ELSE 0 END) AS total_aprovados,
+            SUM(CASE WHEN status = 'Reprovado' THEN 1 ELSE 0 END) AS total_reprovados
+        FROM documentos
+        WHERE id_transacao_origem = %s
+    """, (id_transacao,))
+    row = cur.fetchone()
+
+    total_documentos = row[0] or 0
+    total_aprovados = row[1] or 0
+    total_reprovados = row[2] or 0
+
+    if total_reprovados > 0:
+        return 'Reprovado'
+    if total_documentos > 0 and total_aprovados == total_documentos:
+        return 'Aprovado'
+    return 'Pendente'
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -5296,6 +5319,17 @@ def get_notas_em_aberto():
             WHERE tf.uvr = %s 
               AND tf.tipo_transacao = %s 
               AND tf.status_pagamento <> 'Liquidado'
+              AND EXISTS (
+                    SELECT 1
+                    FROM documentos d_ok
+                    WHERE d_ok.id_transacao_origem = tf.id
+                )
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM documentos d_pend
+                    WHERE d_pend.id_transacao_origem = tf.id
+                      AND d_pend.status <> 'Aprovado'
+                )
         """
         params = [uvr, tipo_transacao_filtro]
 
@@ -5402,6 +5436,24 @@ def registrar_fluxo_caixa():
         
         if not notas_ids_selecionadas:
              return jsonify({"error": "Nenhuma nota fiscal foi selecionada."}), 400
+
+        # Regra de auditoria: somente transações aprovadas podem ser baixadas no fluxo de caixa.
+        for id_nf_str in notas_ids_selecionadas:
+            id_transacao = int(id_nf_str)
+            status_auditoria = _obter_status_auditoria_transacao(cur, id_transacao)
+            if status_auditoria != "Aprovado":
+                cur.execute(
+                    "SELECT COALESCE(numero_documento, 'N/D') FROM transacoes_financeiras WHERE id = %s",
+                    (id_transacao,)
+                )
+                row_doc = cur.fetchone()
+                numero_doc = row_doc[0] if row_doc else "N/D"
+                return jsonify({
+                    "error": (
+                        f"Transação da nota {numero_doc} (ID {id_transacao}) está com auditoria "
+                        f"'{status_auditoria}'. Somente transações aprovadas podem ser baixadas."
+                    )
+                }), 400
 
         # Calcula totais
         for id_nf_str in notas_ids_selecionadas:
@@ -8243,7 +8295,24 @@ def buscar_transacoes_gestao():
         # 2. SQL Base
         sql = """
             SELECT id, uvr, data_documento, tipo_transacao, nome_cadastro_origem, 
-                   numero_documento, valor_total_documento, status_pagamento
+                   numero_documento, valor_total_documento, status_pagamento,
+                   CASE
+                       WHEN EXISTS (
+                           SELECT 1 FROM documentos d
+                           WHERE d.id_transacao_origem = transacoes_financeiras.id
+                             AND d.status = 'Reprovado'
+                       ) THEN 'Reprovado'
+                       WHEN EXISTS (
+                           SELECT 1 FROM documentos d
+                           WHERE d.id_transacao_origem = transacoes_financeiras.id
+                       )
+                        AND NOT EXISTS (
+                           SELECT 1 FROM documentos d
+                           WHERE d.id_transacao_origem = transacoes_financeiras.id
+                             AND d.status <> 'Aprovado'
+                       ) THEN 'Aprovado'
+                       ELSE 'Pendente'
+                   END AS status_auditoria
             FROM transacoes_financeiras 
             WHERE 1=1
         """
@@ -8305,7 +8374,8 @@ def buscar_transacoes_gestao():
                 "nome_cadastro_origem": r[4],
                 "numero_documento": r[5] or "-",
                 "valor_total_documento": val_float,
-                "status_pagamento": r[7]
+                "status_pagamento": r[7],
+                "status_auditoria": r[8]
             })
 
         return jsonify(resultados)
@@ -8621,6 +8691,7 @@ def get_transacao_detalhes(id):
             "data": data_doc,
             "valor_total": float(cabecalho[9]),
             "status": cabecalho[10],
+            "status_auditoria": _obter_status_auditoria_transacao(cur, id),
             "id_patrimonio": cabecalho[12],
             "patrimonio": cabecalho[13] or "",
             "patrimonio_placa": cabecalho[14] or "",
@@ -8650,6 +8721,89 @@ def get_transacao_detalhes(id):
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+
+@app.route("/aprovar_auditoria_transacao/<int:id_transacao>", methods=["POST"])
+@login_required
+def aprovar_auditoria_transacao(id_transacao):
+    if (current_user.role or "").lower() != "admin":
+        return jsonify({"error": "Apenas administradores podem aprovar auditoria de transações."}), 403
+
+    conn = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+        if not cur.fetchone():
+            return jsonify({"error": "Transação não encontrada."}), 404
+
+        cur.execute("SELECT COUNT(*) FROM documentos WHERE id_transacao_origem = %s", (id_transacao,))
+        total_docs = cur.fetchone()[0] or 0
+        if total_docs == 0:
+            return jsonify({"error": "Esta transação não possui documentos vinculados para auditoria."}), 400
+
+        cur.execute("""
+            UPDATE documentos
+               SET status = 'Aprovado',
+                   motivo_rejeicao = NULL
+             WHERE id_transacao_origem = %s
+        """, (id_transacao,))
+
+        conn.commit()
+        return jsonify({"status": "sucesso", "message": "Transação aprovada na auditoria com sucesso."})
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Erro ao aprovar auditoria da transação {id_transacao}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/reprovar_auditoria_transacao/<int:id_transacao>", methods=["POST"])
+@login_required
+def reprovar_auditoria_transacao(id_transacao):
+    if (current_user.role or "").lower() != "admin":
+        return jsonify({"error": "Apenas administradores podem reprovar auditoria de transações."}), 403
+
+    conn = None
+    try:
+        payload = request.get_json(silent=True) or {}
+        motivo = (payload.get("motivo_rejeicao") or "").strip()
+        if not motivo:
+            return jsonify({"error": "Informe o motivo da reprovação."}), 400
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+        if not cur.fetchone():
+            return jsonify({"error": "Transação não encontrada."}), 404
+
+        cur.execute("SELECT COUNT(*) FROM documentos WHERE id_transacao_origem = %s", (id_transacao,))
+        total_docs = cur.fetchone()[0] or 0
+        if total_docs == 0:
+            return jsonify({"error": "Esta transação não possui documentos vinculados para auditoria."}), 400
+
+        cur.execute("""
+            UPDATE documentos
+               SET status = 'Reprovado',
+                   motivo_rejeicao = %s
+             WHERE id_transacao_origem = %s
+        """, (motivo, id_transacao))
+
+        conn.commit()
+        return jsonify({"status": "sucesso", "message": "Transação reprovada e devolvida para correção na UVR."})
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Erro ao reprovar auditoria da transação {id_transacao}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 # --- NOVAS ROTAS PARA GESTÃO DE PRODUTOS E SUBGRUPOS ---
 

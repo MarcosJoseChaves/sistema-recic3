@@ -1011,7 +1011,7 @@
                 </div>
             </div>
         </div>
-        <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Data</th><th>UVR</th><th>Tipo</th><th>Origem/Destino</th><th>Nº Doc.</th><th>Valor Total</th><th>Status Pag.</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaTransacoesBody"></tbody></table></div>
+        <div class="tabela-container"><table class="table table-hover table-bordered table-sm"><thead class="table-light"><tr><th>Data</th><th>UVR</th><th>Tipo</th><th>Origem/Destino</th><th>Nº Doc.</th><th>Valor Total</th><th>Status Pag.</th><th>Status Auditoria</th><th class="text-center">Ações</th></tr></thead><tbody id="tabelaTransacoesBody"></tbody></table></div>
     </div>
 
     <div id="relatoriosFormContainer" class="form-container">
@@ -2034,6 +2034,27 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalReprovarAuditoriaTransacao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Reprovar Auditoria da Transação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="idTransacaoReprovacao">
+                <label for="motivoReprovacaoTransacao" class="form-label">Motivo da reprovação</label>
+                <textarea class="form-control" id="motivoReprovacaoTransacao" rows="4" placeholder="Descreva o que precisa ser corrigido pela UVR..." required></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmarReprovacaoTransacao()">
+                    <i class="fas fa-times"></i> Reprovar
+                </button>
             </div>
         </div>
     </div>
@@ -4258,7 +4279,7 @@ function buscarTransacoesGestao() {
     // const q = $('#inputBuscaTransacao').val(); 
 
     const tbody = $('#tabelaTransacoesBody');
-    tbody.html('<tr><td colspan="8" class="text-center">Buscando...</td></tr>');
+    tbody.html('<tr><td colspan="9" class="text-center">Buscando...</td></tr>');
 
     const params = new URLSearchParams({
         data_inicial: dataIni,
@@ -4273,7 +4294,7 @@ function buscarTransacoesGestao() {
         tbody.empty();
         
         if (data.length === 0) {
-            tbody.html('<tr><td colspan="8" class="text-center">Nenhuma transação encontrada.</td></tr>');
+            tbody.html('<tr><td colspan="9" class="text-center">Nenhuma transação encontrada.</td></tr>');
             return;
         }
 
@@ -4287,6 +4308,11 @@ function buscarTransacoesGestao() {
             } else if (statusTexto === 'Cancelado') {
                 badgeClass = 'bg-secondary';
             }
+
+            const auditoria = t.status_auditoria || 'Pendente';
+            let badgeAuditoria = 'bg-warning text-dark';
+            if (auditoria === 'Aprovado') badgeAuditoria = 'bg-success';
+            if (auditoria === 'Reprovado') badgeAuditoria = 'bg-danger';
 
             const corValor = t.tipo_transacao === 'Receita' ? 'text-success' : 'text-danger';
             
@@ -4311,8 +4337,17 @@ function buscarTransacoesGestao() {
                     <td>${numDoc}</td>
                     <td class="text-end fw-bold ${corValor}">${valorFormatado}</td>
                     <td class="text-center"><span class="badge ${badgeClass}">${statusTexto}</span></td>
+                    <td class="text-center"><span class="badge ${badgeAuditoria}">${auditoria}</span></td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
+                            ${usuarioIsAdmin && auditoria === 'Pendente' ? `
+                            <button class="btn btn-sm btn-success" onclick="aprovarAuditoriaTransacao(${t.id})" title="Aprovar Auditoria">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning text-dark" onclick="abrirModalReprovarTransacao(${t.id})" title="Reprovar Auditoria">
+                                <i class="fas fa-times"></i>
+                            </button>
+                            ` : ''}
                             <button class="btn btn-sm btn-info text-white" onclick="verDetalhesTransacao(${t.id})" title="Ver Itens">
                                 <i class="fas fa-list"></i>
                             </button>
@@ -4325,7 +4360,63 @@ function buscarTransacoesGestao() {
             `);
         });
     }).fail(function() {
-        tbody.html('<tr><td colspan="8" class="text-center text-danger">Erro ao buscar dados no servidor.</td></tr>');
+        tbody.html('<tr><td colspan="9" class="text-center text-danger">Erro ao buscar dados no servidor.</td></tr>');
+    });
+}
+
+function aprovarAuditoriaTransacao(idTransacao) {
+    if (!confirm('Confirmar aprovação da auditoria desta transação?')) return;
+
+    $.ajax({
+        url: `/aprovar_auditoria_transacao/${idTransacao}`,
+        method: 'POST',
+        success: function(res) {
+            alert(res.message || 'Transação aprovada na auditoria.');
+            buscarTransacoesGestao();
+        },
+        error: function(xhr) {
+            const msg = xhr.responseJSON?.error || 'Erro ao aprovar auditoria da transação.';
+            alert(msg);
+        }
+    });
+}
+
+function abrirModalReprovarTransacao(idTransacao) {
+    $('#idTransacaoReprovacao').val(idTransacao);
+    $('#motivoReprovacaoTransacao').val('');
+    const modal = new bootstrap.Modal(document.getElementById('modalReprovarAuditoriaTransacao'));
+    modal.show();
+}
+
+function confirmarReprovacaoTransacao() {
+    const idTransacao = $('#idTransacaoReprovacao').val();
+    const motivo = ($('#motivoReprovacaoTransacao').val() || '').trim();
+
+    if (!idTransacao) {
+        alert('Transação inválida.');
+        return;
+    }
+    if (!motivo) {
+        alert('Informe o motivo da reprovação.');
+        return;
+    }
+
+    $.ajax({
+        url: `/reprovar_auditoria_transacao/${idTransacao}`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ motivo_rejeicao: motivo }),
+        success: function(res) {
+            alert(res.message || 'Transação reprovada na auditoria.');
+            const modalEl = document.getElementById('modalReprovarAuditoriaTransacao');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+            buscarTransacoesGestao();
+        },
+        error: function(xhr) {
+            const msg = xhr.responseJSON?.error || 'Erro ao reprovar auditoria da transação.';
+            alert(msg);
+        }
     });
 }
 
