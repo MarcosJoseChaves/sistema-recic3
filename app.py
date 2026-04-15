@@ -4442,6 +4442,7 @@ def registrar_transacao_financeira():
                 return f"{msg} é obrigatório(a).", 400
         
         tipo_atividade = dados.get("tipo_atividade_transacao")
+        uvr_transacao = dados.get("uvr_transacao")
         id_origem_selecionado = dados.get("fornecedor_prestador_transacao")
         nome_origem_input = dados.get("nome_fornecedor_prestador_transacao", "").strip()
         id_patrimonio_input = dados.get("id_patrimonio_transacao")
@@ -4504,26 +4505,24 @@ def registrar_transacao_financeira():
         cur = conn.cursor()
 
         if tipo_atividade == "Rateio dos Associados":
-            if not id_origem_selecionado: 
-                nome_final_origem = "Rateio Geral Associados"
-                if nome_origem_input: 
-                    nome_final_origem = nome_origem_input
-            else: 
-                cur.execute(
-                    """
-                    SELECT nome
-                    FROM associados
-                    WHERE id = %s
-                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
-                    """,
-                    (id_origem_selecionado,)
-                )
-                associado_rateio = cur.fetchone()
-                if not associado_rateio:
-                    return "Associado inativo não pode receber rateio.", 400
-                if not nome_origem_input:
-                     return "Erro: ID de associado selecionado para rateio sem nome correspondente.", 400
-                nome_final_origem = nome_origem_input
+            if not id_origem_selecionado:
+                return "Selecione um associado ativo para lançar o rateio.", 400
+            cur.execute(
+                """
+                SELECT nome
+                FROM associados
+                WHERE id = %s
+                  AND uvr = %s
+                  AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                """,
+                (id_origem_selecionado, uvr_transacao)
+            )
+            associado_rateio = cur.fetchone()
+            if not associado_rateio:
+                return "O associado informado não está ativo ou não pertence à UVR selecionada.", 400
+            if not nome_origem_input:
+                 return "Erro: ID de associado selecionado para rateio sem nome correspondente.", 400
+            nome_final_origem = nome_origem_input
         else: 
             if not id_origem_selecionado:
                 label_campo = dados.get('labelFornecedorPrestadorCliente', 'Fornecedor / Prestador / Cliente')
@@ -4904,29 +4903,33 @@ def editar_transacao():
         # 2. Dados do Cabeçalho
 
         tipo_atividade = dados.get("tipo_atividade_transacao")
+        uvr_transacao = dados.get("uvr_transacao")
         id_origem_selecionado = dados.get("fornecedor_prestador_transacao")
         nome_origem_input = dados.get("nome_fornecedor_prestador_transacao", "").strip()
         nome_final_origem = ""
 
+        conn = conectar_banco()
+        cur = conn.cursor()
+
         if tipo_atividade == "Rateio dos Associados":
             if not id_origem_selecionado:
-                nome_final_origem = nome_origem_input or "Rateio Geral Associados"
-            else:
-                cur.execute(
-                    """
-                    SELECT nome
-                    FROM associados
-                    WHERE id = %s
-                      AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
-                    """,
-                    (id_origem_selecionado,)
-                )
-                associado_rateio = cur.fetchone()
-                if not associado_rateio:
-                    return "Associado inativo não pode receber rateio.", 400
-                if not nome_origem_input:
-                    return "Erro: ID de associado selecionado para rateio sem nome correspondente.", 400
-                nome_final_origem = nome_origem_input
+                return "Selecione um associado ativo para lançar o rateio.", 400
+            cur.execute(
+                """
+                SELECT nome
+                FROM associados
+                WHERE id = %s
+                  AND uvr = %s
+                  AND COALESCE(TRIM(status), '') ILIKE 'Ativo'
+                """,
+                (id_origem_selecionado, uvr_transacao)
+            )
+            associado_rateio = cur.fetchone()
+            if not associado_rateio:
+                return "O associado informado não está ativo ou não pertence à UVR selecionada.", 400
+            if not nome_origem_input:
+                return "Erro: ID de associado selecionado para rateio sem nome correspondente.", 400
+            nome_final_origem = nome_origem_input
         else:
             if not id_origem_selecionado:
                 return "O campo 'Fornecedor / Prestador / Cliente' é obrigatório.", 400

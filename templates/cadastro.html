@@ -2469,7 +2469,7 @@
     if (tipoAtividade === "Rateio dos Associados") {
         url = '/get_associados_ativos'; 
         tipoOrigemDesc = 'Associado (para Rateio)';
-        isRequired = false; 
+        isRequired = true; 
     } else { 
         let tipoCadastroFiltro = '';
         
@@ -2503,11 +2503,7 @@
     const request = $.getJSON(url, function(data) {
         selectDropdown.empty();
         
-        if (tipoAtividade === "Rateio dos Associados") {
-            selectDropdown.append('<option value="">Rateio Geral (Nenhum Associado Específico)</option>'); 
-        } else {
-            selectDropdown.append(`<option value="">Selecione ${tipoOrigemDesc}...</option>`);
-        }
+        selectDropdown.append(`<option value="">Selecione ${tipoOrigemDesc}...</option>`);
 
         if (data && data.length > 0) {
             data.forEach(function(item) {
@@ -3200,12 +3196,14 @@ $('#fornecedorPrestadorTransacaoSelect').change(function() {
             const nomeOrigemInputHidden = $('#nomeFornecedorPrestadorTransacaoInput');
 
             if (tipoAtividade === "Rateio dos Associados") {
-                if (!origemSelecionada) { 
-                     nomeOrigemInputHidden.val("Rateio Geral Associados");
-                } else { 
-                    if (!nomeOrigemInputHidden.val()) { 
-                         nomeOrigemInputHidden.val($('#fornecedorPrestadorTransacaoSelect option:selected').data('nome'));
-                    }
+                if (!origemSelecionada) {
+                    alert("Selecione um associado ativo para lançar o rateio.");
+                    $('#fornecedorPrestadorTransacaoSelect').focus();
+                    e.preventDefault();
+                    return false;
+                }
+                if (!nomeOrigemInputHidden.val()) {
+                    nomeOrigemInputHidden.val($('#fornecedorPrestadorTransacaoSelect option:selected').data('nome'));
                 }
             } else { 
                 if (!origemSelecionada) {
