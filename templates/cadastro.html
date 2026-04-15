@@ -1754,6 +1754,11 @@
                             </tbody>
                     </table>
                 </div>
+
+                <h6 class="mt-4"><i class="fas fa-paperclip"></i> Documentos Associados</h6>
+                <div id="listaDocumentosTransacao" class="list-group list-group-flush border rounded">
+                    <div class="list-group-item text-muted">Nenhum documento associado.</div>
+                </div>
             </div>
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -5243,6 +5248,28 @@ SOLUÇÃO: Vá ao Fluxo de Caixa, exclua o(s) pagamento(s) referente(s) a esta n
                 });
             } else {
                 tbody.append('<tr><td colspan="5" class="text-center text-muted">Nenhum item detalhado.</td></tr>');
+            }
+
+            const documentosContainer = $('#listaDocumentosTransacao');
+            documentosContainer.empty();
+            if (data.documentos && data.documentos.length > 0) {
+                data.documentos.forEach(doc => {
+                    const nomeArquivo = doc.nome_original || `Documento #${doc.id}`;
+                    const tipoDocumento = doc.tipo_documento || 'Documento';
+                    const link = doc.url_visualizacao || '#';
+                    documentosContainer.append(`
+                        <a href="${link}" target="_blank" rel="noopener noreferrer" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="fas fa-file-alt text-primary me-2"></i>
+                                ${nomeArquivo}
+                                <small class="text-muted ms-2">(${tipoDocumento})</small>
+                            </span>
+                            <span class="badge bg-primary">Abrir</span>
+                        </a>
+                    `);
+                });
+            } else {
+                documentosContainer.append('<div class="list-group-item text-muted">Nenhum documento associado.</div>');
             }
 
             // Configura o botão de "Editar" para abrir o formulário principal com este ID

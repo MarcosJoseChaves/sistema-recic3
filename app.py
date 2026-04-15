@@ -4994,9 +4994,6 @@ def editar_transacao():
             if extensao_relatorio not in formatos_permitidos:
                 return "O relatório fotográfico da carga deve ser enviado em PDF ou imagem (JPG/PNG).", 400
 
-        conn = conectar_banco()
-        cur = conn.cursor()
-
         # 3. TRAVA DE SEGURANÇA (Rigidez Contábil)
         # Verifica se já existe qualquer pagamento/recebimento vinculado
         cur.execute("SELECT valor_pago_recebido, status_pagamento FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
@@ -8589,8 +8586,29 @@ def get_transacao_detalhes(id):
                 "subgrupo": item[6] or ""
             })
 
-        # Formata datas e valores do cabeçalho
+       # Formata datas e valores do cabeçalho
         data_doc = cabecalho[8].strftime('%d/%m/%Y') if cabecalho[8] else "-"
+
+        # 3. Busca documentos associados à transação
+        cur.execute("""
+            SELECT d.id, d.nome_original, d.caminho_arquivo, td.nome AS tipo_documento
+            FROM documentos d
+            LEFT JOIN tipos_documentos td ON td.id = d.id_tipo
+            WHERE d.id_transacao_origem = %s
+            ORDER BY d.data_envio DESC, d.id DESC
+        """, (id,))
+        documentos_db = cur.fetchall()
+
+        documentos = []
+        for doc in documentos_db:
+            caminho_arquivo = doc[2] or ""
+            url_visualizacao = _build_cloudinary_delivery_url(caminho_arquivo) if caminho_arquivo.startswith("http") else f"/uploads/{caminho_arquivo}"
+            documentos.append({
+                "id": doc[0],
+                "nome_original": doc[1] or f"Documento #{doc[0]}",
+                "tipo_documento": doc[3] or "Documento",
+                "url_visualizacao": url_visualizacao
+            })
         
         dados_retorno = {
             "id": cabecalho[0],
@@ -8621,7 +8639,8 @@ def get_transacao_detalhes(id):
             "garantia_data": cabecalho[27].strftime('%Y-%m-%d') if cabecalho[27] else "",
             "proxima_revisao_km": cabecalho[28],
             "proxima_revisao_data": cabecalho[29].strftime('%Y-%m-%d') if cabecalho[29] else "",
-            "itens": itens
+            "itens": itens,
+            "documentos": documentos
         }
 
         return jsonify(dados_retorno)
