@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo Auditoria - Sistema Recic3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
+        .card-shell { border: none; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .wizard-step {
+            border-radius: 999px;
+            font-weight: 700;
+            border: 1px solid #dee2e6;
+            color: #6c757d;
+            padding: 8px 16px;
+            background: #fff;
+        }
+        .wizard-step.active { background: #ffc107; color: #212529; border-color: #ffc107; }
+        .wizard-step.done { background: #198754; color: #fff; border-color: #198754; }
+        .status-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 50px; font-weight: 600; }
+        .btn-acao { width: 34px; height: 34px; padding: 0; line-height: 34px; text-align: center; border-radius: 8px; }
+        .step-card-title { font-weight: 700; color: #2c3e50; }
+        .linha-associado { cursor: pointer; }
+        .linha-associado:hover { background-color: #f8fbff; }
+        .thumb-associado {
+            width: 120px;
+            height: 120px;
+            border-radius: 12px;
+            object-fit: cover;
+            border: 1px solid #dee2e6;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
+                <span class="badge text-bg-warning">Módulo</span>
+            </div>
+            <h3 class="mb-0"><i class="fas fa-clipboard-check text-warning me-2"></i>Auditoria - {{ usuario.nome_completo if usuario else 'Usuário' }}</h3>
+            <small class="text-muted">Fluxo por etapas para fiscalizações da coleta seletiva.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('alterar_senha') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-key"></i> Alterar Senha</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</a>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <a href="{{ url_for('auditoria', passo='1', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="wizard-step text-decoration-none {{ 'active' if passo_atual == '1' else '' }}"><i class="fas fa-1 me-1"></i> Passo 1 · Associados</a>
+        <a href="{{ url_for('auditoria', passo='2', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="wizard-step text-decoration-none {{ 'active' if passo_atual == '2' else '' }}"><i class="fas fa-2 me-1"></i> Passo 2 · Em breve</a>
+        <a href="{{ url_for('auditoria', passo='3', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="wizard-step text-decoration-none {{ 'active' if passo_atual == '3' else '' }}"><i class="fas fa-3 me-1"></i> Passo 3 · Em breve</a>
+        <a href="{{ url_for('auditoria', passo='4', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="wizard-step text-decoration-none {{ 'active' if passo_atual == '4' else '' }}"><i class="fas fa-flag-checkered me-1"></i> Finalização</a>
+    </div>
+
+    <div class="card card-shell p-4 mb-4 border-top border-warning border-4">
+        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <div>
+                <h5 class="step-card-title mb-1"><i class="fas fa-users text-primary me-2"></i>Passo 1: Fiscalização de Associados</h5>
+                <p class="text-muted mb-0">
+                    {% if uvr_filtro and periodo_analise %}
+                        Contexto da auditoria definido. Agora revise o documento <strong>Relatório de Associados</strong> e audite os associados ativos individualmente.
+                    {% else %}
+                        Antes de iniciar os passos, configure a UVR e o período da auditoria.
+                    {% endif %}
+                </p>
+                {% if passo_atual in ['1', '2', '3'] and uvr_filtro and periodo_analise %}
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input js-toggle-passo" type="checkbox" id="togglePassoAtual" data-passo="{{ passo_atual }}" {{ 'checked' if passo_atual in passos_selecionados else '' }}>
+                        <label class="form-check-label small" for="togglePassoAtual">Incluir este passo no relatório final da auditoria</label>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('auditoria') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-eraser me-1"></i> Limpar</a>
+                {% if passo_atual == '1' %}
+                    <a href="{{ url_for('auditoria', passo='2', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="btn btn-outline-warning btn-sm {{ '' if (uvr_filtro and periodo_analise) else 'disabled' }}" {{ '' if (uvr_filtro and periodo_analise) else 'aria-disabled=true' }}><i class="fas fa-forward me-1"></i> Prosseguir (Passo 2)</a>
+                {% elif passo_atual == '2' %}
+                    <a href="{{ url_for('auditoria', passo='3', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="btn btn-outline-warning btn-sm {{ '' if (uvr_filtro and periodo_analise) else 'disabled' }}" {{ '' if (uvr_filtro and periodo_analise) else 'aria-disabled=true' }}><i class="fas fa-forward me-1"></i> Prosseguir (Passo 3)</a>
+                {% elif passo_atual == '3' %}
+                    <a href="{{ url_for('auditoria', passo='4', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="btn btn-outline-warning btn-sm {{ '' if (uvr_filtro and periodo_analise) else 'disabled' }}" {{ '' if (uvr_filtro and periodo_analise) else 'aria-disabled=true' }}><i class="fas fa-forward me-1"></i> Prosseguir (Finalização)</a>
+                {% else %}
+                    <a href="{{ url_for('auditoria', passo='1', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="btn btn-outline-primary btn-sm"><i class="fas fa-arrow-left me-1"></i> Voltar ao Passo 1</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if uvr_filtro and periodo_analise %}
+            <div class="row g-3 mt-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">UVR da auditoria</label>
+                    <input type="text" class="form-control" value="{{ uvr_filtro }}" readonly>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Nome da UVR</label>
+                    <input type="text" class="form-control" value="{{ nome_uvr or '' }}" readonly>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Período de análise</label>
+                    <input type="month" class="form-control" value="{{ periodo_analise }}" readonly>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <a href="{{ url_for('auditoria') }}" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-pen-to-square me-1"></i> Alterar
+                    </a>
+                </div>
+            </div>
+        {% else %}
+            <form method="GET" action="{{ url_for('auditoria') }}" class="row g-3 mt-3">
+                <input type="hidden" name="passo" value="1">
+                <input type="hidden" name="passos_auditoria" value="{{ passos_auditoria_param }}">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">UVR para auditar</label>
+                    <select class="form-select" name="uvr" id="selectUvrAuditoria" required>
+                        <option value="">Selecione...</option>
+                        {% for uvr in uvrs %}
+                            <option value="{{ uvr }}" data-nome="{{ nomes_uvr.get(uvr, uvr) }}" {{ 'selected' if uvr_filtro == uvr else '' }}>{{ uvr }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Nome da UVR</label>
+                    <input type="text" class="form-control" id="nomeUvrAuditoria" value="{{ nome_uvr or '' }}" readonly>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Período de análise (mês/ano)</label>
+                    <input type="month" class="form-control" name="periodo_analise" value="{{ periodo_analise }}" required>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-warning fw-bold w-100"><i class="fas fa-play me-1"></i> Iniciar</button>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+
+    {% if passo_atual == '1' and uvr_filtro and periodo_analise %}
+    <div class="card card-shell p-4 mb-4">
+        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-folder-open me-2"></i>Documentos base · {{ uvr_filtro }}</h6>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Envio</th>
+                        <th>Documento</th>
+                        <th>Status</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documentos_relatorio %}
+                    <tr>
+                        <td>{{ doc.data_envio.strftime('%d/%m/%Y %H:%M') if doc.data_envio else '-' }}</td>
+                        <td>
+                            <div class="fw-bold">{{ doc.nome_original or 'Relatório de Associados' }}</div>
+                            <small class="text-muted">Tipo: Relatório de Associados</small>
+                        </td>
+                        <td>
+                            {% if doc.status == 'Pendente' %}
+                                <span class="status-badge bg-warning text-dark"><i class="fas fa-clock"></i> AGUARDANDO</span>
+                            {% elif doc.status == 'Aprovado' %}
+                                <span class="status-badge bg-success text-white"><i class="fas fa-check-circle"></i> OK</span>
+                            {% else %}
+                                <span class="status-badge bg-danger text-white"><i class="fas fa-times-circle"></i> CORRIGIR</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% set doc_url = doc.caminho_arquivo %}
+                            {% if doc_url and not doc_url.startswith('http') %}
+                                {% set doc_url = '/uploads/' ~ doc_url %}
+                            {% endif %}
+                            {% if doc_url %}
+                                <a href="{{ doc_url }}" target="_blank" class="btn btn-outline-primary btn-sm me-1"><i class="fas fa-eye"></i> Visualizar</a>
+                                <a href="{{ doc_url }}" download class="btn btn-outline-success btn-sm"><i class="fas fa-download"></i> Baixar</a>
+                            {% else %}
+                                <span class="text-muted">Arquivo indisponível</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center text-muted p-4">Nenhum <strong>Relatório de Associados</strong> encontrado para esta UVR.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card card-shell p-4">
+        <h6 class="fw-bold text-success mb-3"><i class="fas fa-user-check me-2"></i>Conferência individual dos associados ativos</h6>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nº</th>
+                        <th>Nome</th>
+                        <th>CPF</th>
+                        <th>Função</th>
+                        <th>Status auditoria</th>
+                        <th>Observação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for associado in associados %}
+                    <tr data-associado-id="{{ associado.id }}" data-status-original="{{ associado.status_auditoria or '' }}" class="linha-associado js-open-ficha">
+                        <td>{{ associado.numero }}</td>
+                        <td class="fw-semibold">{{ associado.nome }}</td>
+                        <td>{{ associado.cpf }}</td>
+                        <td>{{ associado.funcao or '-' }}</td>
+                        <td>
+                            <input type="hidden" class="js-status-auditoria" value="{{ associado.status_auditoria or '' }}">
+                            <div class="d-flex gap-1 align-items-center js-area-acoes">
+                                <button type="button" class="btn btn-acao btn-success js-btn-aprovar {{ 'opacity-100' if (associado.status_auditoria or '')|lower == 'aprovado' else 'opacity-50' }}" title="Aprovar">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button type="button" class="btn btn-acao btn-danger js-btn-reprovar {{ 'opacity-100' if (associado.status_auditoria or '')|lower == 'reprovado' else 'opacity-50' }}" title="Reprovar">
+                                    <i class="fas fa-exclamation-circle"></i>
+                                </button>
+                            </div>
+                            {% if associado.status_auditoria %}
+                                <small class="text-muted d-block mt-1">Última análise: {{ associado.status_auditoria }}{% if associado.usuario_auditor %} · {{ associado.usuario_auditor }}{% endif %}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="js-observacao-wrapper {{ '' if associado.status_auditoria == 'Reprovado' else 'd-none' }}">
+                                <textarea class="form-control form-control-sm js-observacao" rows="2" placeholder="Obrigatório se reprovar">{{ associado.observacao or '' }}</textarea>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-muted p-4">Nenhum associado ativo encontrado para esta UVR.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+            <div class="small text-muted">
+                Total: {{ resumo_auditoria.total }} • Aprovados: {{ resumo_auditoria.aprovados }} • Reprovados: {{ resumo_auditoria.reprovados }} • Pendentes: {{ resumo_auditoria.pendentes }}
+            </div>
+            <button type="button" class="btn btn-success fw-bold" id="btnSalvarLoteAuditoria">
+                <i class="fas fa-floppy-disk me-1"></i> Salvar auditoria do Passo 1
+            </button>
+        </div>
+        <div class="mt-3">
+            <label for="observacaoNaoCadastrados" class="form-label fw-bold">
+                Inconformidade: associados da lista não cadastrados (se houver)
+            </label>
+            <textarea id="observacaoNaoCadastrados" class="form-control" rows="3" placeholder="Ex.: Foram identificados 2 associados no relatório sem cadastro no sistema.">{{ observacao_passo1 or '' }}</textarea>
+            <small class="text-muted">Campo opcional para registrar inconformidade adicional do Passo 1.</small>
+        </div>
+    </div>
+    {% elif passo_atual == '2' %}
+        <div class="card card-shell p-4">
+            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-list-check me-2"></i>Passo 2</h6>
+            <p class="text-muted mb-0">Rotina em estruturação. Você pode pular este passo e seguir para os próximos, executando somente as auditorias necessárias para o momento.</p>
+        </div>
+    {% elif passo_atual == '3' %}
+        <div class="card card-shell p-4">
+            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-clipboard-list me-2"></i>Passo 3</h6>
+            <p class="text-muted mb-0">Rotina em estruturação. Este fluxo permite executar qualquer passo individualmente ou todos em sequência.</p>
+        </div>
+    {% elif passo_atual == '4' %}
+        <div class="card card-shell p-4">
+            <h6 class="fw-bold text-success mb-3"><i class="fas fa-flag-checkered me-2"></i>Finalização</h6>
+            <p class="text-muted">Na finalização você pode gerar o PDF consolidado da auditoria, com data de emissão e campo de assinatura do auditor.</p>
+            <div class="mb-3">
+                <label class="form-label fw-bold mb-2">Passos incluídos nesta auditoria</label>
+                <div class="d-flex flex-column gap-1">
+                    <label class="form-check-label"><input class="form-check-input me-2 js-passo-final" type="checkbox" value="1" {{ 'checked' if '1' in passos_selecionados else '' }}>Passo 1 - Fiscalização de Associados</label>
+                    <label class="form-check-label"><input class="form-check-input me-2 js-passo-final" type="checkbox" value="2" {{ 'checked' if '2' in passos_selecionados else '' }}>Passo 2 - Em estruturação</label>
+                    <label class="form-check-label"><input class="form-check-input me-2 js-passo-final" type="checkbox" value="3" {{ 'checked' if '3' in passos_selecionados else '' }}>Passo 3 - Em estruturação</label>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ url_for('gerar_pdf_finalizacao_auditoria', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" id="btnGerarPdfAuditoria" class="btn btn-danger {{ '' if (uvr_filtro and periodo_analise) else 'disabled' }}" {{ '' if (uvr_filtro and periodo_analise) else 'aria-disabled=true' }}>
+                    <i class="fas fa-file-pdf me-1"></i> Gerar Relatório PDF da Auditoria
+                </a>
+                <a href="{{ url_for('auditoria', passo='1', uvr=uvr_filtro, periodo_analise=periodo_analise, passos_auditoria=passos_auditoria_param) }}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left me-1"></i> Revisar Passo 1
+                </a>
+            </div>
+            {% if not uvr_filtro or not periodo_analise %}
+                <div class="alert alert-warning mt-3 mb-0">Selecione UVR e período de análise para habilitar a geração do relatório final.</div>
+            {% endif %}
+            <hr>
+            <h6 class="fw-bold text-secondary mb-2"><i class="fas fa-history me-2"></i>Relatórios já gerados (reimpressão)</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Número</th>
+                            <th>UVR</th>
+                            <th>Período</th>
+                            <th>Passos</th>
+                            <th>Data</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rel in relatorios_gerados %}
+                            <tr>
+                                <td>{{ rel.numero_relatorio }}</td>
+                                <td>{{ rel.uvr }} - {{ rel.nome_uvr }}</td>
+                                <td>{{ rel.periodo_analise }}</td>
+                                <td>{{ rel.passos_auditoria }}</td>
+                                <td>{{ rel.data_hora_geracao.strftime('%d/%m/%Y %H:%M') if rel.data_hora_geracao else '-' }}</td>
+                                <td>
+                                    <div class="d-flex gap-1 flex-wrap">
+                                        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('baixar_relatorio_auditoria', id_relatorio=rel.id) }}">
+                                            <i class="fas fa-print me-1"></i> Reimprimir
+                                        </a>
+                                        <form method="POST" action="{{ url_for('excluir_relatorio_auditoria', id_relatorio=rel.id) }}" onsubmit="return confirm('Deseja realmente excluir este relatório de auditoria?');">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                <i class="fas fa-trash me-1"></i> Excluir
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="6" class="text-center text-muted">Nenhum relatório salvo para esta UVR/período.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="modalFichaAssociadoAuditoria" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Ficha completa do associado</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-3 text-center">
+                        <img id="fichaFotoAssociado" class="thumb-associado" src="" alt="Foto do associado">
+                    </div>
+                    <div class="col-md-9">
+                        <div class="row g-2">
+                            <div class="col-md-6"><strong>Nome:</strong> <span id="fichaNomeAssociado">-</span></div>
+                            <div class="col-md-3"><strong>Nº:</strong> <span id="fichaNumeroAssociado">-</span></div>
+                            <div class="col-md-3"><strong>Status:</strong> <span id="fichaStatusAssociado">-</span></div>
+                            <div class="col-md-4"><strong>CPF:</strong> <span id="fichaCpfAssociado">-</span></div>
+                            <div class="col-md-4"><strong>RG:</strong> <span id="fichaRgAssociado">-</span></div>
+                            <div class="col-md-4"><strong>Função:</strong> <span id="fichaFuncaoAssociado">-</span></div>
+                            <div class="col-md-4"><strong>UVR:</strong> <span id="fichaUvrAssociado">-</span></div>
+                            <div class="col-md-4"><strong>Associação:</strong> <span id="fichaAssociacaoAssociado">-</span></div>
+                            <div class="col-md-4"><strong>Admissão:</strong> <span id="fichaDataAdmissaoAssociado">-</span></div>
+                            <div class="col-md-12"><strong>Endereço:</strong> <span id="fichaEnderecoAssociado">-</span></div>
+                            <div class="col-md-6"><strong>Telefone:</strong> <span id="fichaTelefoneAssociado">-</span></div>
+                            <div class="col-md-6"><strong>Cadastro:</strong> <span id="fichaDataCadastroAssociado">-</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const modalFichaAssociadoAuditoria = new bootstrap.Modal(document.getElementById('modalFichaAssociadoAuditoria'));
+    const FOTO_PADRAO_ASSOCIADO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="100%" height="100%" fill="%23f1f3f5"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%236c757d" font-size="12">Sem foto</text></svg>';
+    let passosSelecionados = "{{ passos_auditoria_param }}".split(',').map(v => v.trim()).filter(Boolean);
+
+    function redirecionarComPassos(passoDestino = "{{ passo_atual }}") {
+        const params = new URLSearchParams(window.location.search);
+        params.set('passo', passoDestino);
+        const uvrAtual = "{{ uvr_filtro }}";
+        if (uvrAtual) params.set('uvr', uvrAtual);
+        const periodoAtual = "{{ periodo_analise }}";
+        if (periodoAtual) params.set('periodo_analise', periodoAtual);
+        params.set('passos_auditoria', passosSelecionados.join(','));
+        window.location.href = `{{ url_for('auditoria') }}?${params.toString()}`;
+    }
+
+    const selectUvrAuditoria = document.getElementById('selectUvrAuditoria');
+    const nomeUvrAuditoria = document.getElementById('nomeUvrAuditoria');
+    function atualizarNomeUvrSelecionada() {
+        if (!selectUvrAuditoria || !nomeUvrAuditoria) return;
+        const nome = selectUvrAuditoria.selectedOptions?.[0]?.dataset?.nome || '';
+        nomeUvrAuditoria.value = nome;
+    }
+    if (selectUvrAuditoria) {
+        selectUvrAuditoria.addEventListener('change', atualizarNomeUvrSelecionada);
+        atualizarNomeUvrSelecionada();
+    }
+
+    document.querySelectorAll('.js-toggle-passo').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+            const passo = checkbox.dataset.passo;
+            if (checkbox.checked) {
+                if (!passosSelecionados.includes(passo)) passosSelecionados.push(passo);
+            } else {
+                passosSelecionados = passosSelecionados.filter(item => item !== passo);
+            }
+            redirecionarComPassos("{{ passo_atual }}");
+        });
+    });
+
+    document.querySelectorAll('.js-passo-final').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+            const passo = checkbox.value;
+            if (checkbox.checked) {
+                if (!passosSelecionados.includes(passo)) passosSelecionados.push(passo);
+            } else {
+                passosSelecionados = passosSelecionados.filter(item => item !== passo);
+            }
+            const btnPdf = document.getElementById('btnGerarPdfAuditoria');
+            if (btnPdf) {
+                const url = new URL(btnPdf.href, window.location.origin);
+                url.searchParams.set('passos_auditoria', passosSelecionados.join(','));
+                btnPdf.href = url.pathname + url.search;
+            }
+        });
+    });
+
+    function formatarDataIsoParaBr(valor) {
+        if (!valor) return '-';
+        const partes = String(valor).split('-');
+        if (partes.length !== 3) return valor;
+        return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+
+    function preencherFichaAssociado(data, linha) {
+        document.getElementById('fichaFotoAssociado').src = data.foto_base64 || FOTO_PADRAO_ASSOCIADO;
+        document.getElementById('fichaNomeAssociado').textContent = data.nome || '-';
+        document.getElementById('fichaNumeroAssociado').textContent = linha?.children?.[0]?.textContent?.trim() || '-';
+        document.getElementById('fichaStatusAssociado').textContent = data.status || '-';
+        document.getElementById('fichaCpfAssociado').textContent = data.cpf || '-';
+        document.getElementById('fichaRgAssociado').textContent = data.rg || '-';
+        document.getElementById('fichaFuncaoAssociado').textContent = data.funcao || '-';
+        document.getElementById('fichaUvrAssociado').textContent = data.uvr || '-';
+        document.getElementById('fichaAssociacaoAssociado').textContent = data.associacao || '-';
+        document.getElementById('fichaDataAdmissaoAssociado').textContent = formatarDataIsoParaBr(data.data_admissao);
+        document.getElementById('fichaEnderecoAssociado').textContent = [data.logradouro, data.numero, data.bairro, data.cidade, data.uf].filter(Boolean).join(', ') || '-';
+        document.getElementById('fichaTelefoneAssociado').textContent = data.telefone || '-';
+        document.getElementById('fichaDataCadastroAssociado').textContent = data.data_cadastro || '-';
+    }
+
+    document.querySelectorAll('.js-open-ficha').forEach((linha) => {
+        linha.addEventListener('click', async (event) => {
+            if (event.target.closest('.js-area-acoes') || event.target.closest('.js-observacao-wrapper')) {
+                return;
+            }
+            const idAssociado = linha.dataset.associadoId;
+            try {
+                const response = await fetch(`/get_associado/${idAssociado}`);
+                const data = await response.json();
+                if (!response.ok || data.error) throw new Error(data.error || 'Erro ao carregar ficha.');
+                preencherFichaAssociado(data, linha);
+                modalFichaAssociadoAuditoria.show();
+            } catch (error) {
+                alert(error.message || 'Não foi possível carregar a ficha do associado.');
+            }
+        });
+    });
+
+    function atualizarEstadoLinha(linha, statusSelecionado) {
+        const statusInput = linha.querySelector('.js-status-auditoria');
+        const btnAprovar = linha.querySelector('.js-btn-aprovar');
+        const btnReprovar = linha.querySelector('.js-btn-reprovar');
+        const obsWrapper = linha.querySelector('.js-observacao-wrapper');
+        statusInput.value = statusSelecionado;
+        btnAprovar.classList.toggle('opacity-50', statusSelecionado !== 'Aprovado');
+        btnReprovar.classList.toggle('opacity-50', statusSelecionado !== 'Reprovado');
+        if (statusSelecionado === 'Reprovado') {
+            obsWrapper.classList.remove('d-none');
+        } else {
+            obsWrapper.classList.add('d-none');
+            const obsInput = linha.querySelector('.js-observacao');
+            if (obsInput && statusSelecionado !== 'Reprovado') {
+                obsInput.value = '';
+            }
+        }
+    }
+
+    function normalizarStatus(status) {
+        const valor = String(status || '').trim().toLowerCase();
+        if (valor === 'aprovado') return 'Aprovado';
+        if (valor === 'reprovado') return 'Reprovado';
+        return '';
+    }
+
+    document.querySelectorAll('.js-btn-aprovar').forEach((botao) => {
+        botao.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const linha = botao.closest('tr');
+            const statusAtual = normalizarStatus(linha.querySelector('.js-status-auditoria')?.value);
+            atualizarEstadoLinha(linha, statusAtual === 'Aprovado' ? '' : 'Aprovado');
+        });
+    });
+
+    document.querySelectorAll('.js-btn-reprovar').forEach((botao) => {
+        botao.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const linha = botao.closest('tr');
+            const statusAtual = normalizarStatus(linha.querySelector('.js-status-auditoria')?.value);
+            const novoStatus = statusAtual === 'Reprovado' ? '' : 'Reprovado';
+            atualizarEstadoLinha(linha, novoStatus);
+            if (novoStatus === 'Reprovado') {
+                linha.querySelector('.js-observacao')?.focus();
+            }
+        });
+    });
+
+    const btnSalvarLoteAuditoria = document.getElementById('btnSalvarLoteAuditoria');
+    if (btnSalvarLoteAuditoria) {
+        btnSalvarLoteAuditoria.addEventListener('click', async () => {
+            const linhas = Array.from(document.querySelectorAll('tr[data-associado-id]'));
+            const avaliacoes = [];
+            const observacaoNaoCadastrados = (document.getElementById('observacaoNaoCadastrados')?.value || '').trim();
+            for (const linha of linhas) {
+                const status = normalizarStatus(linha.querySelector('.js-status-auditoria')?.value);
+                const statusOriginal = normalizarStatus(linha.dataset.statusOriginal || '');
+                const observacaoInput = linha.querySelector('.js-observacao');
+                const observacao = (observacaoInput?.value || '').trim();
+                if (!status) {
+                    if (statusOriginal) {
+                        avaliacoes.push({
+                            id_associado: linha.dataset.associadoId,
+                            status_auditoria: 'Pendente',
+                            observacao: ''
+                        });
+                    }
+                    continue;
+                }
+                if (status === 'Reprovado' && !observacao) {
+                    alert('Existe associado reprovado sem observação. Complete antes de salvar.');
+                    observacaoInput?.focus();
+                    return;
+                }
+                avaliacoes.push({
+                    id_associado: linha.dataset.associadoId,
+                    status_auditoria: status,
+                    observacao
+                });
+            }
+
+            if (!avaliacoes.length && !observacaoNaoCadastrados) {
+                alert('Nenhuma avaliação selecionada para salvar.');
+                return;
+            }
+
+            btnSalvarLoteAuditoria.disabled = true;
+            const textoOriginal = btnSalvarLoteAuditoria.innerHTML;
+            btnSalvarLoteAuditoria.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando...';
+            try {
+                const response = await fetch('/auditoria/associados/salvar_lote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        uvr: '{{ uvr_filtro }}',
+                        avaliacoes,
+                        observacao_nao_cadastrados: observacaoNaoCadastrados
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'Erro ao salvar lote.');
+                alert(data.message || 'Auditoria salva com sucesso.');
+                window.location.reload();
+            } catch (error) {
+                alert(error.message || 'Erro ao salvar auditoria.');
+            } finally {
+                btnSalvarLoteAuditoria.disabled = false;
+                btnSalvarLoteAuditoria.innerHTML = textoOriginal;
+            }
+        });
+    }
+</script>
+</body>
+</html>

@@ -777,6 +777,67 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
+        # --- MÓDULO DE AUDITORIA ---
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auditoria_associados (
+                id SERIAL PRIMARY KEY,
+                uvr VARCHAR(10) NOT NULL,
+                id_associado INTEGER NOT NULL REFERENCES associados(id) ON DELETE CASCADE,
+                status_auditoria VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+                observacao TEXT,
+                usuario_auditor VARCHAR(100) NOT NULL,
+                data_hora_auditoria TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (uvr, id_associado)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auditoria_passo1_observacoes (
+                id SERIAL PRIMARY KEY,
+                uvr VARCHAR(10) NOT NULL UNIQUE,
+                observacao_nao_cadastrados TEXT,
+                usuario_auditor VARCHAR(100) NOT NULL,
+                data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auditoria_relatorios (
+                id SERIAL PRIMARY KEY,
+                numero_relatorio VARCHAR(30) NOT NULL UNIQUE,
+                uvr VARCHAR(10) NOT NULL,
+                nome_uvr VARCHAR(255) NOT NULL,
+                periodo_analise VARCHAR(7) NOT NULL,
+                passos_auditoria VARCHAR(20) NOT NULL,
+                caminho_arquivo VARCHAR(255) NOT NULL,
+                usuario_gerador VARCHAR(100) NOT NULL,
+                data_hora_geracao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        try:
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS uvr VARCHAR(10);")
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS id_associado INTEGER REFERENCES associados(id) ON DELETE CASCADE;")
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS status_auditoria VARCHAR(20) NOT NULL DEFAULT 'Pendente';")
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS observacao TEXT;")
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS usuario_auditor VARCHAR(100);")
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS data_hora_auditoria TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("UPDATE auditoria_associados SET status_auditoria = 'Pendente' WHERE status_auditoria IS NULL;")
+            cur.execute("UPDATE auditoria_associados SET usuario_auditor = 'sistema' WHERE usuario_auditor IS NULL OR usuario_auditor = '';")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_auditoria_associados_uvr_associado ON auditoria_associados (uvr, id_associado);")
+            cur.execute("ALTER TABLE auditoria_passo1_observacoes ADD COLUMN IF NOT EXISTS observacao_nao_cadastrados TEXT;")
+            cur.execute("ALTER TABLE auditoria_passo1_observacoes ADD COLUMN IF NOT EXISTS usuario_auditor VARCHAR(100);")
+            cur.execute("ALTER TABLE auditoria_passo1_observacoes ADD COLUMN IF NOT EXISTS data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("UPDATE auditoria_passo1_observacoes SET usuario_auditor = 'sistema' WHERE usuario_auditor IS NULL OR usuario_auditor = '';")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS numero_relatorio VARCHAR(30);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS uvr VARCHAR(10);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS nome_uvr VARCHAR(255);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS periodo_analise VARCHAR(7);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS passos_auditoria VARCHAR(20);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS caminho_arquivo VARCHAR(255);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS usuario_gerador VARCHAR(100);")
+            cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS data_hora_geracao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()
+
         try:
             cur.execute("ALTER TABLE ouvidoria_grupos ADD COLUMN IF NOT EXISTS ordem INTEGER NOT NULL DEFAULT 0;")
             cur.execute("ALTER TABLE ouvidoria_grupos ADD COLUMN IF NOT EXISTS fixo BOOLEAN NOT NULL DEFAULT TRUE;")
@@ -2293,6 +2354,15 @@ def index():
             "disponivel": True,
             "badge": "Em estruturação",
         },
+        {
+            "nome": "Auditoria",
+            "descricao": "Fiscalizações por etapas para validação de documentos e rotinas da coleta seletiva.",
+            "icone": "fa-clipboard-check",
+            "rota": "auditoria",
+            "cor": "warning",
+            "disponivel": True,
+            "badge": "Passo 1 disponível",
+        },
     ]
     return render_template("modulos.html", usuario=current_user, modulos=modulos)
 
@@ -2445,22 +2515,589 @@ def ouvidoria():
                 (grupo_id,),
             )
             subgrupos_filtro = cur.fetchall()
+        return render_template(
+            "ouvidoria.html",
+            usuario=current_user,
+            hierarquia_tipologias=hierarquia,
+            manifestacoes_recentes=manifestacoes,
+            filtros_manifestacoes=filtros,
+            subgrupos_filtro=subgrupos_filtro,
+            permissao_edicao_tipologias=not usuario_visitante(),
+            ouvidoria_status_opcoes=OUVIDORIA_STATUS_OPCOES,
+            ouvidoria_prioridade_opcoes=OUVIDORIA_PRIORIDADE_OPCOES,
+        )
     finally:
         cur.close()
         conn.close()
 
-    return render_template(
-        "ouvidoria.html",
-        usuario=current_user,
-        hierarquia_tipologias=hierarquia,
-        manifestacoes_recentes=manifestacoes,
-        filtros_manifestacoes=filtros,
-        subgrupos_filtro=subgrupos_filtro,
-        permissao_edicao_tipologias=not usuario_visitante(),
-        ouvidoria_status_opcoes=OUVIDORIA_STATUS_OPCOES,
-        ouvidoria_prioridade_opcoes=OUVIDORIA_PRIORIDADE_OPCOES,
+@app.route("/modulos/auditoria", methods=["GET"])
+@login_required
+def auditoria():
+    """Módulo de Auditoria com fluxo em etapas. Passo 1: fiscalização de associados."""
+    role_usuario = (current_user.role or "").lower()
+    if role_usuario not in {"admin", "auditor"}:
+        flash("Apenas ADMIN (e futuramente AUDITOR) pode acessar o módulo de Auditoria.", "warning")
+        return redirect(url_for("index"))
+
+    uvr_filtro = (request.args.get("uvr") or "").strip()
+    periodo_analise = (request.args.get("periodo_analise") or "").strip()  # formato YYYY-MM
+    passo = (request.args.get("passo") or "1").strip()
+    if passo not in {"1", "2", "3", "4"}:
+        passo = "1"
+    passos_param = (request.args.get("passos_auditoria") or "").strip()
+    passos_selecionados = []
+    if passos_param:
+        for item in passos_param.split(","):
+            passo_item = item.strip()
+            if passo_item in {"1", "2", "3"} and passo_item not in passos_selecionados:
+                passos_selecionados.append(passo_item)
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        def resolver_nome_uvr(uvr_alvo):
+            if not uvr_alvo:
+                return ""
+            cur.execute("""
+                SELECT associacao
+                FROM associados
+                WHERE uvr = %s AND associacao IS NOT NULL AND associacao <> ''
+                ORDER BY id DESC
+                LIMIT 1
+            """, (uvr_alvo,))
+            row = cur.fetchone()
+            if row and row.get("associacao"):
+                return row["associacao"]
+
+            cur.execute("""
+                SELECT associacao
+                FROM cadastros
+                WHERE uvr = %s AND associacao IS NOT NULL AND associacao <> ''
+                ORDER BY id DESC
+                LIMIT 1
+            """, (uvr_alvo,))
+            row = cur.fetchone()
+            if row and row.get("associacao"):
+                return row["associacao"]
+            return uvr_alvo
+        cur.execute("""
+            SELECT DISTINCT uvr
+            FROM (
+                SELECT uvr FROM associados WHERE uvr IS NOT NULL AND uvr <> ''
+                UNION
+                SELECT d.uvr
+                FROM documentos d
+                JOIN tipos_documentos td ON td.id = d.id_tipo
+                WHERE td.nome = 'Relatório de Associados' AND d.uvr IS NOT NULL AND d.uvr <> ''
+            ) base
+            ORDER BY uvr
+        """)
+        uvrs = [row["uvr"] for row in cur.fetchall() if row.get("uvr")]
+        nomes_uvr = {uvr_item: resolver_nome_uvr(uvr_item) for uvr_item in uvrs}
+
+        documentos_relatorio = []
+        associados = []
+        observacao_passo1 = ""
+        nome_uvr = resolver_nome_uvr(uvr_filtro)
+        relatorios_gerados = []
+        resumo_auditoria = {
+            "total": 0,
+            "aprovados": 0,
+            "reprovados": 0,
+            "pendentes": 0,
+        }
+        if uvr_filtro:
+            cur.execute("""
+                SELECT
+                    d.id,
+                    d.uvr,
+                    d.nome_original,
+                    d.caminho_arquivo,
+                    d.data_envio,
+                    d.status,
+                    d.motivo_rejeicao
+                FROM documentos d
+                JOIN tipos_documentos td ON td.id = d.id_tipo
+                WHERE td.nome = 'Relatório de Associados'
+                  AND d.uvr = %s
+                ORDER BY d.data_envio DESC
+            """, (uvr_filtro,))
+            documentos_relatorio = cur.fetchall()
+
+            cur.execute("""
+                SELECT
+                    a.id,
+                    a.numero,
+                    a.nome,
+                    a.cpf,
+                    a.funcao,
+                    a.status,
+                    aa.status_auditoria,
+                    aa.observacao,
+                    aa.usuario_auditor,
+                    aa.data_hora_auditoria
+                FROM associados a
+                LEFT JOIN auditoria_associados aa
+                  ON aa.id_associado = a.id AND aa.uvr = a.uvr
+                WHERE a.uvr = %s
+                  AND LOWER(a.status) = 'ativo'
+                ORDER BY a.nome ASC
+            """, (uvr_filtro,))
+            associados = cur.fetchall()
+            cur.execute("""
+                SELECT observacao_nao_cadastrados
+                FROM auditoria_passo1_observacoes
+                WHERE uvr = %s
+            """, (uvr_filtro,))
+            observacao_row = cur.fetchone()
+            observacao_passo1 = (observacao_row.get("observacao_nao_cadastrados") or "") if observacao_row else ""
+            if periodo_analise:
+                cur.execute("""
+                    SELECT id, numero_relatorio, nome_uvr, periodo_analise, passos_auditoria, caminho_arquivo, data_hora_geracao
+                    FROM auditoria_relatorios
+                    WHERE uvr = %s AND periodo_analise = %s
+                    ORDER BY data_hora_geracao DESC
+                    LIMIT 30
+                """, (uvr_filtro, periodo_analise))
+                relatorios_gerados = cur.fetchall()
+            resumo_auditoria["total"] = len(associados)
+            resumo_auditoria["aprovados"] = sum(1 for item in associados if (item.get("status_auditoria") or "").lower() == "aprovado")
+            resumo_auditoria["reprovados"] = sum(1 for item in associados if (item.get("status_auditoria") or "").lower() == "reprovado")
+            resumo_auditoria["pendentes"] = resumo_auditoria["total"] - resumo_auditoria["aprovados"] - resumo_auditoria["reprovados"]
+
+        return render_template(
+            "auditoria.html",
+            usuario=current_user,
+            uvrs=uvrs,
+            nomes_uvr=nomes_uvr,
+            uvr_filtro=uvr_filtro,
+            nome_uvr=nome_uvr,
+            periodo_analise=periodo_analise,
+            passo_atual=passo,
+            passos_selecionados=passos_selecionados,
+            passos_auditoria_param=",".join(passos_selecionados),
+            documentos_relatorio=documentos_relatorio,
+            associados=associados,
+            observacao_passo1=observacao_passo1,
+            relatorios_gerados=relatorios_gerados,
+            resumo_auditoria=resumo_auditoria,
+        )
+    except Exception as e:
+        app.logger.error(f"Erro ao carregar módulo de auditoria: {e}")
+        flash("Não foi possível carregar o módulo de Auditoria.", "danger")
+        return redirect(url_for("index"))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/auditoria/associados/<int:id_associado>/avaliar", methods=["POST"])
+@login_required
+def avaliar_associado_auditoria(id_associado):
+    role_usuario = (current_user.role or "").lower()
+    if role_usuario not in {"admin", "auditor"}:
+        return jsonify({"ok": False, "message": "Sem permissão para auditar."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    status_auditoria = (payload.get("status_auditoria") or "").strip().capitalize()
+    observacao = (payload.get("observacao") or "").strip()
+    if status_auditoria not in {"Aprovado", "Reprovado"}:
+        return jsonify({"ok": False, "message": "Status inválido. Use Aprovado ou Reprovado."}), 400
+    if status_auditoria == "Reprovado" and not observacao:
+        return jsonify({"ok": False, "message": "Informe a observação ao reprovar o associado."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("SELECT id, uvr FROM associados WHERE id = %s", (id_associado,))
+        associado = cur.fetchone()
+        if not associado:
+            return jsonify({"ok": False, "message": "Associado não encontrado."}), 404
+
+        cur.execute("""
+            INSERT INTO auditoria_associados (uvr, id_associado, status_auditoria, observacao, usuario_auditor)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (uvr, id_associado)
+            DO UPDATE SET
+                status_auditoria = EXCLUDED.status_auditoria,
+                observacao = EXCLUDED.observacao,
+                usuario_auditor = EXCLUDED.usuario_auditor,
+                data_hora_auditoria = CURRENT_TIMESTAMP
+        """, (
+            associado["uvr"],
+            id_associado,
+            status_auditoria,
+            observacao if observacao else None,
+            current_user.username,
+        ))
+        conn.commit()
+        return jsonify({"ok": True, "message": "Auditoria registrada com sucesso."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao avaliar associado em auditoria: {e}")
+        return jsonify({"ok": False, "message": "Erro ao salvar avaliação."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/auditoria/associados/salvar_lote", methods=["POST"])
+@login_required
+def salvar_lote_auditoria_associados():
+    role_usuario = (current_user.role or "").lower()
+    if role_usuario not in {"admin", "auditor"}:
+        return jsonify({"ok": False, "message": "Sem permissão para auditar."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    uvr = (payload.get("uvr") or "").strip()
+    avaliacoes = payload.get("avaliacoes") or []
+    observacao_nao_cadastrados = (payload.get("observacao_nao_cadastrados") or "").strip()
+    if not uvr:
+        return jsonify({"ok": False, "message": "Informe a UVR da auditoria."}), 400
+    if not isinstance(avaliacoes, list):
+        return jsonify({"ok": False, "message": "Formato de avaliações inválido."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        salvos = 0
+        for item in avaliacoes:
+            if not isinstance(item, dict):
+                continue
+            id_associado = item.get("id_associado")
+            status_auditoria = (item.get("status_auditoria") or "").strip().capitalize()
+            observacao = (item.get("observacao") or "").strip()
+            if not id_associado:
+                continue
+            if status_auditoria not in {"Aprovado", "Reprovado", "Pendente"}:
+                continue
+            if status_auditoria == "Reprovado" and not observacao:
+                continue
+
+            cur.execute(
+                """
+                SELECT id, uvr
+                FROM associados
+                WHERE id = %s AND uvr = %s
+                """,
+                (int(id_associado), uvr),
+            )
+            associado = cur.fetchone()
+            if not associado:
+                continue
+
+            if status_auditoria == "Pendente":
+                cur.execute("""
+                    DELETE FROM auditoria_associados
+                    WHERE uvr = %s AND id_associado = %s
+                """, (uvr, int(id_associado)))
+                salvos += 1
+                continue
+
+            cur.execute("""
+                INSERT INTO auditoria_associados (uvr, id_associado, status_auditoria, observacao, usuario_auditor)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (uvr, id_associado)
+                DO UPDATE SET
+                    status_auditoria = EXCLUDED.status_auditoria,
+                    observacao = EXCLUDED.observacao,
+                    usuario_auditor = EXCLUDED.usuario_auditor,
+                    data_hora_auditoria = CURRENT_TIMESTAMP
+            """, (
+                uvr,
+                int(id_associado),
+                status_auditoria,
+                observacao if observacao else None,
+                current_user.username,
+            ))
+            salvos += 1
+
+        cur.execute("""
+            INSERT INTO auditoria_passo1_observacoes (uvr, observacao_nao_cadastrados, usuario_auditor)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (uvr)
+            DO UPDATE SET
+                observacao_nao_cadastrados = EXCLUDED.observacao_nao_cadastrados,
+                usuario_auditor = EXCLUDED.usuario_auditor,
+                data_hora_atualizacao = CURRENT_TIMESTAMP
+        """, (
+            uvr,
+            observacao_nao_cadastrados if observacao_nao_cadastrados else None,
+            current_user.username,
+        ))
+
+        conn.commit()
+        if salvos == 0:
+            if observacao_nao_cadastrados:
+                return jsonify({"ok": True, "message": "Observação geral salva com sucesso."})
+            return jsonify({"ok": False, "message": "Nenhuma linha válida para salvar."}), 400
+        return jsonify({"ok": True, "message": f"{salvos} avaliação(ões) salva(s) com sucesso."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao salvar lote de auditoria: {e}")
+        return jsonify({"ok": False, "message": "Erro ao salvar avaliações."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/auditoria/finalizacao/pdf", methods=["GET"])
+@login_required
+def gerar_pdf_finalizacao_auditoria():
+    role_usuario = (current_user.role or "").lower()
+    if role_usuario not in {"admin", "auditor"}:
+        flash("Sem permissão para gerar o relatório de auditoria.", "warning")
+        return redirect(url_for("index"))
+
+    uvr = (request.args.get("uvr") or "").strip()
+    periodo_analise = (request.args.get("periodo_analise") or "").strip()
+    passos_param = (request.args.get("passos_auditoria") or "").strip()
+
+    passos_selecionados = []
+    if passos_param:
+        for item in passos_param.split(","):
+            passo_item = item.strip()
+            if passo_item in {"1", "2", "3"} and passo_item not in passos_selecionados:
+                passos_selecionados.append(passo_item)
+
+    if not uvr:
+        flash("Selecione a UVR antes de gerar o relatório de auditoria.", "warning")
+        return redirect(url_for("auditoria", passo=4))
+    if not periodo_analise:
+        flash("Informe o período de análise (mês/ano) antes de gerar o relatório.", "warning")
+        return redirect(url_for("auditoria", passo=4, uvr=uvr, passos_auditoria=passos_param))
+
+    if not passos_selecionados:
+        flash("Selecione ao menos um passo para incluir no relatório final.", "warning")
+        return redirect(url_for("auditoria", passo=4, uvr=uvr, periodo_analise=periodo_analise))
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT
+                a.numero,
+                a.nome,
+                a.cpf,
+                a.funcao,
+                COALESCE(aa.status_auditoria, 'Pendente') AS status_auditoria,
+                COALESCE(aa.observacao, '') AS observacao
+            FROM associados a
+            LEFT JOIN auditoria_associados aa
+              ON aa.id_associado = a.id AND aa.uvr = a.uvr
+            WHERE a.uvr = %s
+              AND LOWER(a.status) = 'ativo'
+            ORDER BY a.nome ASC
+            """,
+            (uvr,),
+        )
+        linhas = cur.fetchall()
+        cur.execute("""
+            SELECT observacao_nao_cadastrados
+            FROM auditoria_passo1_observacoes
+            WHERE uvr = %s
+        """, (uvr,))
+        observacao_row = cur.fetchone()
+        observacao_nao_cadastrados = (observacao_row.get("observacao_nao_cadastrados") or "").strip() if observacao_row else ""
+        cur.execute("""
+            SELECT associacao
+            FROM associados
+            WHERE uvr = %s AND associacao IS NOT NULL AND associacao <> ''
+            ORDER BY id DESC
+            LIMIT 1
+        """, (uvr,))
+        nome_uvr_row = cur.fetchone()
+        nome_uvr = nome_uvr_row.get("associacao") if nome_uvr_row and nome_uvr_row.get("associacao") else uvr
+    finally:
+        cur.close()
+        conn.close()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        rightMargin=1.2 * cm,
     )
 
+    styles = getSampleStyleSheet()
+    style_title = ParagraphStyle(
+        "auditoria_title",
+        parent=styles["Heading2"],
+        alignment=TA_LEFT,
+        spaceAfter=6
+    )
+    style_text = ParagraphStyle(
+        "auditoria_text",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=12
+    )
+
+    story = []
+    data_geracao = datetime.now().strftime("%d/%m/%Y %H:%M")
+    periodo_br = periodo_analise[5:7] + "/" + periodo_analise[0:4] if len(periodo_analise) == 7 and "-" in periodo_analise else periodo_analise
+
+    story.append(Paragraph("Relatório de Auditoria - Coleta Seletiva", style_title))
+    story.append(Paragraph(f"UVR: <b>{uvr}</b> - <b>{nome_uvr}</b>", style_text))
+    story.append(Paragraph(f"Período analisado: <b>{periodo_br}</b>", style_text))
+    story.append(Paragraph(f"Data de emissão: {data_geracao}", style_text))
+    story.append(Spacer(1, 0.35 * cm))
+
+    story.append(Paragraph("Passos incluídos nesta auditoria", styles["Heading4"]))
+    if "1" in passos_selecionados:
+        story.append(Paragraph("Passo 1: Fiscalização de Associados.", style_text))
+    if "2" in passos_selecionados:
+        story.append(Paragraph("Passo 2: Rotina em estruturação (incluído pelo auditor).", style_text))
+    if "3" in passos_selecionados:
+        story.append(Paragraph("Passo 3: Rotina em estruturação (incluído pelo auditor).", style_text))
+    story.append(Spacer(1, 0.3 * cm))
+
+    if "1" in passos_selecionados:
+        tabela_data = [["Nº", "Associado", "CPF", "Função", "Status", "Observação"]]
+        for item in linhas:
+            tabela_data.append([
+                item.get("numero") or "-",
+                item.get("nome") or "-",
+                item.get("cpf") or "-",
+                item.get("funcao") or "-",
+                item.get("status_auditoria") or "Pendente",
+                item.get("observacao") or "-",
+            ])
+
+        tabela = Table(
+            tabela_data,
+            repeatRows=1,
+            colWidths=[1.2 * cm, 5.3 * cm, 3.0 * cm, 2.8 * cm, 2.4 * cm, 4.8 * cm]
+        )
+        tabela.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#343a40")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey]),
+        ]))
+        story.append(tabela)
+        story.append(Spacer(1, 0.4*cm))
+        if observacao_nao_cadastrados:
+            story.append(Paragraph("<b>Inconformidade informada no Passo 1 (associados da lista sem cadastro):</b>", style_text))
+            story.append(Paragraph(observacao_nao_cadastrados, style_text))
+            story.append(Spacer(1, 0.6*cm))
+        else:
+            story.append(Paragraph("Sem inconformidade adicional registrada sobre associados não cadastrados.", style_text))
+            story.append(Spacer(1, 0.6*cm))
+    else:
+        story.append(Paragraph("Passo 1 não foi incluído nesta auditoria.", style_text))
+        story.append(Spacer(1, 0.8 * cm))
+
+    story.append(Paragraph("______________________________________________", style_text))
+    story.append(Paragraph("Assinatura do Auditor", style_text))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    os.makedirs(os.path.join(app.root_path, "uploads", "auditoria_relatorios"), exist_ok=True)
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            INSERT INTO auditoria_relatorios (
+                numero_relatorio, uvr, nome_uvr, periodo_analise, passos_auditoria,
+                caminho_arquivo, usuario_gerador
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            f"PENDENTE-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            uvr,
+            nome_uvr,
+            periodo_analise,
+            ",".join(passos_selecionados),
+            "",
+            current_user.username,
+        ))
+        id_relatorio = cur.fetchone()["id"]
+        numero_relatorio = f"AUD-{datetime.now().year}-{id_relatorio:05d}"
+        nome_arquivo = f"{numero_relatorio}_{uvr.replace(' ', '_')}_{periodo_analise.replace('-', '')}.pdf"
+        caminho_relativo = os.path.join("auditoria_relatorios", nome_arquivo)
+        caminho_absoluto = os.path.join(app.root_path, "uploads", caminho_relativo)
+
+        with open(caminho_absoluto, "wb") as f:
+            f.write(buffer.getvalue())
+
+        cur.execute("""
+            UPDATE auditoria_relatorios
+            SET numero_relatorio = %s, caminho_arquivo = %s
+            WHERE id = %s
+        """, (numero_relatorio, caminho_relativo, id_relatorio))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=nome_arquivo,
+        mimetype="application/pdf"
+    )
+
+@app.route("/auditoria/relatorios/<int:id_relatorio>/excluir", methods=["POST"])
+@login_required
+def excluir_relatorio_auditoria(id_relatorio):
+    role_usuario = (current_user.role or "").lower()
+    if role_usuario not in {"admin", "auditor"}:
+        flash("Sem permissão para excluir relatório de auditoria.", "warning")
+        return redirect(url_for("index"))
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, uvr, periodo_analise, caminho_arquivo
+            FROM auditoria_relatorios
+            WHERE id = %s
+        """, (id_relatorio,))
+        relatorio = cur.fetchone()
+        if not relatorio:
+            flash("Relatório de auditoria não encontrado.", "warning")
+            return redirect(url_for("auditoria", passo=4))
+
+        caminho_relativo = (relatorio.get("caminho_arquivo") or "").strip()
+        if caminho_relativo:
+            caminho_absoluto = os.path.join(app.root_path, "uploads", caminho_relativo)
+            if os.path.exists(caminho_absoluto):
+                try:
+                    os.remove(caminho_absoluto)
+                except OSError:
+                    app.logger.warning(f"Não foi possível remover arquivo do relatório: {caminho_absoluto}")
+
+        cur.execute("DELETE FROM auditoria_relatorios WHERE id = %s", (id_relatorio,))
+        conn.commit()
+        flash("Relatório de auditoria excluído com sucesso.", "success")
+        return redirect(url_for(
+            "auditoria",
+            passo=4,
+            uvr=relatorio.get("uvr"),
+            periodo_analise=relatorio.get("periodo_analise"),
+        ))
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao excluir relatório de auditoria {id_relatorio}: {e}", exc_info=True)
+        flash("Erro ao excluir relatório de auditoria.", "danger")
+        return redirect(url_for("auditoria", passo=4))
+    finally:
+        cur.close()
+        conn.close()
 
 @app.route("/ouvidoria/api/hierarquia", methods=["GET"])
 @login_required
@@ -10145,16 +10782,20 @@ def gerar_pdf_unico_documentos():
         caminho = doc.get("caminho_arquivo")
         if not caminho:
             return None, None
+        
         if str(caminho).startswith("http"):
             url = _build_cloudinary_delivery_url(caminho)
             resposta = requests.get(url, timeout=30)
             resposta.raise_for_status()
             return resposta.content, caminho
+            
         caminho_local = caminho
         if not os.path.isabs(caminho_local):
             caminho_local = os.path.join("uploads", caminho_local)
+            
         if not os.path.exists(caminho_local):
             return None, caminho_local
+            
         with open(caminho_local, "rb") as arquivo_local:
             return arquivo_local.read(), caminho_local
 
@@ -10243,13 +10884,79 @@ def gerar_pdf_unico_documentos():
         return send_file(buffer, as_attachment=True, download_name=nome_arquivo, mimetype="application/pdf")
 
     except Exception as e:
-        app.logger.error(f"Erro ao gerar PDF único de documentos: {e}", exc_info=True)
-        flash("Erro ao gerar PDF único. Tente novamente.", "danger")
+        app.logger.error(f"Erro ao gerar PDF único: {e}", exc_info=True)
+        flash("Erro interno ao gerar o documento. Tente novamente.", "danger")
         return redirect(url_for("documentos"))
+        
     finally:
-        if not cursor.closed:
+        if cursor is not None and not cursor.closed:
             cursor.close()
-        if not conn.closed:
+        if conn is not None and not conn.closed:
+            conn.close()
+
+@app.route("/auditoria/relatorios/<int:id_relatorio>/download", methods=["GET"])
+@login_required
+def baixar_relatorio_auditoria(id_relatorio):
+    role_usuario = (current_user.role or "").lower()
+    if role_usuario not in {"admin", "auditor"}:
+        flash("Sem permissão para baixar relatório de auditoria.", "warning")
+        return redirect(url_for("index"))
+
+    conn = None
+    cur = None
+    try:
+        conn = conectar_banco()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT numero_relatorio, caminho_arquivo
+            FROM auditoria_relatorios
+            WHERE id = %s
+            """,
+            (id_relatorio,),
+        )
+        relatorio = cur.fetchone()
+
+        if not relatorio:
+            flash("Relatório não encontrado.", "warning")
+            return redirect(url_for("auditoria", passo=4))
+
+        caminho_relativo = (relatorio.get("caminho_arquivo") or "").strip()
+        if not caminho_relativo:
+            flash("Caminho do relatório inválido.", "danger")
+            return redirect(url_for("auditoria", passo=4))
+
+        pasta_uploads = os.path.abspath(os.path.join(app.root_path, "uploads"))
+        caminho_absoluto = os.path.abspath(os.path.join(pasta_uploads, caminho_relativo))
+
+        # Segurança básica: evita path traversal
+        if os.path.commonpath([pasta_uploads, caminho_absoluto]) != pasta_uploads:
+            flash("Caminho de arquivo inválido para reimpressão.", "danger")
+            return redirect(url_for("auditoria", passo=4))
+
+        if not os.path.isfile(caminho_absoluto):
+            flash("Arquivo do relatório não encontrado para reimpressão.", "danger")
+            return redirect(url_for("auditoria", passo=4))
+
+        numero_relatorio = (relatorio.get("numero_relatorio") or "relatorio_auditoria").strip()
+        nome_download = f"{numero_relatorio}.pdf"
+
+        return send_file(
+            caminho_absoluto,
+            as_attachment=True,
+            download_name=nome_download,
+            mimetype="application/pdf",
+        )
+
+    except Exception as e:
+        app.logger.error(f"Erro ao baixar relatório de auditoria {id_relatorio}: {e}", exc_info=True)
+        flash("Erro ao baixar relatório. Tente novamente.", "danger")
+        return redirect(url_for("auditoria", passo=4))
+    finally:
+        if cur is not None and not cur.closed:
+            cur.close()
+        if conn is not None and not conn.closed:
             conn.close()
 
 @app.route('/editar_documento', methods=['POST'])
