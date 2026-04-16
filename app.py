@@ -777,17 +777,18 @@ def criar_tabelas_se_nao_existir():
             )
         """)
 
-        # --- MÓDULO DE AUDITORIA ---
+       # --- MÓDULO DE AUDITORIA ---
         cur.execute("""
             CREATE TABLE IF NOT EXISTS auditoria_associados (
                 id SERIAL PRIMARY KEY,
                 uvr VARCHAR(10) NOT NULL,
+                periodo_analise VARCHAR(7) NOT NULL DEFAULT '',
                 id_associado INTEGER NOT NULL REFERENCES associados(id) ON DELETE CASCADE,
                 status_auditoria VARCHAR(20) NOT NULL DEFAULT 'Pendente',
                 observacao TEXT,
                 usuario_auditor VARCHAR(100) NOT NULL,
                 data_hora_auditoria TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (uvr, id_associado)
+                UNIQUE (uvr, periodo_analise, id_associado)
             )
         """)
         cur.execute("""
@@ -814,6 +815,7 @@ def criar_tabelas_se_nao_existir():
         """)
         try:
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS uvr VARCHAR(10);")
+            cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS periodo_analise VARCHAR(7) NOT NULL DEFAULT '';")
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS id_associado INTEGER REFERENCES associados(id) ON DELETE CASCADE;")
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS status_auditoria VARCHAR(20) NOT NULL DEFAULT 'Pendente';")
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS observacao TEXT;")
@@ -821,7 +823,10 @@ def criar_tabelas_se_nao_existir():
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS data_hora_auditoria TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
             cur.execute("UPDATE auditoria_associados SET status_auditoria = 'Pendente' WHERE status_auditoria IS NULL;")
             cur.execute("UPDATE auditoria_associados SET usuario_auditor = 'sistema' WHERE usuario_auditor IS NULL OR usuario_auditor = '';")
-            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_auditoria_associados_uvr_associado ON auditoria_associados (uvr, id_associado);")
+            cur.execute("UPDATE auditoria_associados SET periodo_analise = '' WHERE periodo_analise IS NULL;")
+            cur.execute("DROP INDEX IF EXISTS uq_auditoria_associados_uvr_associado;")
+            cur.execute("ALTER TABLE auditoria_associados DROP CONSTRAINT IF EXISTS auditoria_associados_uvr_id_associado_key;")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_auditoria_associados_uvr_periodo_associado ON auditoria_associados (uvr, periodo_analise, id_associado);")
             cur.execute("ALTER TABLE auditoria_passo1_observacoes ADD COLUMN IF NOT EXISTS observacao_nao_cadastrados TEXT;")
             cur.execute("ALTER TABLE auditoria_passo1_observacoes ADD COLUMN IF NOT EXISTS usuario_auditor VARCHAR(100);")
             cur.execute("ALTER TABLE auditoria_passo1_observacoes ADD COLUMN IF NOT EXISTS data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
@@ -2637,11 +2642,13 @@ def auditoria():
                     aa.data_hora_auditoria
                 FROM associados a
                 LEFT JOIN auditoria_associados aa
-                  ON aa.id_associado = a.id AND aa.uvr = a.uvr
+                  ON aa.id_associado = a.id
+                 AND aa.uvr = a.uvr
+                 AND aa.periodo_analise = %s
                 WHERE a.uvr = %s
                   AND LOWER(a.status) = 'ativo'
                 ORDER BY a.nome ASC
-            """, (uvr_filtro,))
+            """, (periodo_analise, uvr_filtro))
             associados = cur.fetchall()
             cur.execute("""
                 SELECT observacao_nao_cadastrados
@@ -2698,10 +2705,13 @@ def avaliar_associado_auditoria(id_associado):
         return jsonify({"ok": False, "message": "Sem permissão para auditar."}), 403
 
     payload = request.get_json(silent=True) or {}
+    periodo_analise = (payload.get("periodo_analise") or "").strip()
     status_auditoria = (payload.get("status_auditoria") or "").strip().capitalize()
     observacao = (payload.get("observacao") or "").strip()
     if status_auditoria not in {"Aprovado", "Reprovado"}:
         return jsonify({"ok": False, "message": "Status inválido. Use Aprovado ou Reprovado."}), 400
+    if not periodo_analise:
+        return jsonify({"ok": False, "message": "Informe o período de análise da auditoria."}), 400
     if status_auditoria == "Reprovado" and not observacao:
         return jsonify({"ok": False, "message": "Informe a observação ao reprovar o associado."}), 400
 
@@ -2714,9 +2724,9 @@ def avaliar_associado_auditoria(id_associado):
             return jsonify({"ok": False, "message": "Associado não encontrado."}), 404
 
         cur.execute("""
-            INSERT INTO auditoria_associados (uvr, id_associado, status_auditoria, observacao, usuario_auditor)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (uvr, id_associado)
+            INSERT INTO auditoria_associados (uvr, periodo_analise, id_associado, status_auditoria, observacao, usuario_auditor)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (uvr, periodo_analise, id_associado)
             DO UPDATE SET
                 status_auditoria = EXCLUDED.status_auditoria,
                 observacao = EXCLUDED.observacao,
@@ -2724,6 +2734,7 @@ def avaliar_associado_auditoria(id_associado):
                 data_hora_auditoria = CURRENT_TIMESTAMP
         """, (
             associado["uvr"],
+            periodo_analise,
             id_associado,
             status_auditoria,
             observacao if observacao else None,
@@ -2749,10 +2760,9 @@ def salvar_lote_auditoria_associados():
 
     payload = request.get_json(silent=True) or {}
     uvr = (payload.get("uvr") or "").strip()
-    avaliacoes = payload.get("avaliacoes") or []
-    observacao_nao_cadastrados = (payload.get("observacao_nao_cadastrados") or "").strip()
-    if not uvr:
-        return jsonify({"ok": False, "message": "Informe a UVR da auditoria."}), 400
+    periodo_analise = (payload.get("periodo_analise") or "").strip()
+    if not periodo_analise:
+        return jsonify({"ok": False, "message": "Informe o período de análise da auditoria."}), 400
     if not isinstance(avaliacoes, list):
         return jsonify({"ok": False, "message": "Formato de avaliações inválido."}), 400
 
@@ -2788,15 +2798,15 @@ def salvar_lote_auditoria_associados():
             if status_auditoria == "Pendente":
                 cur.execute("""
                     DELETE FROM auditoria_associados
-                    WHERE uvr = %s AND id_associado = %s
-                """, (uvr, int(id_associado)))
+                    WHERE uvr = %s AND periodo_analise = %s AND id_associado = %s
+                """, (uvr, periodo_analise, int(id_associado)))
                 salvos += 1
                 continue
 
             cur.execute("""
-                INSERT INTO auditoria_associados (uvr, id_associado, status_auditoria, observacao, usuario_auditor)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (uvr, id_associado)
+                INSERT INTO auditoria_associados (uvr, periodo_analise, id_associado, status_auditoria, observacao, usuario_auditor)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (uvr, periodo_analise, id_associado)
                 DO UPDATE SET
                     status_auditoria = EXCLUDED.status_auditoria,
                     observacao = EXCLUDED.observacao,
@@ -2804,6 +2814,7 @@ def salvar_lote_auditoria_associados():
                     data_hora_auditoria = CURRENT_TIMESTAMP
             """, (
                 uvr,
+                periodo_analise,
                 int(id_associado),
                 status_auditoria,
                 observacao if observacao else None,
@@ -2884,12 +2895,14 @@ def gerar_pdf_finalizacao_auditoria():
                 COALESCE(aa.observacao, '') AS observacao
             FROM associados a
             LEFT JOIN auditoria_associados aa
-              ON aa.id_associado = a.id AND aa.uvr = a.uvr
+              ON aa.id_associado = a.id
+             AND aa.uvr = a.uvr
+             AND aa.periodo_analise = %s
             WHERE a.uvr = %s
               AND LOWER(a.status) = 'ativo'
             ORDER BY a.nome ASC
             """,
-            (uvr,),
+            (periodo_analise, uvr),
         )
         linhas = cur.fetchall()
         cur.execute("""
@@ -3035,6 +3048,14 @@ def gerar_pdf_finalizacao_auditoria():
             SET numero_relatorio = %s, caminho_arquivo = %s
             WHERE id = %s
         """, (numero_relatorio, caminho_relativo, id_relatorio))
+
+        # Após a finalização da auditoria, reinicia os associados para "Pendente"
+        # removendo os registros de avaliação da UVR (independente do período),
+        # permitindo reauditar o mesmo período quantas vezes for necessário.
+        cur.execute("""
+            DELETE FROM auditoria_associados
+            WHERE uvr = %s
+        """, (uvr,))
         conn.commit()
     except Exception:
         conn.rollback()
