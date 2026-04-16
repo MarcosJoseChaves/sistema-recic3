@@ -2761,6 +2761,8 @@ def salvar_lote_auditoria_associados():
     payload = request.get_json(silent=True) or {}
     uvr = (payload.get("uvr") or "").strip()
     periodo_analise = (payload.get("periodo_analise") or "").strip()
+    avaliacoes = payload.get("avaliacoes") or []
+    observacao_nao_cadastrados = (payload.get("observacao_nao_cadastrados") or "").strip()
     if not periodo_analise:
         return jsonify({"ok": False, "message": "Informe o período de análise da auditoria."}), 400
     if not isinstance(avaliacoes, list):
@@ -4257,7 +4259,7 @@ def cadastrar_associado():
                 data_afastamento, motivo_afastamento, observacao_afastamento,
                 data_readmissao, motivo_readmissao
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             numero_gerado_str, dados["uvr"], dados.get("associacao",""), dados["nome"],
             cpf_num, dados["rg"], data_nascimento, data_admissao, dados["status"],
