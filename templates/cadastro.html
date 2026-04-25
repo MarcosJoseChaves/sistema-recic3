@@ -161,6 +161,10 @@
             <i class="fas fa-folder"></i> Documentos
         </a>
 
+        <a href="{{ url_for('entrega_documentos') }}" class="btn btn-outline-info">
+            <i class="fas fa-box-archive"></i> Entrega de documentos
+        </a>
+
         {% if current_user.role == 'admin' %}
         <button class="btn btn-warning position-relative shadow-sm fw-bold" onclick="carregarPendenciasDoc()">
             <i class="fas fa-file-signature"></i> Docs Pendentes

@@ -813,6 +813,43 @@ def criar_tabelas_se_nao_existir():
                 data_hora_geracao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # --- MÓDULO ENTREGA DE DOCUMENTOS (PASSO A PASSO) ---
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS entrega_documentos_pacotes (
+                id SERIAL PRIMARY KEY,
+                uvr VARCHAR(10) NOT NULL,
+                periodo_referencia VARCHAR(7) NOT NULL,
+                passo INTEGER NOT NULL DEFAULT 1,
+                status_envio VARCHAR(20) NOT NULL DEFAULT 'Em elaboração',
+                criado_por VARCHAR(100) NOT NULL,
+                data_hora_criacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                data_hora_finalizacao TIMESTAMP,
+                usuario_finalizacao VARCHAR(100),
+                UNIQUE (uvr, periodo_referencia, passo)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS entrega_documentos_itens (
+                id SERIAL PRIMARY KEY,
+                id_pacote INTEGER NOT NULL REFERENCES entrega_documentos_pacotes(id) ON DELETE CASCADE,
+                id_documento_origem INTEGER REFERENCES documentos(id) ON DELETE SET NULL,
+                id_tipo_documento INTEGER REFERENCES tipos_documentos(id) ON DELETE SET NULL,
+                area_documento VARCHAR(100),
+                tipo_documento VARCHAR(150) NOT NULL,
+                numero_referencia VARCHAR(100),
+                nome_original VARCHAR(255),
+                caminho_arquivo VARCHAR(255),
+                status_auditoria VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+                observacao_auditoria TEXT,
+                auditado_por VARCHAR(100),
+                data_hora_auditoria TIMESTAMP,
+                criado_por VARCHAR(100) NOT NULL,
+                data_hora_criacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         try:
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS uvr VARCHAR(10);")
             cur.execute("ALTER TABLE auditoria_associados ADD COLUMN IF NOT EXISTS periodo_analise VARCHAR(7) NOT NULL DEFAULT '';")
@@ -839,6 +876,141 @@ def criar_tabelas_se_nao_existir():
             cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS caminho_arquivo VARCHAR(255);")
             cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS usuario_gerador VARCHAR(100);")
             cur.execute("ALTER TABLE auditoria_relatorios ADD COLUMN IF NOT EXISTS data_hora_geracao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS passo INTEGER NOT NULL DEFAULT 1;")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS status_envio VARCHAR(20) NOT NULL DEFAULT 'Em elaboração';")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS criado_por VARCHAR(100);")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS data_hora_criacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS data_hora_finalizacao TIMESTAMP;")
+            cur.execute("ALTER TABLE entrega_documentos_pacotes ADD COLUMN IF NOT EXISTS usuario_finalizacao VARCHAR(100);")
+            cur.execute("UPDATE entrega_documentos_pacotes SET criado_por = 'sistema' WHERE criado_por IS NULL OR criado_por = '';")
+            cur.execute("DROP INDEX IF EXISTS uq_entrega_documentos_pacote_uvr_periodo;")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_entrega_documentos_pacote_uvr_periodo_passo ON entrega_documentos_pacotes (uvr, periodo_referencia, passo);")
+
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'pacote_id'
+                    ) AND NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'id_pacote'
+                    ) THEN
+                        ALTER TABLE entrega_documentos_itens RENAME COLUMN pacote_id TO id_pacote;
+                    ELSIF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'id_entrega_documentos_pacote'
+                    ) AND NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'id_pacote'
+                    ) THEN
+                        ALTER TABLE entrega_documentos_itens RENAME COLUMN id_entrega_documentos_pacote TO id_pacote;
+                    ELSIF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'id_pacote'
+                    ) THEN
+                        ALTER TABLE entrega_documentos_itens ADD COLUMN id_pacote INTEGER;
+                    END IF;
+                END $$;
+            """)
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'id_lote'
+                    ) THEN
+                        IF EXISTS (
+                            SELECT 1
+                            FROM information_schema.columns
+                            WHERE table_schema = 'public'
+                              AND table_name = 'entrega_documentos_itens'
+                              AND column_name = 'id_pacote'
+                        ) THEN
+                            UPDATE entrega_documentos_itens
+                            SET id_lote = id_pacote
+                            WHERE id_lote IS NULL AND id_pacote IS NOT NULL;
+
+                            ALTER TABLE entrega_documentos_itens
+                            ALTER COLUMN id_lote DROP NOT NULL;
+                        ELSE
+                            ALTER TABLE entrega_documentos_itens RENAME COLUMN id_lote TO id_pacote;
+                        END IF;
+                    END IF;
+                END $$;
+            """)
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'fk_entrega_documentos_itens_id_pacote'
+                    ) THEN
+                        ALTER TABLE entrega_documentos_itens
+                        ADD CONSTRAINT fk_entrega_documentos_itens_id_pacote
+                        FOREIGN KEY (id_pacote) REFERENCES entrega_documentos_pacotes(id) ON DELETE CASCADE;
+                    END IF;
+                END $$;
+            """)
+
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS id_documento_origem INTEGER REFERENCES documentos(id) ON DELETE SET NULL;")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS id_tipo_documento INTEGER REFERENCES tipos_documentos(id) ON DELETE SET NULL;")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS area_documento VARCHAR(100);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(150);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS numero_referencia VARCHAR(100);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS nome_documento VARCHAR(255);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS nome_original VARCHAR(255);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS caminho_arquivo VARCHAR(255);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS status_auditoria VARCHAR(20) NOT NULL DEFAULT 'Pendente';")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS observacao_auditoria TEXT;")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS auditado_por VARCHAR(100);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS data_hora_auditoria TIMESTAMP;")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS criado_por VARCHAR(100);")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS data_hora_criacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("ALTER TABLE entrega_documentos_itens ADD COLUMN IF NOT EXISTS data_hora_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;")
+            cur.execute("UPDATE entrega_documentos_itens SET criado_por = 'sistema' WHERE criado_por IS NULL OR criado_por = '';")
+            cur.execute("UPDATE entrega_documentos_itens SET tipo_documento = 'Documento' WHERE tipo_documento IS NULL OR tipo_documento = '';")
+            cur.execute("""
+                UPDATE entrega_documentos_itens
+                SET nome_documento = COALESCE(NULLIF(TRIM(nome_documento), ''), NULLIF(TRIM(nome_original), ''), NULLIF(TRIM(tipo_documento), ''), 'Documento')
+                WHERE nome_documento IS NULL OR TRIM(nome_documento) = ''
+            """)
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'entrega_documentos_itens'
+                          AND column_name = 'nome_documento'
+                          AND is_nullable = 'NO'
+                    ) THEN
+                        ALTER TABLE entrega_documentos_itens
+                        ALTER COLUMN nome_documento DROP NOT NULL;
+                    END IF;
+                END $$;
+            """)
             conn.commit()
         except psycopg2.Error:
             conn.rollback()
@@ -2368,6 +2540,15 @@ def index():
             "disponivel": True,
             "badge": "Passo 1 disponível",
         },
+        {
+            "nome": "Entrega de documentos",
+            "descricao": "UVR empacota os documentos mensais para checklist da fiscalização por etapas.",
+            "icone": "fa-box-archive",
+            "rota": "entrega_documentos",
+            "cor": "info",
+            "disponivel": True,
+            "badge": "Passo 1 disponível",
+        },
     ]
     return render_template("modulos.html", usuario=current_user, modulos=modulos)
 
@@ -2534,6 +2715,546 @@ def ouvidoria():
     finally:
         cur.close()
         conn.close()
+
+
+def _usuario_pode_auditar_entrega():
+    return (current_user.role or "").lower() in {"admin", "auditor"}
+
+
+def _resolver_uvr_entrega(uvr_solicitada):
+    if (current_user.role or "").lower() == "admin":
+        return (uvr_solicitada or "").strip()
+    return (current_user.uvr_acesso or "").strip()
+
+
+def _buscar_ou_criar_pacote_entrega(cur, uvr, periodo_referencia, passo=1):
+    cur.execute(
+        """
+        INSERT INTO entrega_documentos_pacotes (uvr, periodo_referencia, passo, criado_por)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (uvr, periodo_referencia, passo)
+        DO UPDATE SET data_hora_atualizacao = CURRENT_TIMESTAMP
+        RETURNING id, status_envio
+        """,
+        (uvr, periodo_referencia, passo, current_user.username),
+    )
+    return cur.fetchone()
+
+
+@app.route("/modulos/entrega-documentos", methods=["GET"])
+@login_required
+def entrega_documentos():
+    uvr_query = (request.args.get("uvr") or "").strip()
+    uvr_filtro = _resolver_uvr_entrega(uvr_query)
+    periodo_referencia = (request.args.get("periodo_referencia") or datetime.now().strftime("%Y-%m")).strip()
+    passo = (request.args.get("passo") or "1").strip()
+    if passo not in {"1", "2", "3", "4"}:
+        passo = "1"
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        uvrs = obter_uvrs_existentes() if (current_user.role or "").lower() == "admin" else [current_user.uvr_acesso]
+        if not uvr_filtro and uvrs:
+            uvr_filtro = uvrs[0]
+
+        pacote = None
+        itens = []
+        areas_disponiveis = []
+        tipos_disponiveis = []
+        tipos_por_area = {}
+        if uvr_filtro and periodo_referencia:
+            cur.execute(
+                """
+                SELECT DISTINCT COALESCE(NULLIF(TRIM(td.categoria), ''), 'Sem área') AS area
+                FROM documentos d
+                JOIN tipos_documentos td ON td.id = d.id_tipo
+                WHERE d.uvr = %s
+                ORDER BY area
+                """,
+                (uvr_filtro,),
+            )
+            areas_disponiveis = [row["area"] for row in cur.fetchall() if row.get("area")]
+
+            cur.execute(
+                """
+                SELECT DISTINCT td.nome AS tipo
+                FROM documentos d
+                JOIN tipos_documentos td ON td.id = d.id_tipo
+                WHERE d.uvr = %s
+                ORDER BY td.nome
+                """,
+                (uvr_filtro,),
+            )
+            tipos_disponiveis = [row["tipo"] for row in cur.fetchall() if row.get("tipo")]
+
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(td.categoria), ''), 'Sem área') AS area,
+                    td.nome AS tipo
+                FROM documentos d
+                JOIN tipos_documentos td ON td.id = d.id_tipo
+                WHERE d.uvr = %s
+                GROUP BY area, td.nome
+                ORDER BY area, td.nome
+                """,
+                (uvr_filtro,),
+            )
+            for row in cur.fetchall():
+                area_item = row.get("area")
+                tipo_item = row.get("tipo")
+                if not area_item or not tipo_item:
+                    continue
+                tipos_por_area.setdefault(area_item, []).append(tipo_item)
+            cur.execute(
+                """
+                SELECT id, status_envio, data_hora_finalizacao, usuario_finalizacao
+                FROM entrega_documentos_pacotes
+                WHERE uvr = %s AND periodo_referencia = %s AND passo = 1
+                """,
+                (uvr_filtro, periodo_referencia),
+            )
+            pacote = cur.fetchone()
+            if pacote:
+                cur.execute(
+                    """
+                    SELECT
+                        i.id,
+                        i.id_documento_origem,
+                        i.area_documento,
+                        i.tipo_documento,
+                        i.numero_referencia,
+                        i.nome_original,
+                        i.status_auditoria,
+                        i.observacao_auditoria,
+                        i.auditado_por,
+                        i.data_hora_auditoria
+                    FROM entrega_documentos_itens i
+                    WHERE i.id_pacote = %s
+                    ORDER BY i.id DESC
+                    """,
+                    (pacote["id"],),
+                )
+                itens = cur.fetchall()
+
+        return render_template(
+            "entrega_documentos.html",
+            usuario=current_user,
+            uvrs=uvrs,
+            uvr_filtro=uvr_filtro,
+            periodo_referencia=periodo_referencia,
+            passo_atual=passo,
+            pacote=pacote,
+            pacote_existe=bool(pacote),
+            itens=itens,
+            areas_disponiveis=areas_disponiveis,
+            tipos_disponiveis=tipos_disponiveis,
+            tipos_por_area=tipos_por_area,
+            pode_auditar=_usuario_pode_auditar_entrega(),
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/documentos-disponiveis", methods=["GET"])
+@login_required
+def listar_documentos_disponiveis_entrega():
+    uvr_filtro = _resolver_uvr_entrega((request.args.get("uvr") or "").strip())
+    area = (request.args.get("area") or "").strip()
+    tipo_documento = (request.args.get("tipo_documento") or "").strip()
+    numero_referencia = (request.args.get("numero_referencia") or "").strip()
+    if not uvr_filtro:
+        return jsonify({"ok": False, "message": "Informe a UVR para buscar documentos."}), 400
+
+    filtros = ["d.uvr = %s"]
+    params = [uvr_filtro]
+    if area:
+        filtros.append("LOWER(td.categoria) = LOWER(%s)")
+        params.append(area)
+    if tipo_documento:
+        filtros.append("LOWER(td.nome) = LOWER(%s)")
+        params.append(tipo_documento)
+    if numero_referencia:
+        filtros.append("LOWER(COALESCE(d.numero_referencia, '')) LIKE LOWER(%s)")
+        params.append(f"%{numero_referencia}%")
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            f"""
+            SELECT
+                d.id,
+                d.data_envio,
+                d.nome_original,
+                d.numero_referencia,
+                td.id AS id_tipo,
+                td.nome AS tipo_documento,
+                td.categoria AS area_documento
+            FROM documentos d
+            JOIN tipos_documentos td ON td.id = d.id_tipo
+            WHERE {" AND ".join(filtros)}
+            ORDER BY d.data_envio DESC
+            LIMIT 100
+            """,
+            tuple(params),
+        )
+        return jsonify({"ok": True, "documentos": cur.fetchall()})
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/modulos/entrega-documentos/finalizacao", methods=["GET"])
+@login_required
+def entrega_documentos_finalizacao():
+    uvr_query = (request.args.get("uvr") or "").strip()
+    uvr_filtro = _resolver_uvr_entrega(uvr_query)
+    periodo_referencia = (request.args.get("periodo_referencia") or datetime.now().strftime("%Y-%m")).strip()
+
+    if not uvr_filtro:
+        flash("Selecione uma UVR para acessar a finalização.", "warning")
+        return redirect(url_for("entrega_documentos"))
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT id, uvr, periodo_referencia, status_envio, data_hora_finalizacao, usuario_finalizacao
+            FROM entrega_documentos_pacotes
+            WHERE uvr = %s AND periodo_referencia = %s AND passo = 1
+            """,
+            (uvr_filtro, periodo_referencia),
+        )
+        pacote = cur.fetchone()
+
+        if not pacote:
+            flash("Crie e salve o pacote antes de prosseguir para finalização.", "warning")
+            return redirect(url_for("entrega_documentos", uvr=uvr_filtro, periodo_referencia=periodo_referencia, passo=1))
+
+        cur.execute("SELECT COUNT(*) AS total FROM entrega_documentos_itens WHERE id_pacote = %s", (pacote["id"],))
+        total_itens = (cur.fetchone() or {}).get("total", 0)
+
+        return render_template(
+            "entrega_documentos_finalizacao.html",
+            usuario=current_user,
+            uvr_filtro=uvr_filtro,
+            periodo_referencia=periodo_referencia,
+            pacote=pacote,
+            total_itens=total_itens,
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/passo1/item", methods=["POST"])
+@login_required
+def criar_item_entrega_documentos():
+    payload = request.get_json(silent=True) or {}
+    uvr_filtro = _resolver_uvr_entrega((payload.get("uvr") or "").strip())
+    periodo_referencia = (payload.get("periodo_referencia") or "").strip()
+    id_documento = payload.get("id_documento")
+    if not uvr_filtro or not periodo_referencia or not id_documento:
+        return jsonify({"ok": False, "message": "UVR, período e documento são obrigatórios."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT d.id, d.uvr, d.id_tipo, d.numero_referencia, d.nome_original, d.caminho_arquivo,
+                   td.nome AS tipo_documento, td.categoria AS area_documento
+            FROM documentos d
+            JOIN tipos_documentos td ON td.id = d.id_tipo
+            WHERE d.id = %s AND d.uvr = %s
+            """,
+            (int(id_documento), uvr_filtro),
+        )
+        documento = cur.fetchone()
+        if not documento:
+            return jsonify({"ok": False, "message": "Documento não encontrado para a UVR selecionada."}), 404
+
+        cur.execute(
+            """
+            SELECT id, status_envio
+            FROM entrega_documentos_pacotes
+            WHERE uvr = %s AND periodo_referencia = %s AND passo = 1
+            """,
+            (uvr_filtro, periodo_referencia),
+        )
+        pacote = cur.fetchone()
+        if not pacote:
+            return jsonify({"ok": False, "message": "Crie o pacote do período antes de adicionar documentos."}), 400
+        if (pacote.get("status_envio") or "").lower() == "finalizado":
+            return jsonify({"ok": False, "message": "Passo finalizado. Só itens reprovados podem ser alterados."}), 400
+
+        cur.execute(
+            """
+            INSERT INTO entrega_documentos_itens (
+                id_pacote, id_documento_origem, id_tipo_documento, area_documento, tipo_documento,
+                numero_referencia, nome_documento, nome_original, caminho_arquivo, criado_por
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                pacote["id"],
+                documento["id"],
+                documento["id_tipo"],
+                documento["area_documento"],
+                documento["tipo_documento"],
+                documento["numero_referencia"],
+                documento["nome_original"] or documento["tipo_documento"] or "Documento",
+                documento["nome_original"],
+                documento["caminho_arquivo"],
+                current_user.username,
+            ),
+        )
+        item = cur.fetchone()
+        conn.commit()
+        return jsonify({"ok": True, "message": "Documento adicionado ao passo 1.", "id_item": item["id"]})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao adicionar item de entrega de documentos: {e}")
+        return jsonify({"ok": False, "message": "Não foi possível adicionar o documento."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/passo1/pacote/criar", methods=["POST"])
+@login_required
+def criar_pacote_passo1_entrega_documentos():
+    payload = request.get_json(silent=True) or {}
+    uvr_filtro = _resolver_uvr_entrega((payload.get("uvr") or "").strip())
+    periodo_referencia = (payload.get("periodo_referencia") or "").strip()
+    if not uvr_filtro or not periodo_referencia:
+        return jsonify({"ok": False, "message": "Informe UVR e período para criar o pacote."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT id
+            FROM entrega_documentos_pacotes
+            WHERE uvr = %s AND periodo_referencia = %s AND passo = 1
+            """,
+            (uvr_filtro, periodo_referencia),
+        )
+        pacote_existente = cur.fetchone()
+        if pacote_existente:
+            return jsonify({"ok": True, "message": "Pacote já existe para o período selecionado.", "id_pacote": pacote_existente["id"]})
+
+        pacote = _buscar_ou_criar_pacote_entrega(cur, uvr_filtro, periodo_referencia, passo=1)
+        conn.commit()
+        return jsonify({"ok": True, "message": "Pacote criado com sucesso.", "id_pacote": pacote["id"]})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao criar pacote da entrega de documentos: {e}")
+        return jsonify({"ok": False, "message": "Não foi possível criar o pacote."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/passo1/pacote/salvar", methods=["POST"])
+@login_required
+def salvar_pacote_passo1_entrega_documentos():
+    payload = request.get_json(silent=True) or {}
+    uvr_filtro = _resolver_uvr_entrega((payload.get("uvr") or "").strip())
+    periodo_referencia = (payload.get("periodo_referencia") or "").strip()
+    if not uvr_filtro or not periodo_referencia:
+        return jsonify({"ok": False, "message": "Informe UVR e período para salvar o pacote."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT id, status_envio
+            FROM entrega_documentos_pacotes
+            WHERE uvr = %s AND periodo_referencia = %s AND passo = 1
+            """,
+            (uvr_filtro, periodo_referencia),
+        )
+        pacote = cur.fetchone()
+        if not pacote:
+            return jsonify({"ok": False, "message": "Crie o pacote antes de salvar."}), 400
+        if (pacote.get("status_envio") or "").lower() == "finalizado":
+            return jsonify({"ok": False, "message": "Pacote já finalizado e enviado para auditoria."}), 400
+
+        cur.execute(
+            """
+            UPDATE entrega_documentos_pacotes
+            SET data_hora_atualizacao = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (pacote["id"],),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "message": "Pacote salvo com sucesso (rascunho)."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao salvar pacote da entrega de documentos: {e}")
+        return jsonify({"ok": False, "message": "Não foi possível salvar o pacote."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/passo1/item/<int:id_item>", methods=["PUT", "DELETE"])
+@login_required
+def editar_item_entrega_documentos(id_item):
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT
+                i.id, i.status_auditoria,
+                p.id AS id_pacote, p.uvr, p.status_envio
+            FROM entrega_documentos_itens i
+            JOIN entrega_documentos_pacotes p ON p.id = i.id_pacote
+            WHERE i.id = %s
+            """,
+            (id_item,),
+        )
+        item = cur.fetchone()
+        if not item:
+            return jsonify({"ok": False, "message": "Item não encontrado."}), 404
+        if (current_user.role or "").lower() != "admin" and item["uvr"] != (current_user.uvr_acesso or ""):
+            return jsonify({"ok": False, "message": "Sem permissão para alterar este item."}), 403
+
+        pacote_finalizado = (item.get("status_envio") or "").lower() == "finalizado"
+        item_reprovado = (item.get("status_auditoria") or "").lower() == "reprovado"
+        if pacote_finalizado and not item_reprovado:
+            return jsonify({"ok": False, "message": "Após envio, só itens reprovados podem ser alterados."}), 400
+
+        if request.method == "DELETE":
+            cur.execute("DELETE FROM entrega_documentos_itens WHERE id = %s", (id_item,))
+            conn.commit()
+            return jsonify({"ok": True, "message": "Item removido com sucesso."})
+
+        payload = request.get_json(silent=True) or {}
+        numero_referencia = (payload.get("numero_referencia") or "").strip()
+        cur.execute(
+            """
+            UPDATE entrega_documentos_itens
+            SET numero_referencia = %s,
+                status_auditoria = CASE WHEN status_auditoria = 'Reprovado' THEN 'Pendente' ELSE status_auditoria END,
+                observacao_auditoria = CASE WHEN status_auditoria = 'Reprovado' THEN NULL ELSE observacao_auditoria END,
+                data_hora_atualizacao = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (numero_referencia or None, id_item),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "message": "Item atualizado com sucesso."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao alterar item da entrega de documentos: {e}")
+        return jsonify({"ok": False, "message": "Erro ao alterar item."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/passo1/finalizar", methods=["POST"])
+@login_required
+def finalizar_passo1_entrega_documentos():
+    payload = request.get_json(silent=True) or {}
+    uvr_filtro = _resolver_uvr_entrega((payload.get("uvr") or "").strip())
+    periodo_referencia = (payload.get("periodo_referencia") or "").strip()
+    if not uvr_filtro or not periodo_referencia:
+        return jsonify({"ok": False, "message": "Informe UVR e período para finalizar."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        pacote = _buscar_ou_criar_pacote_entrega(cur, uvr_filtro, periodo_referencia, passo=1)
+        cur.execute("SELECT COUNT(*) AS total FROM entrega_documentos_itens WHERE id_pacote = %s", (pacote["id"],))
+        total = (cur.fetchone() or {}).get("total", 0)
+        if total == 0:
+            return jsonify({"ok": False, "message": "Adicione pelo menos um documento para finalizar."}), 400
+        cur.execute(
+            """
+            UPDATE entrega_documentos_pacotes
+            SET status_envio = 'Finalizado',
+                usuario_finalizacao = %s,
+                data_hora_finalizacao = CURRENT_TIMESTAMP,
+                data_hora_atualizacao = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (current_user.username, pacote["id"]),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "message": "Passo 1 finalizado e enviado para auditoria."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao finalizar passo 1 da entrega de documentos: {e}")
+        return jsonify({"ok": False, "message": "Não foi possível finalizar o passo."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/entrega-documentos/passo1/item/<int:id_item>/auditar", methods=["POST"])
+@login_required
+def auditar_item_entrega_documentos(id_item):
+    if not _usuario_pode_auditar_entrega():
+        return jsonify({"ok": False, "message": "Sem permissão para auditar."}), 403
+    payload = request.get_json(silent=True) or {}
+    status = (payload.get("status_auditoria") or "").strip().capitalize()
+    observacao = (payload.get("observacao_auditoria") or "").strip()
+    if status not in {"Aprovado", "Reprovado", "Pendente"}:
+        return jsonify({"ok": False, "message": "Status inválido."}), 400
+    if status == "Reprovado" and not observacao:
+        return jsonify({"ok": False, "message": "Informe observação ao reprovar."}), 400
+
+    conn = conectar_banco()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT i.id, p.status_envio
+            FROM entrega_documentos_itens i
+            JOIN entrega_documentos_pacotes p ON p.id = i.id_pacote
+            WHERE i.id = %s
+            """,
+            (id_item,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"ok": False, "message": "Item não encontrado."}), 404
+        if (row.get("status_envio") or "").lower() != "finalizado":
+            return jsonify({"ok": False, "message": "Auditoria disponível apenas após finalização."}), 400
+
+        cur.execute(
+            """
+            UPDATE entrega_documentos_itens
+            SET status_auditoria = %s,
+                observacao_auditoria = %s,
+                auditado_por = %s,
+                data_hora_auditoria = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (status, observacao or None, current_user.username, id_item),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "message": "Checklist atualizado com sucesso."})
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Erro ao auditar item de entrega de documentos: {e}")
+        return jsonify({"ok": False, "message": "Erro ao atualizar checklist."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 
 @app.route("/modulos/auditoria", methods=["GET"])
 @login_required

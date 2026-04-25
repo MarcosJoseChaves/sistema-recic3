@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Entrega de documentos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="{{ url_for('coleta_seletiva') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
+            <h3 class="d-inline ms-2">Entrega de documentos · Passo 1</h3>
+        </div>
+        <span class="badge text-bg-info">Fluxo mensal UVR</span>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label">UVR</label>
+                    <select id="filtroUvr" class="form-select"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Período</label>
+                    <input type="month" id="filtroPeriodo" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Passo</label>
+                    <input class="form-control" value="1 · Registro dos associados" disabled>
+                </div>
+                <div class="col-md-4 d-flex align-items-end gap-2">
+                    <button class="btn btn-primary" id="btnCriarPacote"><i class="fas fa-box"></i> Criar pacote</button>
+                    <button class="btn btn-success" id="btnSalvarPacote"><i class="fas fa-save"></i> Salvar pacote</button>
+                    <button class="btn btn-outline-dark" id="btnProsseguir"><i class="fas fa-arrow-right"></i> Prosseguir</button>
+                </div>
+            </div>
+            <div class="mt-2 small" id="statusPacote"></div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Buscar documentos já cadastrados</strong>
+            <a href="/documentos" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-plus"></i> Anexar documento faltante
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3"><select id="fArea" class="form-select"></select></div>
+                <div class="col-md-4"><select id="fTipo" class="form-select"></select></div>
+                <div class="col-md-3"><input id="fRef" class="form-control" placeholder="Nº de referência"></div>
+                <div class="col-md-2 d-grid"><button class="btn btn-outline-secondary" id="btnBuscar"><i class="fas fa-search"></i> Buscar</button></div>
+            </div>
+            <div class="table-responsive mt-3">
+                <table class="table table-sm table-bordered" id="tblBusca">
+                    <thead><tr><th>Área</th><th>Tipo</th><th>Referência</th><th>Arquivo</th><th></th></tr></thead>
+                    <tbody><tr><td colspan="5" class="text-center text-muted">Use os filtros e clique em Buscar.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header"><strong>Checklist do passo 1 (documentos empacotados)</strong></div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered table-sm" id="tblItens">
+                <thead><tr><th>Área</th><th>Tipo</th><th>Nº Referência</th><th>Arquivo</th><th>Status auditoria</th><th>Obs.</th><th>Ações</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+const ctx = {
+  uvrs: {{ (uvrs or [])|tojson }},
+  uvrFiltro: {{ (uvr_filtro or '')|tojson }},
+  periodoReferencia: {{ (periodo_referencia or '')|tojson }},
+  pacote: {{ (pacote or {})|tojson }},
+  pacoteExiste: {{ pacote_existe|tojson }},
+  areas: {{ (areas_disponiveis or [])|tojson }},
+  tipos: {{ (tipos_disponiveis or [])|tojson }},
+  tiposPorArea: {{ (tipos_por_area or {})|tojson }},
+  itens: {{ (itens or [])|tojson }},
+  podeAuditar: {{ pode_auditar|tojson }},
+  isAdmin: {{ ((usuario.role or '')|lower == 'admin')|tojson }}
+};
+
+const uvrInput = document.getElementById('filtroUvr');
+const periodoInput = document.getElementById('filtroPeriodo');
+const areaSelect = document.getElementById('fArea');
+const tipoSelect = document.getElementById('fTipo');
+const statusPacote = document.getElementById('statusPacote');
+
+function initCabecalho() {
+  const listaUvrs = Array.isArray(ctx.uvrs) ? [...ctx.uvrs] : [];
+  if (!listaUvrs.length && ctx.uvrFiltro) {
+    listaUvrs.push(ctx.uvrFiltro);
+  }
+
+  uvrInput.innerHTML = '';
+  listaUvrs.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u;
+    opt.textContent = u;
+    if (u === ctx.uvrFiltro) opt.selected = true;
+    uvrInput.appendChild(opt);
+  });
+
+  if (!uvrInput.value && listaUvrs.length) {
+    uvrInput.value = listaUvrs[0];
+  }
+  if (!ctx.isAdmin) uvrInput.disabled = true;
+  periodoInput.value = ctx.periodoReferencia || '';
+
+  if (ctx.pacoteExiste) {
+    const fin = ctx.pacote?.data_hora_finalizacao ? ` · Finalizado em ${ctx.pacote.data_hora_finalizacao} por ${ctx.pacote.usuario_finalizacao || '-'}` : '';
+    statusPacote.className = 'mt-2 small text-muted';
+    statusPacote.innerHTML = `Status: <strong>${ctx.pacote?.status_envio || 'Em elaboração'}</strong>${fin}`;
+  } else {
+    statusPacote.className = 'mt-2 small text-warning';
+    statusPacote.textContent = 'Crie o pacote do período para começar a adicionar documentos.';
+  }
+}
+
+function preencherAreas() {
+  areaSelect.innerHTML = '<option value="">Todas as Áreas</option>';
+  (ctx.areas || []).forEach(area => {
+    const opt = document.createElement('option');
+    opt.value = area;
+    opt.textContent = area;
+    areaSelect.appendChild(opt);
+  });
+}
+
+function preencherTipos(areaSelecionada) {
+  const tipos = areaSelecionada ? (ctx.tiposPorArea[areaSelecionada] || []) : (ctx.tipos || []);
+  tipoSelect.innerHTML = '<option value="">Todos os Tipos de Documento</option>';
+  tipos.forEach(tipo => {
+    const opt = document.createElement('option');
+    opt.value = tipo;
+    opt.textContent = tipo;
+    tipoSelect.appendChild(opt);
+  });
+}
+
+function renderItens() {
+  const tbody = document.querySelector('#tblItens tbody');
+  tbody.innerHTML = '';
+  if (!ctx.itens || !ctx.itens.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum documento empacotado para este mês.</td></tr>';
+    return;
+  }
+
+  ctx.itens.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = item.id;
+
+    const statusCell = ctx.podeAuditar
+      ? `<select class="form-select form-select-sm js-status">${['Pendente','Aprovado','Reprovado'].map(s => `<option value="${s}" ${item.status_auditoria === s ? 'selected' : ''}>${s}</option>`).join('')}</select>`
+      : `${item.status_auditoria || 'Pendente'}`;
+
+    tr.innerHTML = `
+      <td>${item.area_documento || '-'}</td>
+      <td>${item.tipo_documento || '-'}</td>
+      <td><input class="form-control form-control-sm js-ref" value="${item.numero_referencia || ''}"></td>
+      <td>${item.nome_original || '-'}</td>
+      <td>${statusCell}</td>
+      <td><input class="form-control form-control-sm js-obs" value="${item.observacao_auditoria || ''}"></td>
+      <td class="d-flex gap-1">
+        <button class="btn btn-outline-primary btn-sm js-salvar">Salvar</button>
+        <button class="btn btn-outline-danger btn-sm js-excluir">Excluir</button>
+        ${ctx.podeAuditar ? '<button class="btn btn-warning btn-sm js-auditar">Checklist</button>' : ''}
+      </td>
+    `;
+
+    tr.querySelector('.js-salvar')?.addEventListener('click', async () => {
+      const res = await fetch(`/entrega-documentos/passo1/item/${item.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({numero_referencia: tr.querySelector('.js-ref').value})});
+      const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
+    });
+
+    tr.querySelector('.js-excluir')?.addEventListener('click', async () => {
+      if(!confirm('Excluir item?')) return;
+      const res = await fetch(`/entrega-documentos/passo1/item/${item.id}`, {method:'DELETE'});
+      const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
+    });
+
+    tr.querySelector('.js-auditar')?.addEventListener('click', async () => {
+      const res = await fetch(`/entrega-documentos/passo1/item/${item.id}/auditar`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status_auditoria: tr.querySelector('.js-status').value, observacao_auditoria: tr.querySelector('.js-obs').value})});
+      const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+areaSelect.addEventListener('change', () => preencherTipos(areaSelect.value));
+
+document.getElementById('btnCriarPacote').onclick = async () => {
+  const uvr = uvrInput.value;
+  const periodo = periodoInput.value;
+  if (!uvr || !periodo) { alert('Selecione UVR e período.'); return; }
+  const res = await fetch('/entrega-documentos/passo1/pacote/criar', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr, periodo_referencia:periodo})
+  });
+  const data = await res.json();
+  alert(data.message || '');
+  if (data.ok) window.location.href = `/modulos/entrega-documentos?uvr=${encodeURIComponent(uvr)}&periodo_referencia=${encodeURIComponent(periodo)}&passo=1`;
+};
+
+document.getElementById('btnBuscar').onclick = async () => {
+  if (!ctx.pacoteExiste) { alert('Crie o pacote antes de buscar/adicionar documentos.'); return; }
+  const params = new URLSearchParams({uvr:uvrInput.value, area:areaSelect.value, tipo_documento:tipoSelect.value, numero_referencia:document.getElementById('fRef').value});
+  const res = await fetch(`/entrega-documentos/documentos-disponiveis?${params.toString()}`);
+  const data = await res.json();
+  const tbody = document.querySelector('#tblBusca tbody');
+  tbody.innerHTML='';
+  (data.documentos || []).forEach(doc => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${doc.area_documento||'-'}</td><td>${doc.tipo_documento||'-'}</td><td>${doc.numero_referencia||'-'}</td><td>${doc.nome_original||'-'}</td><td><button class="btn btn-success btn-sm">Adicionar</button></td>`;
+    tr.querySelector('button').onclick = async () => {
+      const add = await fetch('/entrega-documentos/passo1/item', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr:uvrInput.value, periodo_referencia:periodoInput.value, id_documento:doc.id})});
+      const d = await add.json(); alert(d.message || 'OK'); if (d.ok) location.reload();
+    };
+    tbody.appendChild(tr);
+  });
+  if (!tbody.innerHTML) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum documento encontrado.</td></tr>';
+};
+
+document.getElementById('btnSalvarPacote').onclick = async () => {
+  const res = await fetch('/entrega-documentos/passo1/pacote/salvar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr:uvrInput.value, periodo_referencia:periodoInput.value})});
+  const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
+};
+
+document.getElementById('btnProsseguir').onclick = () => {
+  if (!ctx.pacoteExiste) {
+    alert('Crie e salve o pacote antes de prosseguir.');
+    return;
+  }
+  const uvr = uvrInput.value;
+  const periodo = periodoInput.value;
+  window.location.href = `/modulos/entrega-documentos/finalizacao?uvr=${encodeURIComponent(uvr)}&periodo_referencia=${encodeURIComponent(periodo)}`;
+};
+
+initCabecalho();
+preencherAreas();
+preencherTipos('');
+renderItens();
+</script>
+</body>
+</html>
