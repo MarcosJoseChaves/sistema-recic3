@@ -2820,22 +2820,24 @@ def entrega_documentos():
                 cur.execute(
                     """
                     SELECT
-                        i.id,
-                        i.id_documento_origem,
-                        i.area_documento,
-                        i.tipo_documento,
-                        i.numero_referencia,
-                        i.nome_original,
-                        i.status_auditoria,
-                        i.observacao_auditoria,
-                        i.auditado_por,
-                        i.data_hora_auditoria
-                    FROM entrega_documentos_itens i
-                    WHERE i.id_pacote = %s
-                    ORDER BY i.id DESC
-                    """,
-                    (pacote["id"],),
-                )
+                    i.id,
+                    i.id_documento_origem,
+                    i.area_documento,
+                    i.tipo_documento,
+                    i.numero_referencia,
+                    i.nome_original,
+                    COALESCE(d.competencia, d.data_envio::date) AS data_referencia,
+                    i.status_auditoria,
+                    i.observacao_auditoria,
+                    i.auditado_por,
+                    i.data_hora_auditoria
+                FROM entrega_documentos_itens i
+                LEFT JOIN documentos d ON d.id = i.id_documento_origem
+                WHERE i.id_pacote = %s
+                ORDER BY i.id DESC
+                """,
+                (pacote["id"],),
+            )
                 itens = cur.fetchall()
 
         return render_template(
@@ -2865,8 +2867,20 @@ def listar_documentos_disponiveis_entrega():
     area = (request.args.get("area") or "").strip()
     tipo_documento = (request.args.get("tipo_documento") or "").strip()
     numero_referencia = (request.args.get("numero_referencia") or "").strip()
+    data_referencia_inicio = (request.args.get("data_referencia_inicio") or "").strip()
+    data_referencia_fim = (request.args.get("data_referencia_fim") or "").strip()
     if not uvr_filtro:
         return jsonify({"ok": False, "message": "Informe a UVR para buscar documentos."}), 400
+
+    data_inicio = None
+    data_fim = None
+    try:
+        if data_referencia_inicio:
+            data_inicio = datetime.strptime(data_referencia_inicio, "%Y-%m-%d").date()
+        if data_referencia_fim:
+            data_fim = datetime.strptime(data_referencia_fim, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"ok": False, "message": "Datas inválidas. Use o formato AAAA-MM-DD."}), 400
 
     filtros = ["d.uvr = %s"]
     params = [uvr_filtro]
@@ -2879,6 +2893,12 @@ def listar_documentos_disponiveis_entrega():
     if numero_referencia:
         filtros.append("LOWER(COALESCE(d.numero_referencia, '')) LIKE LOWER(%s)")
         params.append(f"%{numero_referencia}%")
+    if data_inicio:
+        filtros.append("d.competencia >= %s")
+        params.append(data_inicio)
+    if data_fim:
+        filtros.append("d.competencia <= %s")
+        params.append(data_fim)
 
     conn = conectar_banco()
     cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -2887,6 +2907,7 @@ def listar_documentos_disponiveis_entrega():
             f"""
             SELECT
                 d.id,
+                d.competencia AS data_referencia,
                 d.data_envio,
                 d.nome_original,
                 d.numero_referencia,
@@ -3136,6 +3157,8 @@ def editar_item_entrega_documentos(id_item):
             return jsonify({"ok": False, "message": "Após envio, só itens reprovados podem ser alterados."}), 400
 
         if request.method == "DELETE":
+            if pacote_finalizado:
+                return jsonify({"ok": False, "message": "Não é permitido excluir itens após a finalização do pacote."}), 400
             cur.execute("DELETE FROM entrega_documentos_itens WHERE id = %s", (id_item,))
             conn.commit()
             return jsonify({"ok": True, "message": "Item removido com sucesso."})

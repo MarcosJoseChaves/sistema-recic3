@@ -21,7 +21,14 @@
             <div class="row g-2">
                 <div class="col-md-3">
                     <label class="form-label">UVR</label>
-                    <select id="filtroUvr" class="form-select"></select>
+                    <select id="filtroUvr" class="form-select">
+                        {% for u in (uvrs or []) %}
+                        <option value="{{ u }}" {% if u == uvr_filtro %}selected{% endif %}>{{ u }}</option>
+                        {% endfor %}
+                        {% if not (uvrs or []) and uvr_filtro %}
+                        <option value="{{ uvr_filtro }}" selected>{{ uvr_filtro }}</option>
+                        {% endif %}
+                    </select>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Período</label>
@@ -68,7 +75,7 @@
         <div class="card-header"><strong>Checklist do passo 1 (documentos empacotados)</strong></div>
         <div class="card-body table-responsive">
             <table class="table table-bordered table-sm" id="tblItens">
-                <thead><tr><th>Área</th><th>Tipo</th><th>Nº Referência</th><th>Arquivo</th><th>Status auditoria</th><th>Obs.</th><th>Ações</th></tr></thead>
+                <thead><tr><th>Área</th><th>Tipo</th><th>Nº Referência</th><th>Arquivo</th><th>Status auditoria</th><th>Ações</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -97,34 +104,35 @@ const tipoSelect = document.getElementById('fTipo');
 const statusPacote = document.getElementById('statusPacote');
 
 function initCabecalho() {
-  const listaUvrs = Array.isArray(ctx.uvrs) ? [...ctx.uvrs] : [];
-  if (!listaUvrs.length && ctx.uvrFiltro) {
-    listaUvrs.push(ctx.uvrFiltro);
+  if (!uvrInput.value && ctx.uvrFiltro) {
+    uvrInput.value = ctx.uvrFiltro;
   }
-
-  uvrInput.innerHTML = '';
-  listaUvrs.forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u;
-    opt.textContent = u;
-    if (u === ctx.uvrFiltro) opt.selected = true;
-    uvrInput.appendChild(opt);
-  });
-
-  if (!uvrInput.value && listaUvrs.length) {
-    uvrInput.value = listaUvrs[0];
+  if (!uvrInput.value && uvrInput.options.length) {
+    uvrInput.value = uvrInput.options[0].value;
   }
   if (!ctx.isAdmin) uvrInput.disabled = true;
   periodoInput.value = ctx.periodoReferencia || '';
 
-  if (ctx.pacoteExiste) {
-    const fin = ctx.pacote?.data_hora_finalizacao ? ` · Finalizado em ${ctx.pacote.data_hora_finalizacao} por ${ctx.pacote.usuario_finalizacao || '-'}` : '';
-    statusPacote.className = 'mt-2 small text-muted';
-    statusPacote.innerHTML = `Status: <strong>${ctx.pacote?.status_envio || 'Em elaboração'}</strong>${fin}`;
-  } else {
-    statusPacote.className = 'mt-2 small text-warning';
-    statusPacote.textContent = 'Crie o pacote do período para começar a adicionar documentos.';
+  const pacote = ctx.pacote || {};
+  const statusPacoteAtual = (pacote.status_envio || '').toLowerCase();
+  const pacoteFinalizado = statusPacoteAtual === 'finalizado';
+
+  if (!ctx.pacoteExiste) {
+    statusPacote.className = 'mt-2 alert alert-warning py-2 px-3 mb-0';
+    statusPacote.innerHTML = '<strong>Pacote não existe para o período selecionado.</strong> Clique em <em>Criar pacote</em> para iniciar.';
+    return;
   }
+
+  if (pacoteFinalizado) {
+    const finalizadoEm = pacote.data_hora_finalizacao || '-';
+    const finalizadoPor = pacote.usuario_finalizacao || '-';
+    statusPacote.className = 'mt-2 alert alert-success py-2 px-3 mb-0';
+    statusPacote.innerHTML = `<strong>Pacote finalizado.</strong> Finalizado em ${finalizadoEm} por ${finalizadoPor}.`;
+    return;
+  }
+
+  statusPacote.className = 'mt-2 alert alert-info py-2 px-3 mb-0';
+  statusPacote.innerHTML = '<strong>Pacote existente em elaboração.</strong> Você ainda pode adicionar/remover documentos antes de finalizar.';
 }
 
 function preencherAreas() {
@@ -151,54 +159,58 @@ function preencherTipos(areaSelecionada) {
 function renderItens() {
   const tbody = document.querySelector('#tblItens tbody');
   tbody.innerHTML = '';
+  const pacote = ctx.pacote || {};
+  const pacoteFinalizado = (pacote.status_envio || '').toLowerCase() === 'finalizado';
   if (!ctx.itens || !ctx.itens.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum documento empacotado para este mês.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum documento empacotado para este mês.</td></tr>';
     return;
   }
 
   ctx.itens.forEach(item => {
     const tr = document.createElement('tr');
     tr.dataset.id = item.id;
-
-    const statusCell = ctx.podeAuditar
-      ? `<select class="form-select form-select-sm js-status">${['Pendente','Aprovado','Reprovado'].map(s => `<option value="${s}" ${item.status_auditoria === s ? 'selected' : ''}>${s}</option>`).join('')}</select>`
-      : `${item.status_auditoria || 'Pendente'}`;
+    const statusCell = item.status_auditoria || 'Pendente';
 
     tr.innerHTML = `
       <td>${item.area_documento || '-'}</td>
       <td>${item.tipo_documento || '-'}</td>
-      <td><input class="form-control form-control-sm js-ref" value="${item.numero_referencia || ''}"></td>
+      <td>${item.numero_referencia || '-'}</td>
       <td>${item.nome_original || '-'}</td>
       <td>${statusCell}</td>
-      <td><input class="form-control form-control-sm js-obs" value="${item.observacao_auditoria || ''}"></td>
       <td class="d-flex gap-1">
-        <button class="btn btn-outline-primary btn-sm js-salvar">Salvar</button>
-        <button class="btn btn-outline-danger btn-sm js-excluir">Excluir</button>
-        ${ctx.podeAuditar ? '<button class="btn btn-warning btn-sm js-auditar">Checklist</button>' : ''}
+        ${pacoteFinalizado
+          ? '<button class="btn btn-outline-secondary btn-sm" disabled title="Após finalização, a exclusão fica bloqueada.">Excluir</button>'
+          : '<button class="btn btn-outline-danger btn-sm js-excluir">Excluir</button>'
+        }
       </td>
     `;
 
-    tr.querySelector('.js-salvar')?.addEventListener('click', async () => {
-      const res = await fetch(`/entrega-documentos/passo1/item/${item.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({numero_referencia: tr.querySelector('.js-ref').value})});
-      const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
-    });
-
-    tr.querySelector('.js-excluir')?.addEventListener('click', async () => {
-      if(!confirm('Excluir item?')) return;
-      const res = await fetch(`/entrega-documentos/passo1/item/${item.id}`, {method:'DELETE'});
-      const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
-    });
-
-    tr.querySelector('.js-auditar')?.addEventListener('click', async () => {
-      const res = await fetch(`/entrega-documentos/passo1/item/${item.id}/auditar`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status_auditoria: tr.querySelector('.js-status').value, observacao_auditoria: tr.querySelector('.js-obs').value})});
-      const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
-    });
+    const botaoExcluir = tr.querySelector('.js-excluir');
+    if (botaoExcluir) {
+      botaoExcluir.addEventListener('click', async () => {
+        if(!confirm('Excluir item?')) return;
+        const res = await fetch(`/entrega-documentos/passo1/item/${item.id}`, {method:'DELETE'});
+        const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
+      });
+    }
 
     tbody.appendChild(tr);
   });
 }
 
-areaSelect.addEventListener('change', () => preencherTipos(areaSelect.value));
+function carregarPeriodoSelecionado() {
+  const uvr = uvrInput.value;
+  const periodo = periodoInput.value;
+  if (!uvr || !periodo) return;
+  window.location.href = `/modulos/entrega-documentos?uvr=${encodeURIComponent(uvr)}&periodo_referencia=${encodeURIComponent(periodo)}&passo=1`;
+}
+
+const filtroAreaEl = document.getElementById('fArea');
+if (filtroAreaEl) {
+  filtroAreaEl.addEventListener('change', () => preencherTipos(filtroAreaEl.value || ''));
+}
+if (periodoInput) periodoInput.addEventListener('change', carregarPeriodoSelecionado);
+if (uvrInput) uvrInput.addEventListener('change', carregarPeriodoSelecionado);
 
 document.getElementById('btnCriarPacote').onclick = async () => {
   const uvr = uvrInput.value;
@@ -214,9 +226,18 @@ document.getElementById('btnCriarPacote').onclick = async () => {
 
 document.getElementById('btnBuscar').onclick = async () => {
   if (!ctx.pacoteExiste) { alert('Crie o pacote antes de buscar/adicionar documentos.'); return; }
-  const params = new URLSearchParams({uvr:uvrInput.value, area:areaSelect.value, tipo_documento:tipoSelect.value, numero_referencia:document.getElementById('fRef').value});
+  const params = new URLSearchParams({
+    uvr: uvrInput.value,
+    area: ((document.getElementById('fArea') || {}).value || ''),
+    tipo_documento: ((document.getElementById('fTipo') || {}).value || ''),
+    numero_referencia: document.getElementById('fRef').value
+  });
   const res = await fetch(`/entrega-documentos/documentos-disponiveis?${params.toString()}`);
   const data = await res.json();
+  if (!res.ok || data.ok === false) {
+    alert(data.message || 'Não foi possível buscar os documentos.');
+    return;
+  }
   const tbody = document.querySelector('#tblBusca tbody');
   tbody.innerHTML='';
   (data.documentos || []).forEach(doc => {
@@ -228,7 +249,7 @@ document.getElementById('btnBuscar').onclick = async () => {
     };
     tbody.appendChild(tr);
   });
-  if (!tbody.innerHTML) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum documento encontrado.</td></tr>';
+  if (!tbody.innerHTML) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum documento encontrado.</td></tr>';
 };
 
 document.getElementById('btnSalvarPacote').onclick = async () => {
