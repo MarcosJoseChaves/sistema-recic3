@@ -2826,6 +2826,7 @@ def entrega_documentos():
                     i.tipo_documento,
                     i.numero_referencia,
                     i.nome_original,
+                    COALESCE(i.caminho_arquivo, d.caminho_arquivo) AS caminho_arquivo,
                     COALESCE(d.competencia, d.data_envio::date) AS data_referencia,
                     i.status_auditoria,
                     i.observacao_auditoria,
@@ -2894,10 +2895,10 @@ def listar_documentos_disponiveis_entrega():
         filtros.append("LOWER(COALESCE(d.numero_referencia, '')) LIKE LOWER(%s)")
         params.append(f"%{numero_referencia}%")
     if data_inicio:
-        filtros.append("d.competencia >= %s")
+        filtros.append("COALESCE(d.competencia, d.data_envio::date) >= %s")
         params.append(data_inicio)
     if data_fim:
-        filtros.append("d.competencia <= %s")
+        filtros.append("COALESCE(d.competencia, d.data_envio::date) <= %s")
         params.append(data_fim)
 
     conn = conectar_banco()
@@ -2907,9 +2908,10 @@ def listar_documentos_disponiveis_entrega():
             f"""
             SELECT
                 d.id,
-                d.competencia AS data_referencia,
+                COALESCE(d.competencia, d.data_envio::date) AS data_referencia,
                 d.data_envio,
                 d.nome_original,
+                d.caminho_arquivo,
                 d.numero_referencia,
                 td.id AS id_tipo,
                 td.nome AS tipo_documento,

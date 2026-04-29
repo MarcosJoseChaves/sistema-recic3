@@ -82,6 +82,19 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalDetalhesDocumento" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Detalhes do documento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="detalhesDocumentoConteudo"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const ctx = {
   uvrs: {{ (uvrs or [])|tojson }},
@@ -102,6 +115,57 @@ const periodoInput = document.getElementById('filtroPeriodo');
 const areaSelect = document.getElementById('fArea');
 const tipoSelect = document.getElementById('fTipo');
 const statusPacote = document.getElementById('statusPacote');
+const modalDetalhesDocumento = new bootstrap.Modal(document.getElementById('modalDetalhesDocumento'));
+const detalhesDocumentoConteudo = document.getElementById('detalhesDocumentoConteudo');
+
+
+function formatarDataHoraBrasil(valor, exibirHora = true) {
+  if (!valor) return '-';
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return String(valor);
+
+  const opcoes = exibirHora
+    ? { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'medium' }
+    : { timeZone: 'America/Sao_Paulo', dateStyle: 'short' };
+
+  return new Intl.DateTimeFormat('pt-BR', opcoes).format(data);
+}
+
+
+function buildDownloadUrl(caminhoArquivo) {
+  if (!caminhoArquivo) return '';
+  const caminho = String(caminhoArquivo).trim();
+
+  if (/^https?:\/\//i.test(caminho)) {
+    return caminho;
+  }
+
+  const caminhoNormalizado = caminho.replace(/^\/?uploads\//i, '').replace(/^\/+/, '');
+  const segmentos = caminhoNormalizado.split('/').filter(Boolean).map((segmento) => {
+    try {
+      const decodificado = decodeURIComponent(segmento);
+      return encodeURIComponent(decodificado);
+    } catch (e) {
+      return encodeURIComponent(segmento);
+    }
+  });
+
+  return `/uploads/${segmentos.join('/')}`;
+}
+
+function abrirModalDetalhesDocumento(doc) {
+  detalhesDocumentoConteudo.innerHTML = `
+    <dl class="row mb-0">
+      <dt class="col-sm-4">Área</dt><dd class="col-sm-8">${doc.area_documento || '-'}</dd>
+      <dt class="col-sm-4">Tipo</dt><dd class="col-sm-8">${doc.tipo_documento || '-'}</dd>
+      <dt class="col-sm-4">Nº referência</dt><dd class="col-sm-8">${doc.numero_referencia || '-'}</dd>
+      <dt class="col-sm-4">Arquivo</dt><dd class="col-sm-8">${doc.nome_original || '-'}</dd>
+      <dt class="col-sm-4">Data referência</dt><dd class="col-sm-8">${formatarDataHoraBrasil(doc.data_referencia, false)}</dd>
+      <dt class="col-sm-4">Status auditoria</dt><dd class="col-sm-8">${doc.status_auditoria || 'Pendente'}</dd>
+    </dl>
+  `;
+  modalDetalhesDocumento.show();
+}
 
 function initCabecalho() {
   if (!uvrInput.value && ctx.uvrFiltro) {
@@ -124,7 +188,7 @@ function initCabecalho() {
   }
 
   if (pacoteFinalizado) {
-    const finalizadoEm = pacote.data_hora_finalizacao || '-';
+    const finalizadoEm = formatarDataHoraBrasil(pacote.data_hora_finalizacao);
     const finalizadoPor = pacote.usuario_finalizacao || '-';
     statusPacote.className = 'mt-2 alert alert-success py-2 px-3 mb-0';
     statusPacote.innerHTML = `<strong>Pacote finalizado.</strong> Finalizado em ${finalizadoEm} por ${finalizadoPor}.`;
@@ -175,15 +239,24 @@ function renderItens() {
       <td>${item.area_documento || '-'}</td>
       <td>${item.tipo_documento || '-'}</td>
       <td>${item.numero_referencia || '-'}</td>
-      <td>${item.nome_original || '-'}</td>
+      <td><a href="#" class="js-detalhes">${item.nome_original || '-'}</a></td>
       <td>${statusCell}</td>
       <td class="d-flex gap-1">
+        ${buildDownloadUrl(item.caminho_arquivo) ? `<a class="btn btn-outline-primary btn-sm" href="${buildDownloadUrl(item.caminho_arquivo)}" target="_blank" rel="noopener" download title="Baixar arquivo"><i class="fas fa-download"></i></a>` : ''}
         ${pacoteFinalizado
           ? '<button class="btn btn-outline-secondary btn-sm" disabled title="Após finalização, a exclusão fica bloqueada.">Excluir</button>'
           : '<button class="btn btn-outline-danger btn-sm js-excluir">Excluir</button>'
         }
       </td>
     `;
+
+    const linkDetalhes = tr.querySelector('.js-detalhes');
+    if (linkDetalhes) {
+      linkDetalhes.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        abrirModalDetalhesDocumento(item);
+      });
+    }
 
     const botaoExcluir = tr.querySelector('.js-excluir');
     if (botaoExcluir) {
@@ -242,7 +315,14 @@ document.getElementById('btnBuscar').onclick = async () => {
   tbody.innerHTML='';
   (data.documentos || []).forEach(doc => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${doc.area_documento||'-'}</td><td>${doc.tipo_documento||'-'}</td><td>${doc.numero_referencia||'-'}</td><td>${doc.nome_original||'-'}</td><td><button class="btn btn-success btn-sm">Adicionar</button></td>`;
+    tr.innerHTML = `<td>${doc.area_documento||'-'}</td><td>${doc.tipo_documento||'-'}</td><td>${doc.numero_referencia||'-'}</td><td><a href="#" class="js-detalhes-busca">${doc.nome_original||'-'}</a></td><td class="d-flex gap-1">${buildDownloadUrl(doc.caminho_arquivo) ? `<a class=\"btn btn-outline-primary btn-sm\" href=\"${buildDownloadUrl(doc.caminho_arquivo)}\" target=\"_blank\" rel=\"noopener\" download title=\"Baixar arquivo\"><i class=\"fas fa-download\"></i></a>` : ''}<button class="btn btn-success btn-sm">Adicionar</button></td>`;
+    const linkDetalhesBusca = tr.querySelector('.js-detalhes-busca');
+    if (linkDetalhesBusca) {
+      linkDetalhesBusca.onclick = (ev) => {
+        ev.preventDefault();
+        abrirModalDetalhesDocumento(doc);
+      };
+    }
     tr.querySelector('button').onclick = async () => {
       const add = await fetch('/entrega-documentos/passo1/item', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr:uvrInput.value, periodo_referencia:periodoInput.value, id_documento:doc.id})});
       const d = await add.json(); alert(d.message || 'OK'); if (d.ok) location.reload();
