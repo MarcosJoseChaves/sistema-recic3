@@ -25,22 +25,19 @@
                         {% for u in (uvrs or []) %}
                         <option value="{{ u }}" {% if u == uvr_filtro %}selected{% endif %}>{{ u }}</option>
                         {% endfor %}
-                        {% if not (uvrs or []) and uvr_filtro %}
-                        <option value="{{ uvr_filtro }}" selected>{{ uvr_filtro }}</option>
-                        {% endif %}
                     </select>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Período</label>
-                    <input type="month" id="filtroPeriodo" class="form-control">
+                    <input type="month" id="filtroPeriodo" class="form-control" value="{{ periodo_referencia }}">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Passo</label>
-                    <input class="form-control" value="1 · Registro dos associados" disabled>
+                    <input class="form-control" value="1 · Relatório de Associados" disabled>
                 </div>
                 <div class="col-md-4 d-flex align-items-end gap-2">
                     <button class="btn btn-primary" id="btnCriarPacote"><i class="fas fa-box"></i> Criar pacote</button>
-                    <button class="btn btn-success" id="btnSalvarPacote"><i class="fas fa-save"></i> Salvar pacote</button>
+                    <button class="btn btn-success" id="btnSalvarPacote"><i class="fas fa-save"></i> Salvar conferência</button>
                     <button class="btn btn-outline-dark" id="btnProsseguir"><i class="fas fa-arrow-right"></i> Prosseguir</button>
                 </div>
             </div>
@@ -49,33 +46,70 @@
     </div>
 
     <div class="card shadow-sm mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>Buscar documentos já cadastrados</strong>
-            <a href="/documentos" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
-                <i class="fas fa-plus"></i> Anexar documento faltante
-            </a>
+        <div class="card-header"><strong>Tipo de documento deste passo</strong></div>
+        <div class="card-body">
+            <span class="badge text-bg-primary fs-6">Relatório de Associados</span>
+            <p class="text-muted mt-2 mb-0">Neste passo, confirme os associados ativos da UVR e marque a conferência antes do envio.</p>
         </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Incluir documento: Relatório de Associados</strong></div>
         <div class="card-body">
             <div class="row g-2">
-                <div class="col-md-3"><select id="fArea" class="form-select"></select></div>
-                <div class="col-md-4"><select id="fTipo" class="form-select"></select></div>
-                <div class="col-md-3"><input id="fRef" class="form-control" placeholder="Nº de referência"></div>
-                <div class="col-md-2 d-grid"><button class="btn btn-outline-secondary" id="btnBuscar"><i class="fas fa-search"></i> Buscar</button></div>
+                <div class="col-md-4">
+                    <input id="fRef" class="form-control" placeholder="Nº de referência (opcional)">
+                </div>
+                <div class="col-md-2">
+                    <input type="date" id="fDataInicio" class="form-control" title="Data inicial">
+                </div>
+                <div class="col-md-2">
+                    <input type="date" id="fDataFim" class="form-control" title="Data final">
+                </div>
+                <div class="col-md-3 d-grid">
+                    <button class="btn btn-outline-secondary" id="btnBuscarDoc"><i class="fas fa-search"></i> Buscar relatório</button>
+                </div>
             </div>
             <div class="table-responsive mt-3">
-                <table class="table table-sm table-bordered" id="tblBusca">
-                    <thead><tr><th>Área</th><th>Tipo</th><th>Referência</th><th>Arquivo</th><th></th></tr></thead>
-                    <tbody><tr><td colspan="5" class="text-center text-muted">Use os filtros e clique em Buscar.</td></tr></tbody>
+                <table class="table table-sm table-bordered" id="tblBuscaDoc">
+                    <thead><tr><th>Tipo</th><th>Referência</th><th>Data referência</th><th>Arquivo</th><th></th></tr></thead>
+                    <tbody><tr><td colspan="5" class="text-center text-muted">Use o filtro para buscar o documento Relatório de Associados.</td></tr></tbody>
                 </table>
             </div>
         </div>
     </div>
 
     <div class="card shadow-sm">
-        <div class="card-header"><strong>Checklist do passo 1 (documentos empacotados)</strong></div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Associados ativos da UVR selecionada</strong>
+            <span class="badge text-bg-secondary" id="contadorConferencia">0/0 conferidos</span>
+        </div>
         <div class="card-body table-responsive">
-            <table class="table table-bordered table-sm" id="tblItens">
-                <thead><tr><th>Área</th><th>Tipo</th><th>Nº Referência</th><th>Arquivo</th><th>Status auditoria</th><th>Ações</th></tr></thead>
+            <table class="table table-bordered table-sm" id="tblAssociados">
+                <thead><tr><th>Conferência</th><th>Nome</th><th>Função</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% if associados_ativos %}
+                        {% for a in associados_ativos %}
+                        <tr>
+                            <td class="text-center"><input type="checkbox" class="chk-associado" value="{{ a.id }}" {% if a.id in associados_conferidos %}checked{% endif %}></td>
+                            <td><a href="#" class="js-associado" data-id="{{ a.id }}">{{ a.nome }}</a></td>
+                            <td>{{ a.funcao or '-' }}</td>
+                            <td>{{ a.status }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr><td colspan="4" class="text-center text-muted">Nenhum associado ativo encontrado para a UVR.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>Documentos no pacote (Passo 1)</strong></div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered table-sm" id="tblItensPacote">
+                <thead><tr><th>Tipo</th><th>Referência</th><th>Arquivo</th><th>Status auditoria</th><th>Ações</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -93,264 +127,238 @@
     </div>
   </div>
 </div>
-
+<div class="modal fade" id="modalDetalhesAssociado" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Ficha completa do associado</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="detalhesAssociadoConteudo"></div>
+    </div>
+  </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const ctx = {
-  uvrs: {{ (uvrs or [])|tojson }},
-  uvrFiltro: {{ (uvr_filtro or '')|tojson }},
-  periodoReferencia: {{ (periodo_referencia or '')|tojson }},
-  pacote: {{ (pacote or {})|tojson }},
-  pacoteExiste: {{ pacote_existe|tojson }},
-  areas: {{ (areas_disponiveis or [])|tojson }},
-  tipos: {{ (tipos_disponiveis or [])|tojson }},
-  tiposPorArea: {{ (tipos_por_area or {})|tojson }},
-  itens: {{ (itens or [])|tojson }},
-  podeAuditar: {{ pode_auditar|tojson }},
-  isAdmin: {{ ((usuario.role or '')|lower == 'admin')|tojson }}
-};
-
+const pacoteExiste = {{ pacote_existe|tojson }};
+const pacote = {{ (pacote or {})|tojson }};
+const itensPacote = {{ (itens or [])|tojson }};
+const isAdmin = {{ ((usuario.role or '')|lower == 'admin')|tojson }};
+const urlColetaSeletiva = {{ url_for('coleta_seletiva')|tojson }};
 const uvrInput = document.getElementById('filtroUvr');
 const periodoInput = document.getElementById('filtroPeriodo');
-const areaSelect = document.getElementById('fArea');
-const tipoSelect = document.getElementById('fTipo');
 const statusPacote = document.getElementById('statusPacote');
 const modalDetalhesDocumento = new bootstrap.Modal(document.getElementById('modalDetalhesDocumento'));
 const detalhesDocumentoConteudo = document.getElementById('detalhesDocumentoConteudo');
+const modalDetalhesAssociado = new bootstrap.Modal(document.getElementById('modalDetalhesAssociado'));
+const detalhesAssociadoConteudo = document.getElementById('detalhesAssociadoConteudo');
+if (!isAdmin) uvrInput.disabled = true;
 
-
-function formatarDataHoraBrasil(valor, exibirHora = true) {
+function formatarData(valor) {
   if (!valor) return '-';
   const data = new Date(valor);
   if (Number.isNaN(data.getTime())) return String(valor);
-
-  const opcoes = exibirHora
-    ? { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'medium' }
-    : { timeZone: 'America/Sao_Paulo', dateStyle: 'short' };
-
-  return new Intl.DateTimeFormat('pt-BR', opcoes).format(data);
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short' }).format(data);
 }
-
 
 function buildDownloadUrl(caminhoArquivo) {
   if (!caminhoArquivo) return '';
   const caminho = String(caminhoArquivo).trim();
-
-  if (/^https?:\/\//i.test(caminho)) {
-    return caminho;
-  }
-
+  if (/^https?:\/\//i.test(caminho)) return caminho;
   const caminhoNormalizado = caminho.replace(/^\/?uploads\//i, '').replace(/^\/+/, '');
-  const segmentos = caminhoNormalizado.split('/').filter(Boolean).map((segmento) => {
-    try {
-      const decodificado = decodeURIComponent(segmento);
-      return encodeURIComponent(decodificado);
-    } catch (e) {
-      return encodeURIComponent(segmento);
-    }
-  });
-
+  const segmentos = caminhoNormalizado.split('/').filter(Boolean).map((segmento) => encodeURIComponent(segmento));
   return `/uploads/${segmentos.join('/')}`;
 }
 
 function abrirModalDetalhesDocumento(doc) {
+  const downloadUrl = buildDownloadUrl(doc.caminho_arquivo);
   detalhesDocumentoConteudo.innerHTML = `
     <dl class="row mb-0">
-      <dt class="col-sm-4">Área</dt><dd class="col-sm-8">${doc.area_documento || '-'}</dd>
       <dt class="col-sm-4">Tipo</dt><dd class="col-sm-8">${doc.tipo_documento || '-'}</dd>
       <dt class="col-sm-4">Nº referência</dt><dd class="col-sm-8">${doc.numero_referencia || '-'}</dd>
+      <dt class="col-sm-4">Data referência</dt><dd class="col-sm-8">${formatarData(doc.data_referencia)}</dd>
       <dt class="col-sm-4">Arquivo</dt><dd class="col-sm-8">${doc.nome_original || '-'}</dd>
-      <dt class="col-sm-4">Data referência</dt><dd class="col-sm-8">${formatarDataHoraBrasil(doc.data_referencia, false)}</dd>
-      <dt class="col-sm-4">Status auditoria</dt><dd class="col-sm-8">${doc.status_auditoria || 'Pendente'}</dd>
     </dl>
+    <div class="mt-3">
+      ${downloadUrl ? `<a class="btn btn-primary" href="${downloadUrl}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> Baixar documento</a>` : '<span class="text-muted">Arquivo indisponível para download.</span>'}
+    </div>
   `;
   modalDetalhesDocumento.show();
 }
 
-function initCabecalho() {
-  if (!uvrInput.value && ctx.uvrFiltro) {
-    uvrInput.value = ctx.uvrFiltro;
-  }
-  if (!uvrInput.value && uvrInput.options.length) {
-    uvrInput.value = uvrInput.options[0].value;
-  }
-  if (!ctx.isAdmin) uvrInput.disabled = true;
-  periodoInput.value = ctx.periodoReferencia || '';
-
-  const pacote = ctx.pacote || {};
-  const statusPacoteAtual = (pacote.status_envio || '').toLowerCase();
-  const pacoteFinalizado = statusPacoteAtual === 'finalizado';
-
-  if (!ctx.pacoteExiste) {
-    statusPacote.className = 'mt-2 alert alert-warning py-2 px-3 mb-0';
-    statusPacote.innerHTML = '<strong>Pacote não existe para o período selecionado.</strong> Clique em <em>Criar pacote</em> para iniciar.';
-    return;
-  }
-
-  if (pacoteFinalizado) {
-    const finalizadoEm = formatarDataHoraBrasil(pacote.data_hora_finalizacao);
-    const finalizadoPor = pacote.usuario_finalizacao || '-';
-    statusPacote.className = 'mt-2 alert alert-success py-2 px-3 mb-0';
-    statusPacote.innerHTML = `<strong>Pacote finalizado.</strong> Finalizado em ${finalizadoEm} por ${finalizadoPor}.`;
-    return;
-  }
-
-  statusPacote.className = 'mt-2 alert alert-info py-2 px-3 mb-0';
-  statusPacote.innerHTML = '<strong>Pacote existente em elaboração.</strong> Você ainda pode adicionar/remover documentos antes de finalizar.';
+function getSelecionados() {
+  return [...document.querySelectorAll('.chk-associado:checked')].map(i => Number(i.value));
 }
 
-function preencherAreas() {
-  areaSelect.innerHTML = '<option value="">Todas as Áreas</option>';
-  (ctx.areas || []).forEach(area => {
-    const opt = document.createElement('option');
-    opt.value = area;
-    opt.textContent = area;
-    areaSelect.appendChild(opt);
-  });
+function atualizarContador() {
+  const total = document.querySelectorAll('.chk-associado').length;
+  const marcados = document.querySelectorAll('.chk-associado:checked').length;
+  document.getElementById('contadorConferencia').textContent = `${marcados}/${total} conferidos`;
 }
 
-function preencherTipos(areaSelecionada) {
-  const tipos = areaSelecionada ? (ctx.tiposPorArea[areaSelecionada] || []) : (ctx.tipos || []);
-  tipoSelect.innerHTML = '<option value="">Todos os Tipos de Documento</option>';
-  tipos.forEach(tipo => {
-    const opt = document.createElement('option');
-    opt.value = tipo;
-    opt.textContent = tipo;
-    tipoSelect.appendChild(opt);
-  });
-}
-
-function renderItens() {
-  const tbody = document.querySelector('#tblItens tbody');
+function renderItensPacote() {
+  const tbody = document.querySelector('#tblItensPacote tbody');
   tbody.innerHTML = '';
-  const pacote = ctx.pacote || {};
-  const pacoteFinalizado = (pacote.status_envio || '').toLowerCase() === 'finalizado';
-  if (!ctx.itens || !ctx.itens.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum documento empacotado para este mês.</td></tr>';
+  const itens = (itensPacote || []).filter(i => !!i.id_documento_origem);
+  if (!itens.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum documento adicionado ao pacote.</td></tr>';
     return;
   }
-
-  ctx.itens.forEach(item => {
+  const pacoteFinalizado = ((pacote.status_envio || '').toLowerCase() === 'finalizado');
+  itens.forEach((item) => {
     const tr = document.createElement('tr');
-    tr.dataset.id = item.id;
-    const statusCell = item.status_auditoria || 'Pendente';
-
+    const downloadUrl = buildDownloadUrl(item.caminho_arquivo);
     tr.innerHTML = `
-      <td>${item.area_documento || '-'}</td>
       <td>${item.tipo_documento || '-'}</td>
       <td>${item.numero_referencia || '-'}</td>
-      <td><a href="#" class="js-detalhes">${item.nome_original || '-'}</a></td>
-      <td>${statusCell}</td>
-      <td class="d-flex gap-1">
-        ${buildDownloadUrl(item.caminho_arquivo) ? `<a class="btn btn-outline-primary btn-sm" href="${buildDownloadUrl(item.caminho_arquivo)}" target="_blank" rel="noopener" download title="Baixar arquivo"><i class="fas fa-download"></i></a>` : ''}
-        ${pacoteFinalizado
-          ? '<button class="btn btn-outline-secondary btn-sm" disabled title="Após finalização, a exclusão fica bloqueada.">Excluir</button>'
-          : '<button class="btn btn-outline-danger btn-sm js-excluir">Excluir</button>'
-        }
-      </td>
+      <td><a href="#" class="js-doc">${item.nome_original || '-'}</a></td>
+      <td>${item.status_auditoria || 'Pendente'}</td>
+      <td>${downloadUrl ? `<a class="btn btn-sm btn-outline-primary" href="${downloadUrl}" target="_blank" rel="noopener" download>Baixar</a>` : ''} <button class="btn btn-sm btn-outline-danger js-excluir" ${pacoteFinalizado ? 'disabled title="Pacote finalizado"' : ''}>Excluir</button></td>
     `;
-
-    const linkDetalhes = tr.querySelector('.js-detalhes');
-    if (linkDetalhes) {
-      linkDetalhes.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        abrirModalDetalhesDocumento(item);
-      });
-    }
-
-    const botaoExcluir = tr.querySelector('.js-excluir');
-    if (botaoExcluir) {
-      botaoExcluir.addEventListener('click', async () => {
-        if(!confirm('Excluir item?')) return;
-        const res = await fetch(`/entrega-documentos/passo1/item/${item.id}`, {method:'DELETE'});
-        const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
-      });
-    }
-
-    tbody.appendChild(tr);
-  });
-}
-
-function carregarPeriodoSelecionado() {
-  const uvr = uvrInput.value;
-  const periodo = periodoInput.value;
-  if (!uvr || !periodo) return;
-  window.location.href = `/modulos/entrega-documentos?uvr=${encodeURIComponent(uvr)}&periodo_referencia=${encodeURIComponent(periodo)}&passo=1`;
-}
-
-const filtroAreaEl = document.getElementById('fArea');
-if (filtroAreaEl) {
-  filtroAreaEl.addEventListener('change', () => preencherTipos(filtroAreaEl.value || ''));
-}
-if (periodoInput) periodoInput.addEventListener('change', carregarPeriodoSelecionado);
-if (uvrInput) uvrInput.addEventListener('change', carregarPeriodoSelecionado);
-
-document.getElementById('btnCriarPacote').onclick = async () => {
-  const uvr = uvrInput.value;
-  const periodo = periodoInput.value;
-  if (!uvr || !periodo) { alert('Selecione UVR e período.'); return; }
-  const res = await fetch('/entrega-documentos/passo1/pacote/criar', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr, periodo_referencia:periodo})
-  });
-  const data = await res.json();
-  alert(data.message || '');
-  if (data.ok) window.location.href = `/modulos/entrega-documentos?uvr=${encodeURIComponent(uvr)}&periodo_referencia=${encodeURIComponent(periodo)}&passo=1`;
-};
-
-document.getElementById('btnBuscar').onclick = async () => {
-  if (!ctx.pacoteExiste) { alert('Crie o pacote antes de buscar/adicionar documentos.'); return; }
-  const params = new URLSearchParams({
-    uvr: uvrInput.value,
-    area: ((document.getElementById('fArea') || {}).value || ''),
-    tipo_documento: ((document.getElementById('fTipo') || {}).value || ''),
-    numero_referencia: document.getElementById('fRef').value
-  });
-  const res = await fetch(`/entrega-documentos/documentos-disponiveis?${params.toString()}`);
-  const data = await res.json();
-  if (!res.ok || data.ok === false) {
-    alert(data.message || 'Não foi possível buscar os documentos.');
-    return;
-  }
-  const tbody = document.querySelector('#tblBusca tbody');
-  tbody.innerHTML='';
-  (data.documentos || []).forEach(doc => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${doc.area_documento||'-'}</td><td>${doc.tipo_documento||'-'}</td><td>${doc.numero_referencia||'-'}</td><td><a href="#" class="js-detalhes-busca">${doc.nome_original||'-'}</a></td><td class="d-flex gap-1">${buildDownloadUrl(doc.caminho_arquivo) ? `<a class=\"btn btn-outline-primary btn-sm\" href=\"${buildDownloadUrl(doc.caminho_arquivo)}\" target=\"_blank\" rel=\"noopener\" download title=\"Baixar arquivo\"><i class=\"fas fa-download\"></i></a>` : ''}<button class="btn btn-success btn-sm">Adicionar</button></td>`;
-    const linkDetalhesBusca = tr.querySelector('.js-detalhes-busca');
-    if (linkDetalhesBusca) {
-      linkDetalhesBusca.onclick = (ev) => {
-        ev.preventDefault();
-        abrirModalDetalhesDocumento(doc);
-      };
-    }
-    tr.querySelector('button').onclick = async () => {
-      const add = await fetch('/entrega-documentos/passo1/item', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr:uvrInput.value, periodo_referencia:periodoInput.value, id_documento:doc.id})});
-      const d = await add.json(); alert(d.message || 'OK'); if (d.ok) location.reload();
+    tr.querySelector('.js-doc').onclick = (ev) => { ev.preventDefault(); abrirModalDetalhesDocumento(item); };
+    tr.querySelector('.js-excluir').onclick = async () => {
+      if (!confirm('Deseja retirar este documento do pacote?')) return;
+      const r = await fetch(`/entrega-documentos/passo1/item/${item.id}`, { method: 'DELETE' });
+      const d = await r.json();
+      alert(d.message || 'Operação concluída.');
+      if (d.ok) navegarFiltro();
     };
     tbody.appendChild(tr);
   });
-  if (!tbody.innerHTML) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum documento encontrado.</td></tr>';
+}
+
+async function abrirFichaAssociado(idAssociado) {
+  const resp = await fetch(`/get_associado/${idAssociado}`);
+  const a = await resp.json();
+  const fotoCracha = (a.foto_base64 && String(a.foto_base64).trim()) ? String(a.foto_base64).trim() : '';
+  const fotoSrc = fotoCracha && !fotoCracha.startsWith('data:image') && !fotoCracha.startsWith('http')
+    ? `data:image/jpeg;base64,${fotoCracha}`
+    : fotoCracha;
+  detalhesAssociadoConteudo.innerHTML = `
+    <div class="text-center mb-3">
+      ${fotoSrc
+        ? `<img src="${fotoSrc}" alt="Foto do crachá de ${a.nome || 'associado'}" class="img-thumbnail" style="max-height: 220px; object-fit: cover;">`
+        : '<div class="text-muted">Foto do crachá não disponível.</div>'
+      }
+    </div>
+    <dl class="row mb-3">
+      <dt class="col-sm-4">Nome</dt><dd class="col-sm-8">${a.nome || '-'}</dd>
+      <dt class="col-sm-4">CPF</dt><dd class="col-sm-8">${a.cpf || '-'}</dd>
+      <dt class="col-sm-4">RG</dt><dd class="col-sm-8">${a.rg || '-'}</dd>
+      <dt class="col-sm-4">Data nascimento</dt><dd class="col-sm-8">${a.data_nascimento || '-'}</dd>
+      <dt class="col-sm-4">Data admissão</dt><dd class="col-sm-8">${a.data_admissao || '-'}</dd>
+      <dt class="col-sm-4">Função</dt><dd class="col-sm-8">${a.funcao || '-'}</dd>
+      <dt class="col-sm-4">Endereço</dt><dd class="col-sm-8">${[a.logradouro, a.endereco_numero, a.bairro, a.cidade, a.uf].filter(Boolean).join(', ') || '-'}</dd>
+      <dt class="col-sm-4">Telefone</dt><dd class="col-sm-8">${a.telefone || '-'}</dd>
+    </dl>
+    <a class="btn btn-primary" href="${urlColetaSeletiva}?editar_associado=${a.id}" target="_blank" rel="noopener">Editar associado</a>
+  `;
+  modalDetalhesAssociado.show();
+}
+
+function navegarFiltro() {
+  const uvr = encodeURIComponent(uvrInput.value || '');
+  const periodo = encodeURIComponent(periodoInput.value || '');
+  window.location.href = `/modulos/entrega-documentos?uvr=${uvr}&periodo_referencia=${periodo}&passo=1`;
+}
+
+uvrInput.addEventListener('change', navegarFiltro);
+periodoInput.addEventListener('change', navegarFiltro);
+document.querySelectorAll('.chk-associado').forEach(c => c.addEventListener('change', atualizarContador));
+document.querySelectorAll('.js-associado').forEach((el) => {
+  el.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    abrirFichaAssociado(el.dataset.id);
+  });
+});
+
+  const pacoteFinalizado = ((pacote.status_envio || '').toLowerCase() === 'finalizado');
+if (!pacoteExiste) {
+  statusPacote.className = 'mt-2 alert alert-warning py-2 px-3 mb-0';
+  statusPacote.innerHTML = '<strong>Pacote não existe.</strong> Clique em Criar pacote para iniciar.';
+} else if (pacoteFinalizado) {
+  statusPacote.className = 'mt-2 alert alert-success py-2 px-3 mb-0';
+  statusPacote.innerHTML = '<strong>Pacote finalizado.</strong> Apenas visualização disponível até eventual devolução da auditoria.';
+} else {
+  statusPacote.className = 'mt-2 alert alert-info py-2 px-3 mb-0';
+  statusPacote.innerHTML = '<strong>Pacote existente.</strong> Salve a conferência dos associados antes de prosseguir.';
+}
+
+if (pacoteFinalizado) {
+  document.querySelectorAll('.chk-associado').forEach((c) => c.disabled = true);
+  document.getElementById('btnSalvarPacote').disabled = true;
+  document.getElementById('btnCriarPacote').disabled = true;
+  document.getElementById('btnBuscarDoc').disabled = true;
+  document.getElementById('btnProsseguir').disabled = true;
+  document.getElementById('btnProsseguir').title = 'Pacote já finalizado e enviado para auditoria.';
+}
+
+  atualizarContador();
+  renderItensPacote();
+
+document.getElementById('btnCriarPacote').onclick = async () => {
+  const resp = await fetch('/entrega-documentos/passo1/pacote/criar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value})});
+  const data = await resp.json();
+  alert(data.message || 'Operação concluída.');
+  if (data.ok) navegarFiltro();
 };
 
 document.getElementById('btnSalvarPacote').onclick = async () => {
-  const res = await fetch('/entrega-documentos/passo1/pacote/salvar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uvr:uvrInput.value, periodo_referencia:periodoInput.value})});
-  const data = await res.json(); alert(data.message || ''); if (data.ok) location.reload();
+  const resp = await fetch('/entrega-documentos/passo1/pacote/salvar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, associados_conferencia: getSelecionados()})});
+  const data = await resp.json();
+  alert(data.message || 'Operação concluída.');
 };
 
 document.getElementById('btnProsseguir').onclick = () => {
-  if (!ctx.pacoteExiste) {
-    alert('Crie e salve o pacote antes de prosseguir.');
-    return;
-  }
-  const uvr = uvrInput.value;
-  const periodo = periodoInput.value;
-  window.location.href = `/modulos/entrega-documentos/finalizacao?uvr=${encodeURIComponent(uvr)}&periodo_referencia=${encodeURIComponent(periodo)}`;
+  const uvr = encodeURIComponent(uvrInput.value || '');
+  const periodo = encodeURIComponent(periodoInput.value || '');
+  window.location.href = `/modulos/entrega-documentos/finalizacao?uvr=${uvr}&periodo_referencia=${periodo}`;
 };
 
-initCabecalho();
-preencherAreas();
-preencherTipos('');
-renderItens();
-</script>
+document.getElementById('btnBuscarDoc').onclick = async () => {
+  if (((pacote.status_envio || '').toLowerCase() === 'finalizado')) return;
+  const params = new URLSearchParams({
+    uvr: uvrInput.value || '',
+    numero_referencia: document.getElementById('fRef').value || '',
+    data_referencia_inicio: document.getElementById('fDataInicio').value || '',
+    data_referencia_fim: document.getElementById('fDataFim').value || ''
+  });
+  const resp = await fetch(`/entrega-documentos/documentos-disponiveis?${params.toString()}`);
+  const data = await resp.json();
+  const tbody = document.querySelector('#tblBuscaDoc tbody');
+  tbody.innerHTML = '';
+  const docs = (data && data.documentos) || [];
+  if (!docs.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum Relatório de Associados encontrado.</td></tr>';
+    return;
+  }
+  docs.forEach((doc) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${doc.tipo_documento || '-'}</td>
+      <td>${doc.numero_referencia || '-'}</td>
+      <td>${formatarData(doc.data_referencia)}</td>
+      <td><a href="#" class="js-detalhes">${doc.nome_original || '-'}</a></td>
+      <td><button class="btn btn-sm btn-primary" ${((pacote.status_envio || '').toLowerCase() === 'finalizado') ? 'disabled' : ''}>Adicionar</button></td>
+    `;
+    tr.querySelector('.js-detalhes').onclick = (ev) => {
+      ev.preventDefault();
+      abrirModalDetalhesDocumento(doc);
+    };
+    tr.querySelector('button').onclick = async () => {
+      const r = await fetch('/entrega-documentos/passo1/item', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, id_documento: doc.id})
+      });
+      const d = await r.json();
+      alert(d.message || 'Operação concluída.');
+      if (d.ok) navegarFiltro();
+    };
+    tbody.appendChild(tr);
+  });
+};
+
+  </script>
 </body>
 </html>

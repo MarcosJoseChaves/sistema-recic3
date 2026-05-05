@@ -2763,6 +2763,8 @@ def entrega_documentos():
         areas_disponiveis = []
         tipos_disponiveis = []
         tipos_por_area = {}
+        associados_ativos = []
+        associados_conferidos = []
         if uvr_filtro and periodo_referencia:
             cur.execute(
                 """
@@ -2819,6 +2821,15 @@ def entrega_documentos():
             if pacote:
                 cur.execute(
                     """
+                    SELECT COALESCE(NULLIF(TRIM(numero_referencia), ''), '0') AS numero_referencia
+                    FROM entrega_documentos_itens
+                    WHERE id_pacote = %s
+                    """,
+                    (pacote["id"],),
+                )
+                associados_conferidos = [int(row["numero_referencia"]) for row in cur.fetchall() if str(row.get("numero_referencia") or "").isdigit()]
+                cur.execute(
+                    """
                     SELECT
                     i.id,
                     i.id_documento_origem,
@@ -2838,8 +2849,18 @@ def entrega_documentos():
                 ORDER BY i.id DESC
                 """,
                 (pacote["id"],),
-            )
+                )
                 itens = cur.fetchall()
+            cur.execute(
+                """
+                SELECT id, nome, COALESCE(NULLIF(TRIM(funcao), ''), '-') AS funcao, status
+                FROM associados
+                WHERE uvr = %s AND LOWER(COALESCE(status, '')) = 'ativo'
+                ORDER BY nome ASC
+                """,
+                (uvr_filtro,),
+            )
+            associados_ativos = cur.fetchall()
 
         return render_template(
             "entrega_documentos.html",
@@ -2854,6 +2875,8 @@ def entrega_documentos():
             areas_disponiveis=areas_disponiveis,
             tipos_disponiveis=tipos_disponiveis,
             tipos_por_area=tipos_por_area,
+            associados_ativos=associados_ativos,
+            associados_conferidos=associados_conferidos,
             pode_auditar=_usuario_pode_auditar_entrega(),
         )
     finally:
@@ -2865,8 +2888,6 @@ def entrega_documentos():
 @login_required
 def listar_documentos_disponiveis_entrega():
     uvr_filtro = _resolver_uvr_entrega((request.args.get("uvr") or "").strip())
-    area = (request.args.get("area") or "").strip()
-    tipo_documento = (request.args.get("tipo_documento") or "").strip()
     numero_referencia = (request.args.get("numero_referencia") or "").strip()
     data_referencia_inicio = (request.args.get("data_referencia_inicio") or "").strip()
     data_referencia_fim = (request.args.get("data_referencia_fim") or "").strip()
@@ -2885,12 +2906,8 @@ def listar_documentos_disponiveis_entrega():
 
     filtros = ["d.uvr = %s"]
     params = [uvr_filtro]
-    if area:
-        filtros.append("LOWER(td.categoria) = LOWER(%s)")
-        params.append(area)
-    if tipo_documento:
-        filtros.append("LOWER(td.nome) = LOWER(%s)")
-        params.append(tipo_documento)
+    filtros.append("td.nome = %s")
+    params.append("Relatório de Associados")
     if numero_referencia:
         filtros.append("LOWER(COALESCE(d.numero_referencia, '')) LIKE LOWER(%s)")
         params.append(f"%{numero_referencia}%")
@@ -3091,6 +3108,7 @@ def salvar_pacote_passo1_entrega_documentos():
     payload = request.get_json(silent=True) or {}
     uvr_filtro = _resolver_uvr_entrega((payload.get("uvr") or "").strip())
     periodo_referencia = (payload.get("periodo_referencia") or "").strip()
+    associados_conferencia = payload.get("associados_conferencia") or []
     if not uvr_filtro or not periodo_referencia:
         return jsonify({"ok": False, "message": "Informe UVR e período para salvar o pacote."}), 400
 
@@ -3111,6 +3129,34 @@ def salvar_pacote_passo1_entrega_documentos():
         if (pacote.get("status_envio") or "").lower() == "finalizado":
             return jsonify({"ok": False, "message": "Pacote já finalizado e enviado para auditoria."}), 400
 
+        associados_ids = [int(i) for i in associados_conferencia if str(i).isdigit()]
+        cur.execute(
+            """
+            DELETE FROM entrega_documentos_itens
+            WHERE id_pacote = %s
+              AND id_documento_origem IS NULL
+              AND tipo_documento = 'Relatório de Associados'
+            """,
+            (pacote["id"],),
+        )
+        for id_assoc in associados_ids:
+            cur.execute(
+                """
+                INSERT INTO entrega_documentos_itens (
+                    id_pacote, tipo_documento, numero_referencia, nome_documento, nome_original, criado_por
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    pacote["id"],
+                    "Relatório de Associados",
+                    str(id_assoc),
+                    "Relatório de Associados",
+                    f"Associado conferido #{id_assoc}",
+                    current_user.username,
+                ),
+            )
+
         cur.execute(
             """
             UPDATE entrega_documentos_pacotes
@@ -3120,7 +3166,7 @@ def salvar_pacote_passo1_entrega_documentos():
             (pacote["id"],),
         )
         conn.commit()
-        return jsonify({"ok": True, "message": "Pacote salvo com sucesso (rascunho)."})
+        return jsonify({"ok": True, "message": "Conferência dos associados salva com sucesso."})
     except Exception as e:
         conn.rollback()
         app.logger.error(f"Erro ao salvar pacote da entrega de documentos: {e}")
@@ -3205,7 +3251,7 @@ def finalizar_passo1_entrega_documentos():
         cur.execute("SELECT COUNT(*) AS total FROM entrega_documentos_itens WHERE id_pacote = %s", (pacote["id"],))
         total = (cur.fetchone() or {}).get("total", 0)
         if total == 0:
-            return jsonify({"ok": False, "message": "Adicione pelo menos um documento para finalizar."}), 400
+            return jsonify({"ok": False, "message": "Marque ao menos um associado como conferido para finalizar."}), 400
         cur.execute(
             """
             UPDATE entrega_documentos_pacotes

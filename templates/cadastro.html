@@ -6625,6 +6625,19 @@ function iniciarEdicaoAssociado(id) {
     }).fail(function() { alert("Erro ao buscar dados para edição."); });
 }
 
+$(document).ready(function() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const editarAssociadoId = params.get('editar_associado');
+        if (editarAssociadoId && /^\d+$/.test(editarAssociadoId)) {
+            mostrarFormulario('associadoForm', true);
+            iniciarEdicaoAssociado(parseInt(editarAssociadoId, 10));
+        }
+    } catch (e) {
+        console.warn('Não foi possível abrir edição automática do associado:', e);
+    }
+});
+
 function imprimirFichaAssociado(id) {
     if (!id) return;
     window.open(`/imprimir_ficha_associado/${id}`, '_blank');
