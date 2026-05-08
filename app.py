@@ -1640,6 +1640,66 @@ def migrar_dados_antigos_produtos():
 
 _estrutura_db_garantida = False
 
+
+def normalizar_tipo_documento_fgts(cur):
+    """Consolida o nome antigo sem espaço e eventuais duplicidades do CRF/FGTS."""
+    cur.execute("""
+        WITH canonical AS (
+            SELECT MIN(id) AS id
+            FROM tipos_documentos
+            WHERE nome = 'Certificado de Regularidade do FGTS - CRF'
+        ), duplicados AS (
+            SELECT id
+            FROM tipos_documentos
+            WHERE nome IN (
+                'Certificado de Regularidadedo FGTS - CRF',
+                'Certificado de Regularidade do FGTS - CRF'
+            )
+              AND id <> (SELECT id FROM canonical)
+              AND (SELECT id FROM canonical) IS NOT NULL
+        )
+        UPDATE documentos
+           SET id_tipo = (SELECT id FROM canonical)
+         WHERE id_tipo IN (SELECT id FROM duplicados)
+    """)
+    cur.execute("""
+        WITH canonical AS (
+            SELECT MIN(id) AS id
+            FROM tipos_documentos
+            WHERE nome = 'Certificado de Regularidade do FGTS - CRF'
+        ), duplicados AS (
+            SELECT id
+            FROM tipos_documentos
+            WHERE nome IN (
+                'Certificado de Regularidadedo FGTS - CRF',
+                'Certificado de Regularidade do FGTS - CRF'
+            )
+              AND id <> (SELECT id FROM canonical)
+              AND (SELECT id FROM canonical) IS NOT NULL
+        )
+        UPDATE entrega_documentos_itens
+           SET id_tipo_documento = (SELECT id FROM canonical)
+         WHERE id_tipo_documento IN (SELECT id FROM duplicados)
+    """)
+    cur.execute("""
+        WITH canonical AS (
+            SELECT MIN(id) AS id
+            FROM tipos_documentos
+            WHERE nome = 'Certificado de Regularidade do FGTS - CRF'
+        ), duplicados AS (
+            SELECT id
+            FROM tipos_documentos
+            WHERE nome IN (
+                'Certificado de Regularidadedo FGTS - CRF',
+                'Certificado de Regularidade do FGTS - CRF'
+            )
+              AND id <> (SELECT id FROM canonical)
+              AND (SELECT id FROM canonical) IS NOT NULL
+        )
+        DELETE FROM tipos_documentos
+         WHERE id IN (SELECT id FROM duplicados)
+    """)
+
 def garantir_tipos_documentos_padrao():
     conn = None
     try:
@@ -1660,12 +1720,16 @@ def garantir_tipos_documentos_padrao():
                 ('MTR – Manifesto de Transporte', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Documento de transporte de resíduos'),
                 ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada'),
                 ('Certidão Regularidade Municipal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
-                ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão')
+                ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
+                ('CERTIDÃO NEGATIVA DE DÉBITOS TRABALHISTAS', 'Geral – Trabalhista', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão trabalhista'),
+                ('Certidão Negativa de Débitos Tributários e de Dívida Ativa Estadual', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão estadual'),
+                ('Certificado de Regularidade do FGTS - CRF', 'Geral – Trabalhista', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade no certificado do FGTS')
             ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
             WHERE NOT EXISTS (
                 SELECT 1 FROM tipos_documentos existentes WHERE existentes.nome = novos.nome
             )
         """)
+        normalizar_tipo_documento_fgts(cur)
         conn.commit()
     except psycopg2.Error as e:
         app.logger.error(f"Erro ao garantir tipos de documentos padrão: {e}")
@@ -11237,8 +11301,12 @@ TIPOS_DOCUMENTOS = {
     'Certidão Municipal':     {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
     'Certidão Estadual':      {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
     'Certidão Federal':       {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'CERTIDÃO NEGATIVA DE DÉBITOS TRABALHISTAS': {'cat': 'Trabalhista', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'Certidão Negativa de Débitos Tributários e de Dívida Ativa Estadual': {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'Certificado de Regularidade do FGTS - CRF': {'cat': 'Trabalhista', 'validade': True, 'valor': False, 'comp': False, 'num': True},
     'CNDT (Trabalhista)':     {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
-    'FGTS':                   {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True}
+    'FGTS':                   {'cat': 'Fiscal', 'validade': True, 'valor': False, 'comp': False, 'num': True},
+    'Declaração de Não Incidência do IRRF': {'cat': 'Fiscal', 'validade': False, 'valor': False, 'comp': True, 'num': True}
 }
 
 def _montar_consulta_documentos(args, usuario):
@@ -11443,7 +11511,7 @@ def documentos():
 
             # --- CAPTURA DE CAMPOS ---
             id_tipo = request.form.get('tipo_documento')
-            competencia = request.form.get('competencia')          # Formato YYYY-MM
+            competencia = request.form.get('competencia') or None  # Formato YYYY-MM
             data_validade = request.form.get('data_validade') or None
             valor = request.form.get('valor')
             numero_referencia = request.form.get('numero_referencia')
@@ -11503,7 +11571,7 @@ def documentos():
                 (uvr, id_tipo, caminho_arquivo, nome_original, competencia,
                  data_validade, valor, numero_referencia, observacoes,
                  enviado_por, status)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pendente')
+                VALUES (%s,%s,%s,%s,NULLIF(%s, '')::date,NULLIF(%s, '')::date,%s,%s,%s,%s,'Pendente')
             """, (
                 uvr, id_tipo, nome_arquivo_salvo, nome_original,
                 competencia, data_validade, valor,
@@ -11849,8 +11917,8 @@ def editar_documento():
         if novo_arquivo:
             cursor.execute("""
                 UPDATE documentos SET
-                    competencia=%s,
-                    data_validade=%s,
+                    competencia=NULLIF(%s, '')::date,
+                    data_validade=NULLIF(%s, '')::date,
                     valor=%s,
                     numero_referencia=%s,
                     observacoes=%s,
@@ -11862,8 +11930,8 @@ def editar_documento():
         else:
             cursor.execute("""
                 UPDATE documentos SET
-                    competencia=%s,
-                    data_validade=%s,
+                    competencia=NULLIF(%s, '')::date,
+                    data_validade=NULLIF(%s, '')::date,
                     valor=%s,
                     numero_referencia=%s,
                     observacoes=%s,
@@ -12109,9 +12177,14 @@ def setup_banco():
                 ('Extrato Bancário – Associação', 'Mensal – Financeiro', TRUE, FALSE, FALSE, TRUE, 'Conta principal da associação'),
                 ('MTR – Manifesto de Transporte', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Documento de transporte de resíduos'),
                 ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada'),
+                ('Declaração de Não Incidência do IRRF', 'Mensal – Fiscal', TRUE, FALSE, FALSE, FALSE, 'Declaração mensal de não incidência do IRRF'),
                 ('Certidão Regularidade Municipal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
-                ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão');
+                ('Certidão Regularidade Federal', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão'),
+                ('CERTIDÃO NEGATIVA DE DÉBITOS TRABALHISTAS', 'Geral – Trabalhista', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão trabalhista'),
+                ('Certidão Negativa de Débitos Tributários e de Dívida Ativa Estadual', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão estadual'),
+                ('Certificado de Regularidade do FGTS - CRF', 'Geral – Trabalhista', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade no certificado do FGTS');
             """)
+            normalizar_tipo_documento_fgts(cursor)
             conn.commit()
             msg = "Tabelas criadas e Tipos inseridos com sucesso!"
         else:
@@ -12121,12 +12194,17 @@ def setup_banco():
                     ('Notas Fiscais de Receitas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à receita'),
                     ('Notas Fiscais de Despesas', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Informe número, valor e anexe comprovações relacionadas à despesa'),
                     ('Comprovante de Pagamento', 'Mensal – Financeiro', TRUE, FALSE, TRUE, TRUE, 'Comprovante de pagamento das transações financeiras'),
-                    ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada')
+                    ('Relatório fotográfico da carga', 'Mensal – Operacional', TRUE, FALSE, FALSE, TRUE, 'Registro fotográfico da carga transportada'),
+                    ('Declaração de Não Incidência do IRRF', 'Mensal – Fiscal', TRUE, FALSE, FALSE, FALSE, 'Declaração mensal de não incidência do IRRF'),
+                    ('CERTIDÃO NEGATIVA DE DÉBITOS TRABALHISTAS', 'Geral – Trabalhista', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão trabalhista'),
+                    ('Certidão Negativa de Débitos Tributários e de Dívida Ativa Estadual', 'Geral – Fiscal', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade na certidão estadual'),
+                    ('Certificado de Regularidade do FGTS - CRF', 'Geral – Trabalhista', FALSE, TRUE, FALSE, FALSE, 'Verifique a data de validade no certificado do FGTS')
                 ) AS novos(nome, categoria, exige_competencia, exige_validade, exige_valor, multiplos_arquivos, descricao_ajuda)
                 WHERE NOT EXISTS (
                     SELECT 1 FROM tipos_documentos existentes WHERE existentes.nome = novos.nome
                 )
             """)
+            normalizar_tipo_documento_fgts(cursor)
             conn.commit()
             msg = "Tabelas já existiam. Tipos novos garantidos."
             
