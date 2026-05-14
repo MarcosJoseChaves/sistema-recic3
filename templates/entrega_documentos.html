@@ -5,6 +5,44 @@
     <title>Entrega de documentos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .associados-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .associado-card {
+            cursor: pointer;
+            border: 1px solid #e9ecef;
+            border-radius: .9rem;
+            transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+        }
+
+        .associado-card:hover {
+            border-color: #86b7fe;
+            box-shadow: 0 .35rem 1rem rgba(13, 110, 253, .12);
+        }
+
+        .associado-card.associado-selecionado {
+            background: #f0f7ff;
+            border-color: #0d6efd;
+        }
+
+        .associado-check {
+            width: 1.35rem;
+            height: 1.35rem;
+            cursor: pointer;
+        }
+
+        .selection-summary {
+            background: #f8f9fa;
+            border: 1px dashed #adb5bd;
+            border-radius: .9rem;
+        }
+    </style>
 </head>
 <body class="bg-light">
 <div class="container py-4">
@@ -79,29 +117,83 @@
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>Associados ativos da UVR selecionada</strong>
-            <span class="badge text-bg-secondary" id="contadorConferencia">0/0 conferidos</span>
+    <div class="card shadow-sm overflow-hidden" id="cardAssociados">
+        <div class="card-header bg-white">
+            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+                <div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <strong class="fs-5">Selecionar associados ativos da UVR</strong>
+                        <span class="badge text-bg-secondary" id="contadorConferencia">0/0 selecionados</span>
+                    </div>
+                    <p class="text-muted mb-0 mt-1">Marque os associados que devem entrar no pacote do Relatório de Associados antes de salvar e prosseguir para a auditoria.</p>
+                </div>
+                <div class="selection-summary px-3 py-2 text-lg-end">
+                    <div class="small text-muted">Resumo da seleção</div>
+                    <div class="fw-semibold" id="resumoSelecao">Nenhum associado selecionado</div>
+                </div>
+            </div>
         </div>
-        <div class="card-body table-responsive">
-            <table class="table table-bordered table-sm" id="tblAssociados">
-                <thead><tr><th>Conferência</th><th>Nome</th><th>Função</th><th>Status</th></tr></thead>
-                <tbody>
-                    {% if associados_ativos %}
-                        {% for a in associados_ativos %}
-                        <tr>
-                            <td class="text-center"><input type="checkbox" class="chk-associado" value="{{ a.id }}" {% if a.id in associados_conferidos %}checked{% endif %}></td>
-                            <td><a href="#" class="js-associado" data-id="{{ a.id }}">{{ a.nome }}</a></td>
-                            <td>{{ a.funcao or '-' }}</td>
-                            <td>{{ a.status }}</td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr><td colspan="4" class="text-center text-muted">Nenhum associado ativo encontrado para a UVR.</td></tr>
-                    {% endif %}
-                </tbody>
-            </table>
+        <div class="associados-toolbar p-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-5">
+                    <label for="buscaAssociado" class="form-label small fw-semibold text-uppercase text-muted">Buscar na lista</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input id="buscaAssociado" type="search" class="form-control" placeholder="Digite nome, função ou status">
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label for="filtroSelecaoAssociado" class="form-label small fw-semibold text-uppercase text-muted">Visualização</label>
+                    <select id="filtroSelecaoAssociado" class="form-select">
+                        <option value="todos">Todos os ativos</option>
+                        <option value="selecionados">Somente selecionados</option>
+                        <option value="pendentes">Ainda não selecionados</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-4 d-flex gap-2 flex-wrap justify-content-lg-end">
+                    <button type="button" class="btn btn-outline-primary" id="btnSelecionarVisiveis"><i class="fas fa-check-double"></i> Selecionar visíveis</button>
+                    <button type="button" class="btn btn-outline-secondary" id="btnLimparSelecao"><i class="fas fa-eraser"></i> Limpar seleção</button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if associados_ativos %}
+                <div class="alert alert-info d-flex gap-2 align-items-start py-2">
+                    <i class="fas fa-circle-info mt-1"></i>
+                    <div>Use os filtros para localizar rapidamente um associado da {{ uvr_filtro }}. O cartão azul indica quem será incluído no pacote ao clicar em <strong>Salvar conferência</strong>.</div>
+                </div>
+                <div class="row g-3" id="listaAssociados">
+                    {% for a in associados_ativos %}
+                    <div class="col-12 col-lg-6 associado-item" data-search="{{ (a.nome ~ ' ' ~ (a.funcao or '-') ~ ' ' ~ a.status)|lower }}">
+                        <div class="associado-card h-100 p-3 d-flex gap-3 align-items-start {% if a.id in associados_conferidos %}associado-selecionado{% endif %}" data-card-associado>
+                            <input id="assoc_{{ a.id }}" type="checkbox" class="form-check-input associado-check chk-associado mt-1" value="{{ a.id }}" {% if a.id in associados_conferidos %}checked{% endif %}>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between gap-2 align-items-start">
+                                    <div>
+                                        <div class="fw-semibold fs-6">{{ a.nome }}</div>
+                                        <div class="text-muted small"><i class="fas fa-briefcase me-1"></i>{{ a.funcao or '-' }}</div>
+                                    </div>
+                                    <span class="badge rounded-pill text-bg-success">{{ a.status }}</span>
+                                </div>
+                                <div class="mt-3 d-flex gap-2 flex-wrap">
+                                    <span class="badge text-bg-light border text-dark"><i class="fas fa-id-badge me-1"></i>ID {{ a.id }}</span>
+                                    <a href="#" class="btn btn-sm btn-outline-primary js-associado" data-id="{{ a.id }}"><i class="fas fa-eye"></i> Ver ficha</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="text-center text-muted py-4 d-none" id="semResultadoAssociados">
+                    <i class="fas fa-user-slash fa-2x mb-2"></i>
+                    <div>Nenhum associado encontrado com os filtros atuais.</div>
+                </div>
+            {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="fas fa-users-slash fa-2x mb-2"></i>
+                    <div>Nenhum associado ativo encontrado para a UVR selecionada.</div>
+                </div>
+            {% endif %}
         </div>
     </div>
 
@@ -190,10 +282,48 @@ function getSelecionados() {
   return [...document.querySelectorAll('.chk-associado:checked')].map(i => Number(i.value));
 }
 
+function atualizarEstadoVisualAssociados() {
+  document.querySelectorAll('.chk-associado').forEach((checkbox) => {
+    const card = checkbox.closest('.associado-card');
+    if (card) card.classList.toggle('associado-selecionado', checkbox.checked);
+  });
+}
+
 function atualizarContador() {
   const total = document.querySelectorAll('.chk-associado').length;
   const marcados = document.querySelectorAll('.chk-associado:checked').length;
-  document.getElementById('contadorConferencia').textContent = `${marcados}/${total} conferidos`;
+  const contador = document.getElementById('contadorConferencia');
+  const resumo = document.getElementById('resumoSelecao');
+  contador.textContent = `${marcados}/${total} selecionados`;
+  contador.className = `badge ${marcados === total && total > 0 ? 'text-bg-success' : 'text-bg-secondary'}`;
+  if (resumo) {
+    resumo.textContent = marcados === 0
+      ? 'Nenhum associado selecionado'
+      : `${marcados} associado${marcados > 1 ? 's' : ''} entrará${marcados > 1 ? 'ão' : ''} no pacote`;
+  }
+  atualizarEstadoVisualAssociados();
+}
+
+function filtrarAssociados() {
+  const termo = (document.getElementById('buscaAssociado')?.value || '').trim().toLowerCase();
+  const modo = document.getElementById('filtroSelecaoAssociado')?.value || 'todos';
+  let visiveis = 0;
+  document.querySelectorAll('.associado-item').forEach((item) => {
+    const checkbox = item.querySelector('.chk-associado');
+    const combinaTexto = !termo || (item.dataset.search || '').includes(termo);
+    const combinaSelecao = modo === 'todos'
+      || (modo === 'selecionados' && checkbox?.checked)
+      || (modo === 'pendentes' && !checkbox?.checked);
+    const exibir = combinaTexto && combinaSelecao;
+    item.classList.toggle('d-none', !exibir);
+    if (exibir) visiveis += 1;
+  });
+  document.getElementById('semResultadoAssociados')?.classList.toggle('d-none', visiveis > 0);
+}
+
+function atualizarListaAssociados() {
+  atualizarContador();
+  filtrarAssociados();
 }
 
 function renderItensPacote() {
@@ -264,10 +394,34 @@ function navegarFiltro() {
 
 uvrInput.addEventListener('change', navegarFiltro);
 periodoInput.addEventListener('change', navegarFiltro);
-document.querySelectorAll('.chk-associado').forEach(c => c.addEventListener('change', atualizarContador));
+document.querySelectorAll('.chk-associado').forEach(c => c.addEventListener('change', atualizarListaAssociados));
+document.querySelectorAll('[data-card-associado]').forEach((card) => {
+  card.addEventListener('click', (ev) => {
+    if (ev.target.closest('a, button, input')) return;
+    const checkbox = card.querySelector('.chk-associado');
+    if (!checkbox || checkbox.disabled) return;
+    checkbox.checked = !checkbox.checked;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+});
+document.getElementById('buscaAssociado')?.addEventListener('input', filtrarAssociados);
+document.getElementById('filtroSelecaoAssociado')?.addEventListener('change', filtrarAssociados);
+document.getElementById('btnSelecionarVisiveis')?.addEventListener('click', () => {
+  document.querySelectorAll('.associado-item:not(.d-none) .chk-associado').forEach((checkbox) => {
+    if (!checkbox.disabled) checkbox.checked = true;
+  });
+  atualizarListaAssociados();
+});
+document.getElementById('btnLimparSelecao')?.addEventListener('click', () => {
+  document.querySelectorAll('.chk-associado').forEach((checkbox) => {
+    if (!checkbox.disabled) checkbox.checked = false;
+  });
+  atualizarListaAssociados();
+});
 document.querySelectorAll('.js-associado').forEach((el) => {
   el.addEventListener('click', (ev) => {
     ev.preventDefault();
+    ev.stopPropagation();
     abrirFichaAssociado(el.dataset.id);
   });
 });
@@ -290,10 +444,12 @@ if (pacoteFinalizado) {
   document.getElementById('btnCriarPacote').disabled = true;
   document.getElementById('btnBuscarDoc').disabled = true;
   document.getElementById('btnProsseguir').disabled = true;
+  document.getElementById('btnSelecionarVisiveis')?.setAttribute('disabled', 'disabled');
+  document.getElementById('btnLimparSelecao')?.setAttribute('disabled', 'disabled');
   document.getElementById('btnProsseguir').title = 'Pacote já finalizado e enviado para auditoria.';
 }
 
-  atualizarContador();
+  atualizarListaAssociados();
   renderItensPacote();
 
 document.getElementById('btnCriarPacote').onclick = async () => {
