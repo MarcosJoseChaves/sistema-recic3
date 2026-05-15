@@ -45,11 +45,19 @@
     </style>
 </head>
 <body class="bg-light">
+{% set passos_entrega = passos_entrega|default({
+    '1': {'numero': 1, 'tipo': 'Relatório de Associados', 'titulo': 'Relatório de Associados', 'descricao': 'Confirme os associados ativos da UVR e marque a conferência antes do envio.', 'id_tipo': none},
+    '2': {'numero': 2, 'tipo': 'Recibos de Rateio', 'titulo': 'Recibos de Rateio', 'descricao': 'Inclua os comprovantes de pagamento aos associados do período.', 'id_tipo': none},
+    '3': {'numero': 3, 'tipo': 'GPS – INSS', 'titulo': 'GPS – INSS', 'descricao': 'Inclua a guia e o comprovante de pagamento do INSS do período.', 'id_tipo': none},
+    '4': {'numero': 4, 'tipo': 'Relatório fotográfico da carga', 'titulo': 'Relatório fotográfico da carga', 'descricao': 'Inclua os registros fotográficos relacionados à carga transportada.', 'id_tipo': none}
+}, true) %}
+{% set passo_atual = passo_atual|default('1', true) %}
+{% set passo_config = passo_config|default(passos_entrega.get(passo_atual, passos_entrega.get('1')), true) %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <a href="{{ url_for('coleta_seletiva') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
-            <h3 class="d-inline ms-2">Entrega de documentos · Passo 1</h3>
+            <h3 class="d-inline ms-2">Entrega de documentos · Passo {{ passo_atual }}</h3>
         </div>
         <span class="badge text-bg-info">Fluxo mensal UVR</span>
     </div>
@@ -71,7 +79,7 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Passo</label>
-                    <input class="form-control" value="1 · Relatório de Associados" disabled>
+                    <input class="form-control" value="{{ passo_atual }} · {{ passo_config.titulo }}" disabled>
                 </div>
                 <div class="col-md-4 d-flex align-items-end gap-2">
                     <button class="btn btn-primary" id="btnCriarPacote"><i class="fas fa-box"></i> Criar pacote</button>
@@ -84,15 +92,30 @@
     </div>
 
     <div class="card shadow-sm mb-3">
-        <div class="card-header"><strong>Tipo de documento deste passo</strong></div>
-        <div class="card-body">
-            <span class="badge text-bg-primary fs-6">Relatório de Associados</span>
-            <p class="text-muted mt-2 mb-0">Neste passo, confirme os associados ativos da UVR e marque a conferência antes do envio.</p>
+        <div class="card-body d-flex gap-2 flex-wrap">
+            {% for numero, cfg in passos_entrega.items() %}
+                <a class="btn btn-sm {{ 'btn-primary' if passo_atual == numero else 'btn-outline-primary' }}" href="{{ url_for('entrega_documentos', uvr=uvr_filtro, periodo_referencia=periodo_referencia, passo=numero) }}">
+                    Passo {{ numero }} · {{ cfg.titulo }}
+                </a>
+            {% endfor %}
         </div>
     </div>
 
     <div class="card shadow-sm mb-3">
-        <div class="card-header"><strong>Incluir documento: Relatório de Associados</strong></div>
+        <div class="card-header"><strong>Tipo de documento deste passo</strong></div>
+        <div class="card-body d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+            <div>
+                <span class="badge text-bg-primary fs-6">{{ passo_config.titulo }}</span>
+                <p class="text-muted mt-2 mb-0">{{ passo_config.descricao }}</p>
+            </div>
+            <a class="btn btn-outline-success" href="{{ url_for('documentos', retorno_entrega='1', retorno_passo=passo_atual, retorno_periodo=periodo_referencia, uvr=uvr_filtro, tipo_documento=passo_config.id_tipo) }}" target="_blank" rel="noopener noreferrer">
+                <i class="fas fa-plus"></i> Incluir novo documento
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Incluir documento: {{ passo_config.titulo }}</strong></div>
         <div class="card-body">
             <div class="row g-2">
                 <div class="col-md-4">
@@ -105,17 +128,19 @@
                     <input type="date" id="fDataFim" class="form-control" title="Data final">
                 </div>
                 <div class="col-md-3 d-grid">
-                    <button class="btn btn-outline-secondary" id="btnBuscarDoc"><i class="fas fa-search"></i> Buscar relatório</button>
+                    <button class="btn btn-outline-secondary" id="btnBuscarDoc"><i class="fas fa-search"></i> Buscar documento</button>
                 </div>
             </div>
             <div class="table-responsive mt-3">
                 <table class="table table-sm table-bordered" id="tblBuscaDoc">
                     <thead><tr><th>Tipo</th><th>Referência</th><th>Data referência</th><th>Arquivo</th><th></th></tr></thead>
-                    <tbody><tr><td colspan="5" class="text-center text-muted">Use o filtro para buscar o documento Relatório de Associados.</td></tr></tbody>
+                    <tbody><tr><td colspan="5" class="text-center text-muted">Use o filtro para buscar o documento {{ passo_config.titulo }}.</td></tr></tbody>
                 </table>
             </div>
         </div>
     </div>
+
+    {% if passo_atual == '1' %}
 
     <div class="card shadow-sm overflow-hidden" id="cardAssociados">
         <div class="card-header bg-white">
@@ -197,8 +222,9 @@
         </div>
     </div>
 
+    {% endif %}
     <div class="card shadow-sm mt-3">
-        <div class="card-header"><strong>Documentos no pacote (Passo 1)</strong></div>
+        <div class="card-header"><strong>Documentos no pacote (Passo {{ passo_atual }})</strong></div>
         <div class="card-body table-responsive">
             <table class="table table-bordered table-sm" id="tblItensPacote">
                 <thead><tr><th>Tipo</th><th>Referência</th><th>Arquivo</th><th>Status auditoria</th><th>Ações</th></tr></thead>
@@ -237,6 +263,9 @@ const pacote = {{ (pacote or {})|tojson }};
 const itensPacote = {{ (itens or [])|tojson }};
 const isAdmin = {{ ((usuario.role or '')|lower == 'admin')|tojson }};
 const urlColetaSeletiva = {{ url_for('coleta_seletiva')|tojson }};
+const passoAtual = {{ passo_atual|tojson }};
+const tipoDocumentoPasso = {{ passo_config.titulo|tojson }};
+const documentoCadastrado = {{ (request.args.get('documento_cadastrado') == '1')|tojson }};
 const uvrInput = document.getElementById('filtroUvr');
 const periodoInput = document.getElementById('filtroPeriodo');
 const statusPacote = document.getElementById('statusPacote');
@@ -294,8 +323,10 @@ function atualizarContador() {
   const marcados = document.querySelectorAll('.chk-associado:checked').length;
   const contador = document.getElementById('contadorConferencia');
   const resumo = document.getElementById('resumoSelecao');
-  contador.textContent = `${marcados}/${total} selecionados`;
-  contador.className = `badge ${marcados === total && total > 0 ? 'text-bg-success' : 'text-bg-secondary'}`;
+  if (contador) {
+    contador.textContent = `${marcados}/${total} selecionados`;
+    contador.className = `badge ${marcados === total && total > 0 ? 'text-bg-success' : 'text-bg-secondary'}`;
+  }
   if (resumo) {
     resumo.textContent = marcados === 0
       ? 'Nenhum associado selecionado'
@@ -389,7 +420,7 @@ async function abrirFichaAssociado(idAssociado) {
 function navegarFiltro() {
   const uvr = encodeURIComponent(uvrInput.value || '');
   const periodo = encodeURIComponent(periodoInput.value || '');
-  window.location.href = `/modulos/entrega-documentos?uvr=${uvr}&periodo_referencia=${periodo}&passo=1`;
+  window.location.href = `/modulos/entrega-documentos?uvr=${uvr}&periodo_referencia=${periodo}&passo=${encodeURIComponent(passoAtual)}`;
 }
 
 uvrInput.addEventListener('change', navegarFiltro);
@@ -453,14 +484,14 @@ if (pacoteFinalizado) {
   renderItensPacote();
 
 document.getElementById('btnCriarPacote').onclick = async () => {
-  const resp = await fetch('/entrega-documentos/passo1/pacote/criar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value})});
+  const resp = await fetch('/entrega-documentos/passo1/pacote/criar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, passo: passoAtual})});
   const data = await resp.json();
   alert(data.message || 'Operação concluída.');
   if (data.ok) navegarFiltro();
 };
 
 document.getElementById('btnSalvarPacote').onclick = async () => {
-  const resp = await fetch('/entrega-documentos/passo1/pacote/salvar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, associados_conferencia: getSelecionados()})});
+  const resp = await fetch('/entrega-documentos/passo1/pacote/salvar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, passo: passoAtual, associados_conferencia: getSelecionados()})});
   const data = await resp.json();
   alert(data.message || 'Operação concluída.');
 };
@@ -468,7 +499,7 @@ document.getElementById('btnSalvarPacote').onclick = async () => {
 document.getElementById('btnProsseguir').onclick = () => {
   const uvr = encodeURIComponent(uvrInput.value || '');
   const periodo = encodeURIComponent(periodoInput.value || '');
-  window.location.href = `/modulos/entrega-documentos/finalizacao?uvr=${uvr}&periodo_referencia=${periodo}`;
+  window.location.href = `/modulos/entrega-documentos/finalizacao?uvr=${uvr}&periodo_referencia=${periodo}&passo=${encodeURIComponent(passoAtual)}`;
 };
 
 document.getElementById('btnBuscarDoc').onclick = async () => {
@@ -477,7 +508,8 @@ document.getElementById('btnBuscarDoc').onclick = async () => {
     uvr: uvrInput.value || '',
     numero_referencia: document.getElementById('fRef').value || '',
     data_referencia_inicio: document.getElementById('fDataInicio').value || '',
-    data_referencia_fim: document.getElementById('fDataFim').value || ''
+    data_referencia_fim: document.getElementById('fDataFim').value || '',
+    passo: passoAtual
   });
   const resp = await fetch(`/entrega-documentos/documentos-disponiveis?${params.toString()}`);
   const data = await resp.json();
@@ -485,7 +517,7 @@ document.getElementById('btnBuscarDoc').onclick = async () => {
   tbody.innerHTML = '';
   const docs = (data && data.documentos) || [];
   if (!docs.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum Relatório de Associados encontrado.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Nenhum ${tipoDocumentoPasso} encontrado. Use o botão "Incluir novo documento" para cadastrá-lo.</td></tr>`;
     return;
   }
   docs.forEach((doc) => {
@@ -505,7 +537,7 @@ document.getElementById('btnBuscarDoc').onclick = async () => {
       const r = await fetch('/entrega-documentos/passo1/item', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, id_documento: doc.id})
+        body: JSON.stringify({uvr: uvrInput.value, periodo_referencia: periodoInput.value, passo: passoAtual, id_documento: doc.id})
       });
       const d = await r.json();
       alert(d.message || 'Operação concluída.');
@@ -514,6 +546,10 @@ document.getElementById('btnBuscarDoc').onclick = async () => {
     tbody.appendChild(tr);
   });
 };
+
+if (documentoCadastrado && !pacoteFinalizado) {
+  document.getElementById('btnBuscarDoc').click();
+}
 
   </script>
 </body>
