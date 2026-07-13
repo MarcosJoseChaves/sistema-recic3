@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
 
 # ReportLab Imports (Para PDF)
 from reportlab.lib.pagesizes import letter, A4, landscape
@@ -66,6 +67,11 @@ def conectar_banco():
             password="postgres", 
             port="5432"
         )
+
+app.register_blueprint(
+    criar_blueprint_fiscalizacao(),
+    url_prefix="/fiscalizacao-contratos"
+)
 
 # --- VALIDAÇÕES ---
 def validar_cnpj(cnpj):

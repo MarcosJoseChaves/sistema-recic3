@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Sistema antigo mantido somente como referência local
+_referencia_fiscaliza/
+
 # C extensions
 *.so
 
