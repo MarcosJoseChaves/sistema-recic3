@@ -64,7 +64,7 @@ A pasta `_referencia_fiscaliza/` permanece somente para consulta. Nenhum arquivo
 
 ## Etapa 2A — Empresas contratadas
 
-O cadastro de empresas foi implementado no módulo, ainda sem commit e sem aplicar a migração:
+O cadastro de empresas foi implementado no módulo e registrado no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`:
 
 - listagem de empresas ativas e opção para mostrar inativas;
 - cadastro, visualização e edição;
@@ -74,17 +74,28 @@ O cadastro de empresas foi implementado no módulo, ainda sem commit e sem aplic
 - consulta opcional de CNPJ e CEP, mantendo preenchimento manual em caso de falha;
 - acesso restrito a administradores;
 - serviço de empresas usando a função `conectar_banco` recebida do sistema principal;
-- migração idempotente mantida somente como arquivo para revisão.
+- migração idempotente revisada e aplicada no ambiente Neon configurado no `.env`.
 
 Foram executados 20 testes automatizados: 15 relacionados à Etapa 2A e 5 testes de regressão da Etapa 1. Resultado: **20 passaram e 0 falharam**. PostgreSQL foi bloqueado por mock e nenhum SQL real foi executado.
 
-A migração `001_criar_fc_empresas.sql` **não foi executada**. O Neon e qualquer outro banco de dados não foram acessados nesta etapa.
+A migração `001_criar_fc_empresas.sql` foi aplicada em **14/07/2026**, usando a conexão Neon atualmente configurada no `.env`, conforme autorização expressa. Nenhuma credencial, URL ou hostname foi registrado neste documento.
+
+Verificações realizadas após a aplicação:
+
+- a tabela `fc_empresas` existe;
+- as 17 colunas esperadas foram conferidas;
+- chave primária, CNPJ único, validações de CNPJ/CEP/UF e chaves estrangeiras para `usuarios.id` foram conferidas;
+- o índice `idx_fc_empresas_ativo_razao_social` existe;
+- a tabela foi criada vazia, sem cadastro de empresas;
+- o catálogo das demais tabelas permaneceu idêntico antes e depois;
+- nenhum dado existente foi apagado ou alterado;
+- nenhuma outra migração foi executada.
 
 O backup `stash@{0}`, identificado como `Backup parcial Etapa 2A antes da restauração`, continua preservado.
 
 ## Próxima etapa recomendada
 
-Revisar o código e a migração da Etapa 2A. A aplicação da migração na branch de desenvolvimento do Neon exige nova autorização expressa. Contratos e as demais áreas do módulo não devem ser iniciados antes dessa revisão.
+Validar o cadastro de empresas pela interface antes de iniciar qualquer nova parte do módulo. Contratos e as demais áreas não devem ser iniciados sem nova autorização expressa.
 
 ## Como continuar o trabalho
 
@@ -96,4 +107,4 @@ Revisar o código e a migração da Etapa 2A. A aplicação da migração na bra
 6. Solicitar autorização explícita antes de iniciar a Etapa 2.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
-A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. As alterações da Etapa 2A permanecem sem commit, push, pull request ou merge.
+A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`. O registro da aplicação da migração permanece como alteração local, sem commit, push, pull request ou merge.
