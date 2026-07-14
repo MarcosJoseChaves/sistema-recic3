@@ -150,9 +150,30 @@ Os testes manuais da Etapa 2B também foram concluídos com sucesso. Foram valid
 
 A tabela `fc_servidores` está funcionando corretamente com o cadastro de servidores e responsáveis.
 
+## Etapa 2C — Contratos e vínculo de responsáveis
+
+O cadastro básico de contratos foi implementado dentro do módulo, ainda sem commit e sem executar a migração:
+
+- listagem, cadastro, visualização e edição de contratos;
+- vínculo obrigatório com empresa ativa, gestor ativo e fiscal titular ativo;
+- vínculo opcional com fiscais substitutos;
+- confirmação explícita para o mesmo servidor exercer mais de uma função;
+- histórico de responsáveis preservado nas substituições;
+- pesquisa por número, processo, objeto ou empresa;
+- filtros por situação, empresa, cadastro ativo/inativo e vencimento em 60 dias;
+- valores aceitos e exibidos no formato brasileiro;
+- datas exibidas em `DD/MM/AAAA`;
+- inativação e reativação sem exclusão física;
+- acesso restrito a administradores;
+- cartão de Contratos habilitado no painel do módulo.
+
+A migração idempotente e aditiva `003_criar_fc_contratos.sql` foi criada somente como arquivo para revisão. Ela **não foi executada**, o Neon não foi acessado e nenhuma tabela ou dado existente foi alterado.
+
+Foram executados **76 testes automatizados**: os 50 testes anteriores e 26 testes novos da Etapa 2C. Resultado: **76 passaram e 0 falharam**. Os testes usam serviços, banco e APIs simulados.
+
 ## Próxima etapa recomendada
 
-A próxima etapa será o cadastro de contratos e o vínculo de cada contrato com a empresa contratada, o gestor e os fiscais. Ela não deve ser iniciada sem nova autorização expressa.
+Revisar a migração `003_criar_fc_contratos.sql`. Sua aplicação no banco e os testes manuais da interface exigem nova autorização expressa.
 
 ## Como continuar o trabalho
 

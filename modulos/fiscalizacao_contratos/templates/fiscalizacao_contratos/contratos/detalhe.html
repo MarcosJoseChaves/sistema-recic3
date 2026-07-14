@@ -1,0 +1,117 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% block title %}Detalhes do Contrato{% endblock %}
+{% block page_title %}Contrato {{ contrato.numero_contrato }}{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('fiscalizacao_contratos.contratos_lista', status_ativo='todos' if not contrato.ativo else 'ativos') }}"
+   class="btn btn-outline-secondary">
+    <i class="fas fa-list me-2"></i>Lista de contratos
+</a>
+{% endblock %}
+
+{% block content %}
+{% if contrato.vence_em_60_dias %}
+<div class="alert alert-warning shadow-sm" role="alert">
+    <i class="fas fa-triangle-exclamation me-2"></i>
+    Este contrato vence nos próximos 60 dias.
+</div>
+{% endif %}
+
+<div class="card content-card mb-4">
+    <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+        <span><i class="fas fa-file-signature me-2"></i>Dados do contrato</span>
+        <span>
+            <span class="badge text-bg-primary">{{ contrato.situacao }}</span>
+            {% if contrato.ativo %}
+                <span class="badge text-bg-success">Ativo</span>
+            {% else %}
+                <span class="badge text-bg-secondary">Inativo</span>
+            {% endif %}
+        </span>
+    </div>
+    <div class="card-body">
+        <dl class="row detail-list mb-0">
+            <dt class="col-sm-4 col-lg-3">Número</dt><dd class="col-sm-8 col-lg-9">{{ contrato.numero_contrato }}</dd>
+            <dt class="col-sm-4 col-lg-3">Processo</dt><dd class="col-sm-8 col-lg-9">{{ contrato.processo_administrativo or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Empresa</dt><dd class="col-sm-8 col-lg-9">{{ contrato.empresa_nome }}</dd>
+            <dt class="col-sm-4 col-lg-3">Objeto</dt><dd class="col-sm-8 col-lg-9 text-break" style="white-space: pre-wrap;">{{ contrato.objeto }}</dd>
+            <dt class="col-sm-4 col-lg-3">Valor original</dt><dd class="col-sm-8 col-lg-9">{{ contrato.valor_original|fc_moeda }}</dd>
+            <dt class="col-sm-4 col-lg-3">Assinatura</dt><dd class="col-sm-8 col-lg-9">{{ contrato.data_assinatura|fc_data }}</dd>
+            <dt class="col-sm-4 col-lg-3">Vigência</dt><dd class="col-sm-8 col-lg-9">{{ contrato.vigencia_inicio|fc_data }} a {{ contrato.vigencia_fim|fc_data }}</dd>
+            <dt class="col-sm-4 col-lg-3">Observações</dt><dd class="col-sm-8 col-lg-9 text-break" style="white-space: pre-wrap;">{{ contrato.observacoes or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Criado em</dt><dd class="col-sm-8 col-lg-9">{{ contrato.criado_em.strftime('%d/%m/%Y %H:%M') if contrato.criado_em else '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Atualizado em</dt><dd class="col-sm-8 col-lg-9">{{ contrato.atualizado_em.strftime('%d/%m/%Y %H:%M') if contrato.atualizado_em else '-' }}</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="card content-card mb-4">
+    <div class="card-header bg-success text-white">
+        <i class="fas fa-users-gear me-2"></i>Responsáveis atuais
+    </div>
+    <div class="card-body">
+        {% if responsaveis_ativos %}
+        <div class="row g-3">
+            {% for item in responsaveis_ativos %}
+            <div class="col-md-6 col-xl-4">
+                <div class="border rounded h-100 p-3">
+                    <span class="badge text-bg-light border mb-2">{{ item.tipo_responsabilidade }}</span>
+                    <h2 class="h6 mb-1">{{ item.servidor_nome }}</h2>
+                    <p class="text-muted small mb-1">Matrícula {{ item.servidor_matricula }}</p>
+                    <p class="text-muted small mb-0">Desde {{ item.data_inicio|fc_data }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Nenhum responsável ativo.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if historico_responsaveis %}
+<div class="card content-card mb-4">
+    <div class="card-header">
+        <i class="fas fa-clock-rotate-left me-2"></i>Histórico de responsáveis
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Servidor</th><th>Função</th><th>Início</th><th>Fim</th></tr></thead>
+                <tbody>
+                    {% for item in historico_responsaveis %}
+                    <tr>
+                        <td>{{ item.servidor_nome }}</td>
+                        <td>{{ item.tipo_responsabilidade }}</td>
+                        <td>{{ item.data_inicio|fc_data }}</td>
+                        <td>{{ item.data_fim|fc_data }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
+    <a href="{{ url_for('fiscalizacao_contratos.contratos_editar', contrato_id=contrato.id) }}" class="btn btn-primary">
+        <i class="fas fa-pen me-2"></i>Editar
+    </a>
+    {% if contrato.ativo %}
+    <form method="POST" action="{{ url_for('fiscalizacao_contratos.contratos_inativar', contrato_id=contrato.id) }}"
+          onsubmit="return confirm('Inativar este contrato? O registro será preservado.');">
+        <button type="submit" class="btn btn-outline-danger w-100">
+            <i class="fas fa-ban me-2"></i>Inativar
+        </button>
+    </form>
+    {% else %}
+    <form method="POST" action="{{ url_for('fiscalizacao_contratos.contratos_reativar', contrato_id=contrato.id) }}">
+        <button type="submit" class="btn btn-success w-100">
+            <i class="fas fa-rotate-left me-2"></i>Reativar
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
