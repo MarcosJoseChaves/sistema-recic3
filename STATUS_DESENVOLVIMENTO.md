@@ -108,7 +108,7 @@ O backup temporário antigo da Etapa 2A foi revisado e confirmado como contendo 
 
 ## Etapa 2B — Servidores e responsáveis
 
-O cadastro próprio de servidores e responsáveis foi implementado dentro do módulo, ainda sem commit e sem executar a migração:
+A Etapa 2B foi concluída. O cadastro próprio de servidores e responsáveis foi implementado dentro do módulo e registrado no commit `c0ea8c3c4b0a43164b551efcb9f50eb00f9bfe24`:
 
 - listagem de servidores;
 - cadastro, visualização e edição;
@@ -124,13 +124,35 @@ O cadastro próprio de servidores e responsáveis foi implementado dentro do mó
 
 Os servidores ficam separados da tabela `usuarios`. A tabela `usuarios` é referenciada somente para registrar quem criou ou atualizou cada cadastro.
 
-A migração idempotente e aditiva `002_criar_fc_servidores.sql` foi criada somente como arquivo para revisão. Ela **não foi executada**, o Neon não foi acessado e nenhuma tabela ou dado existente foi alterado.
+A migração idempotente e aditiva `002_criar_fc_servidores.sql` foi aplicada em **14/07/2026**, usando a conexão atualmente configurada no `.env`, conforme autorização expressa. Nenhuma credencial, URL ou hostname foi registrado neste documento.
+
+Verificações realizadas após a aplicação:
+
+- a tabela `fc_servidores` existe e foi criada vazia;
+- as 13 colunas esperadas e seus tipos foram conferidos;
+- a chave primária em `id` e a matrícula única foram conferidas;
+- as chaves estrangeiras de criação e atualização apontam para `usuarios.id`;
+- as validações de nome e matrícula preenchidos foram conferidas;
+- o índice `idx_fc_servidores_ativo_nome` existe;
+- o catálogo de colunas, restrições e índices das demais tabelas permaneceu idêntico;
+- nenhum dado existente foi apagado ou alterado;
+- nenhuma outra migração foi executada.
 
 Foram executados **50 testes automatizados**: os 29 testes anteriores e 21 testes novos da Etapa 2B. Resultado: **50 passaram e 0 falharam**. Os testes usam objetos simulados e bloqueiam qualquer conexão PostgreSQL real.
 
+Os testes manuais da Etapa 2B também foram concluídos com sucesso. Foram validados:
+
+- cadastro de servidor;
+- pesquisa por nome, matrícula ou cargo;
+- visualização dos detalhes e edição;
+- inativação e exibição de servidores inativos;
+- reativação.
+
+A tabela `fc_servidores` está funcionando corretamente com o cadastro de servidores e responsáveis.
+
 ## Próxima etapa recomendada
 
-Revisar a migração `002_criar_fc_servidores.sql`. Sua aplicação no banco e os testes manuais da interface exigem nova autorização expressa. O cadastro de contratos continua sendo a etapa seguinte, mas ainda não foi iniciado.
+A próxima etapa será o cadastro de contratos e o vínculo de cada contrato com a empresa contratada, o gestor e os fiscais. Ela não deve ser iniciada sem nova autorização expressa.
 
 ## Como continuar o trabalho
 
