@@ -201,7 +201,7 @@ As tabelas `fc_contratos` e `fc_contrato_responsaveis` estão funcionando corret
 
 ## Etapa 2D — Aditivos contratuais
 
-A implementação da Etapa 2D foi registrada no commit
+A Etapa 2D foi concluída. A implementação foi registrada no commit
 `7db580994a2c24d5035c5fc50251b119a8741401`:
 
 - listagem, cadastro, visualização e edição de aditivos;
@@ -240,11 +240,25 @@ Foram executados **100 testes automatizados**: os 76 testes anteriores e 24
 testes da Etapa 2D. Resultado: **100 passaram e 0 falharam**. Os testes usam
 serviços e banco simulados e bloqueiam conexões PostgreSQL reais.
 
+Os testes manuais da Etapa 2D também foram concluídos com sucesso. Foram
+validados:
+
+- cadastro de aditivo de prazo e atualização da vigência atual;
+- cadastro de acréscimo e de supressão de valor;
+- cálculo correto do valor atualizado;
+- edição de aditivo;
+- inativação com retirada do efeito dos cálculos;
+- reativação com retorno do efeito aos cálculos;
+- bloqueio de número de termo duplicado no mesmo contrato;
+- listagem geral de aditivos.
+
+A tabela `fc_aditivos` está funcionando corretamente. Os cálculos de valor e
+vigência foram validados pelos testes automatizados e manuais.
+
 ## Próxima etapa recomendada
 
-O próximo passo recomendado é validar manualmente o cadastro e os cálculos de
-aditivos. Funcionalidades posteriores não devem ser iniciadas sem nova
-autorização expressa.
+A próxima etapa recomendada é o cadastro de documentos e anexos. Ela não deve
+ser iniciada sem nova autorização expressa.
 
 ## Como continuar o trabalho
 
@@ -253,7 +267,7 @@ autorização expressa.
 3. Confirmar que a branch é `codex/modulo-fiscalizacao-contratos` e não `main`.
 4. Ler este arquivo e revisar o `git diff` pendente.
 5. Não modificar `_referencia_fiscaliza/`.
-6. Solicitar autorização explícita antes de aplicar a migração de aditivos.
+6. Solicitar autorização explícita antes de iniciar documentos e anexos.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
