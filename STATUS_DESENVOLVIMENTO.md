@@ -201,7 +201,8 @@ As tabelas `fc_contratos` e `fc_contrato_responsaveis` estão funcionando corret
 
 ## Etapa 2D — Aditivos contratuais
 
-A implementação da Etapa 2D foi preparada e permanece sem commit para revisão:
+A implementação da Etapa 2D foi registrada no commit
+`7db580994a2c24d5035c5fc50251b119a8741401`:
 
 - listagem, cadastro, visualização e edição de aditivos;
 - pesquisa por contrato, termo, processo, empresa ou tipo;
@@ -215,9 +216,25 @@ A implementação da Etapa 2D foi preparada e permanece sem commit para revisão
 - acesso restrito a administradores;
 - cartão de Aditivos habilitado no painel do módulo.
 
-A migração idempotente e aditiva `004_criar_fc_aditivos.sql` foi criada somente
-como arquivo. **Ela não foi executada e o banco Neon não foi acessado nesta
-etapa.** Nenhum cadastro real foi realizado.
+A migração idempotente e aditiva `004_criar_fc_aditivos.sql` foi aplicada em
+**14/07/2026**, usando a conexão atualmente configurada no `.env`, conforme
+autorização expressa. Nenhuma credencial, URL ou hostname foi registrado neste
+documento.
+
+Verificações realizadas após a aplicação:
+
+- a tabela `fc_aditivos` existe e possui as 19 colunas esperadas;
+- a chave primária, as chaves estrangeiras para `fc_contratos` e `usuarios`, e
+  a combinação única de contrato com número do termo foram conferidas;
+- as restrições de tipo, dias, valores e percentual não negativos foram
+  conferidas;
+- os índices de contrato/atividade, tipo/atividade e data de assinatura foram
+  conferidos;
+- a tabela foi criada vazia, com **0 registros**;
+- a estrutura, as restrições, os índices e as quantidades de registros das
+  tabelas anteriores permaneceram iguais antes e depois da migração;
+- nenhum dado anterior foi apagado ou alterado;
+- nenhuma outra migração foi executada e nenhum aditivo foi cadastrado.
 
 Foram executados **100 testes automatizados**: os 76 testes anteriores e 24
 testes da Etapa 2D. Resultado: **100 passaram e 0 falharam**. Os testes usam
@@ -225,9 +242,9 @@ serviços e banco simulados e bloqueiam conexões PostgreSQL reais.
 
 ## Próxima etapa recomendada
 
-Após a revisão do código, o próximo passo recomendado é revisar e, somente com
-autorização expressa, aplicar a migração `004_criar_fc_aditivos.sql` no ambiente
-autorizado. Funcionalidades posteriores não devem ser iniciadas antes disso.
+O próximo passo recomendado é validar manualmente o cadastro e os cálculos de
+aditivos. Funcionalidades posteriores não devem ser iniciadas sem nova
+autorização expressa.
 
 ## Como continuar o trabalho
 
