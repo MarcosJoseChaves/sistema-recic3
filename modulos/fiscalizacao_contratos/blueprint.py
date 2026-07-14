@@ -8,6 +8,10 @@ from .validacoes_contratos import (
     formatar_moeda_brasileira,
     formatar_valor_campo,
 )
+from .validacoes_aditivos import (
+    formatar_percentual_brasileiro,
+    formatar_percentual_campo,
+)
 from .validacoes import formatar_cep, formatar_cnpj
 
 
@@ -29,5 +33,7 @@ def criar_blueprint_fiscalizacao(conectar_banco):
     blueprint.add_app_template_filter(formatar_valor_campo, "fc_valor_campo")
     blueprint.add_app_template_filter(formatar_data_brasileira, "fc_data")
     blueprint.add_app_template_filter(formatar_data_iso, "fc_data_iso")
+    blueprint.add_app_template_filter(formatar_percentual_brasileiro, "fc_percentual")
+    blueprint.add_app_template_filter(formatar_percentual_campo, "fc_percentual_campo")
     registrar_rotas(blueprint, conectar_banco)
     return blueprint

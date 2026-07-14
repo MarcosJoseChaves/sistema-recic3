@@ -46,6 +46,44 @@
     </div>
 </div>
 
+{% if resumo_aditivos %}
+<div class="card content-card mb-4">
+    <div class="card-header bg-warning text-dark d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+        <span><i class="fas fa-file-circle-plus me-2"></i>Resumo dos aditivos</span>
+        <a href="{{ url_for('fiscalizacao_contratos.aditivos_novo', contrato_id=contrato.id) }}" class="btn btn-sm btn-dark"><i class="fas fa-plus me-1"></i>Novo aditivo</a>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-4">
+            <div class="col-sm-6 col-xl-3"><div class="border rounded h-100 p-3"><div class="small text-muted">Valor original</div><strong>{{ resumo_aditivos.valor_original|fc_moeda }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="border rounded h-100 p-3"><div class="small text-muted">Total de acréscimos</div><strong class="text-success">{{ resumo_aditivos.total_acrescimos|fc_moeda }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="border rounded h-100 p-3"><div class="small text-muted">Total de supressões</div><strong class="text-danger">{{ resumo_aditivos.total_supressoes|fc_moeda }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="border rounded h-100 p-3"><div class="small text-muted">Valor atualizado</div><strong>{{ resumo_aditivos.valor_atualizado|fc_moeda }}</strong></div></div>
+            <div class="col-sm-6 col-xl-4"><div class="border rounded h-100 p-3"><div class="small text-muted">Vigência original</div><strong>{{ resumo_aditivos.vigencia_inicio_original|fc_data }} a {{ resumo_aditivos.vigencia_fim_original|fc_data }}</strong></div></div>
+            <div class="col-sm-6 col-xl-4"><div class="border rounded h-100 p-3"><div class="small text-muted">Vigência final atual</div><strong>{{ resumo_aditivos.vigencia_fim_atual|fc_data }}</strong></div></div>
+            <div class="col-sm-6 col-xl-4"><div class="border rounded h-100 p-3"><div class="small text-muted">Aditivos ativos</div><strong>{{ resumo_aditivos.quantidade_aditivos_ativos }}</strong></div></div>
+        </div>
+        {% if aditivos %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Termo</th><th>Tipo</th><th>Assinatura</th><th>Situação</th><th class="text-end">Ação</th></tr></thead>
+                <tbody>
+                    {% for aditivo in aditivos %}
+                    <tr>
+                        <td>{{ aditivo.numero_termo }}</td><td>{{ aditivo.tipo_aditivo }}</td><td>{{ aditivo.data_assinatura|fc_data }}</td>
+                        <td><span class="badge {{ 'text-bg-success' if aditivo.ativo else 'text-bg-secondary' }}">{{ 'Ativo' if aditivo.ativo else 'Inativo' }}</span></td>
+                        <td class="text-end"><a href="{{ url_for('fiscalizacao_contratos.aditivos_detalhe', aditivo_id=aditivo.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i><span class="visually-hidden">Visualizar</span></a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Nenhum aditivo registrado para este contrato.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="card content-card mb-4">
     <div class="card-header bg-success text-white">
         <i class="fas fa-users-gear me-2"></i>Responsáveis atuais

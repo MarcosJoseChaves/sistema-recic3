@@ -4,6 +4,7 @@ from flask import current_app, flash, redirect, render_template, request, url_fo
 from flask_login import current_user
 
 from ..permissions import admin_required
+from ..services.aditivos_service import AditivoService, AditivoServiceError
 from ..services.contratos_service import (
     ContratoDuplicadoError,
     ContratoNaoEncontradoError,
@@ -138,6 +139,15 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             flash("Não foi possível carregar o contrato.", "danger")
             return redirect(url_for("fiscalizacao_contratos.contratos_lista"))
 
+        try:
+            resumo_aditivos, aditivos = AditivoService(conectar_banco).resumo_contrato(
+                contrato_id
+            )
+        except AditivoServiceError:
+            current_app.logger.exception("Falha ao carregar aditivos do contrato")
+            flash("Não foi possível carregar os aditivos do contrato.", "danger")
+            resumo_aditivos, aditivos = None, []
+
         responsaveis_ativos = [item for item in responsaveis if item["ativo"]]
         historico_responsaveis = [item for item in responsaveis if not item["ativo"]]
         return render_template(
@@ -145,6 +155,8 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             contrato=contrato,
             responsaveis_ativos=responsaveis_ativos,
             historico_responsaveis=historico_responsaveis,
+            resumo_aditivos=resumo_aditivos,
+            aditivos=aditivos,
         )
 
     @blueprint.route("/contratos/<int:contrato_id>/editar", methods=["GET", "POST"])

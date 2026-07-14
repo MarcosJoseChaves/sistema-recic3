@@ -1,0 +1,90 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% block title %}{{ 'Novo' if modo == 'novo' else 'Editar' }} Aditivo{% endblock %}
+{% block page_title %}{{ 'Novo aditivo' if modo == 'novo' else 'Editar aditivo' }}{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('fiscalizacao_contratos.aditivos_lista') }}" class="btn btn-outline-secondary"><i class="fas fa-list me-2"></i>Lista de aditivos</a>
+{% endblock %}
+
+{% block content %}
+<form method="POST" class="card content-card">
+    <div class="card-body">
+        <p class="text-muted"><span class="text-danger">*</span> Campos obrigatórios.</p>
+        <div class="row g-3">
+            <div class="col-lg-7">
+                <label for="contrato_id" class="form-label">Contrato <span class="text-danger">*</span></label>
+                <select class="form-select" id="contrato_id" name="contrato_id" required>
+                    <option value="">Selecione</option>
+                    {% for contrato in contratos %}
+                    <option value="{{ contrato.id }}" {% if aditivo.contrato_id == contrato.id %}selected{% endif %}>
+                        {{ contrato.numero_contrato }} — {{ contrato.empresa_nome }}{% if not contrato.ativo %} (inativo){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 col-lg-5">
+                <label for="numero_termo" class="form-label">Número do termo <span class="text-danger">*</span></label>
+                <input class="form-control" id="numero_termo" name="numero_termo" maxlength="100" required value="{{ aditivo.numero_termo or '' }}">
+            </div>
+            <div class="col-md-6">
+                <label for="tipo_aditivo" class="form-label">Tipo <span class="text-danger">*</span></label>
+                <select class="form-select" id="tipo_aditivo" name="tipo_aditivo" required>
+                    <option value="">Selecione</option>
+                    {% for item in tipos_aditivo %}<option value="{{ item }}" {% if aditivo.tipo_aditivo == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <label for="data_assinatura" class="form-label">Data de assinatura <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="data_assinatura" name="data_assinatura" required value="{{ aditivo.data_assinatura|fc_data_iso }}">
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <label for="data_inicio_efeitos" class="form-label">Início dos efeitos</label>
+                <input type="date" class="form-control" id="data_inicio_efeitos" name="data_inicio_efeitos" value="{{ aditivo.data_inicio_efeitos|fc_data_iso }}">
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <h2 class="h5">Alterações de prazo e valor</h2>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label for="dias_acrescidos" class="form-label">Dias acrescidos</label>
+                <input type="number" min="0" class="form-control" id="dias_acrescidos" name="dias_acrescidos" value="{{ aditivo.dias_acrescidos if aditivo.dias_acrescidos is not none else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label for="nova_vigencia_fim" class="form-label">Nova vigência final</label>
+                <input type="date" class="form-control" id="nova_vigencia_fim" name="nova_vigencia_fim" value="{{ aditivo.nova_vigencia_fim|fc_data_iso }}">
+            </div>
+            <div class="col-md-4">
+                <label for="percentual_alteracao" class="form-label">Percentual de alteração</label>
+                <div class="input-group"><input class="form-control" id="percentual_alteracao" name="percentual_alteracao" inputmode="decimal" placeholder="5,25" value="{{ aditivo.percentual_alteracao|fc_percentual_campo }}"><span class="input-group-text">%</span></div>
+            </div>
+            <div class="col-md-6">
+                <label for="valor_acrescimo" class="form-label">Valor do acréscimo</label>
+                <div class="input-group"><span class="input-group-text">R$</span><input class="form-control" id="valor_acrescimo" name="valor_acrescimo" inputmode="decimal" placeholder="0,00" value="{{ aditivo.valor_acrescimo|fc_valor_campo }}"></div>
+            </div>
+            <div class="col-md-6">
+                <label for="valor_supressao" class="form-label">Valor da supressão</label>
+                <div class="input-group"><span class="input-group-text">R$</span><input class="form-control" id="valor_supressao" name="valor_supressao" inputmode="decimal" placeholder="0,00" value="{{ aditivo.valor_supressao|fc_valor_campo }}"></div>
+            </div>
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="confirmar_valores_simultaneos" name="confirmar_valores_simultaneos" value="1" {% if aditivo.confirmar_valores_simultaneos %}checked{% endif %}>
+                    <label class="form-check-label" for="confirmar_valores_simultaneos">Confirmo que este termo possui acréscimo e supressão simultâneos, explicados na justificativa técnica.</label>
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="row g-3">
+            <div class="col-12"><label for="descricao_alteracao" class="form-label">Descrição da alteração</label><textarea class="form-control" id="descricao_alteracao" name="descricao_alteracao" rows="3">{{ aditivo.descricao_alteracao or '' }}</textarea></div>
+            <div class="col-12"><label for="justificativa" class="form-label">Justificativa técnica</label><textarea class="form-control" id="justificativa" name="justificativa" rows="3">{{ aditivo.justificativa or '' }}</textarea></div>
+            <div class="col-12"><label for="observacoes" class="form-label">Observações</label><textarea class="form-control" id="observacoes" name="observacoes" rows="3">{{ aditivo.observacoes or '' }}</textarea></div>
+        </div>
+    </div>
+    <div class="card-footer d-flex flex-column flex-sm-row justify-content-end gap-2">
+        <a href="{{ url_for('fiscalizacao_contratos.aditivos_lista') }}" class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk me-2"></i>Salvar aditivo</button>
+    </div>
+</form>
+{% endblock %}

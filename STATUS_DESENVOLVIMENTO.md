@@ -199,9 +199,35 @@ Os testes manuais da Etapa 2C também foram concluídos com sucesso. Foram valid
 
 As tabelas `fc_contratos` e `fc_contrato_responsaveis` estão funcionando corretamente com o cadastro de contratos e seus responsáveis.
 
+## Etapa 2D — Aditivos contratuais
+
+A implementação da Etapa 2D foi preparada e permanece sem commit para revisão:
+
+- listagem, cadastro, visualização e edição de aditivos;
+- pesquisa por contrato, termo, processo, empresa ou tipo;
+- filtro por tipo e por cadastro ativo/inativo;
+- inativação e reativação sem exclusão do histórico;
+- cálculo do valor atualizado usando somente acréscimos e supressões ativos;
+- cálculo da vigência atual usando somente alterações de prazo ativas;
+- preservação do valor e da vigência originais do contrato;
+- resumo e histórico de aditivos na página de detalhes do contrato;
+- valores monetários tratados com `Decimal` e exibidos no padrão brasileiro;
+- acesso restrito a administradores;
+- cartão de Aditivos habilitado no painel do módulo.
+
+A migração idempotente e aditiva `004_criar_fc_aditivos.sql` foi criada somente
+como arquivo. **Ela não foi executada e o banco Neon não foi acessado nesta
+etapa.** Nenhum cadastro real foi realizado.
+
+Foram executados **100 testes automatizados**: os 76 testes anteriores e 24
+testes da Etapa 2D. Resultado: **100 passaram e 0 falharam**. Os testes usam
+serviços e banco simulados e bloqueiam conexões PostgreSQL reais.
+
 ## Próxima etapa recomendada
 
-A próxima etapa recomendada é o cadastro de aditivos contratuais. Ela não deve ser iniciada sem nova autorização expressa.
+Após a revisão do código, o próximo passo recomendado é revisar e, somente com
+autorização expressa, aplicar a migração `004_criar_fc_aditivos.sql` no ambiente
+autorizado. Funcionalidades posteriores não devem ser iniciadas antes disso.
 
 ## Como continuar o trabalho
 
@@ -210,7 +236,7 @@ A próxima etapa recomendada é o cadastro de aditivos contratuais. Ela não dev
 3. Confirmar que a branch é `codex/modulo-fiscalizacao-contratos` e não `main`.
 4. Ler este arquivo e revisar o `git diff` pendente.
 5. Não modificar `_referencia_fiscaliza/`.
-6. Solicitar autorização explícita antes de aplicar a migração de servidores.
+6. Solicitar autorização explícita antes de aplicar a migração de aditivos.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.

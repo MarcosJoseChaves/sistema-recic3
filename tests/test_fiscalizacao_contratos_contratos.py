@@ -281,8 +281,27 @@ class TestFiscalizacaoContratosContratos(unittest.TestCase):
             return_value=self.servico,
         )
         self.patcher_servico.start()
+        self.patcher_aditivos = patch(
+            "modulos.fiscalizacao_contratos.routes.contratos.AditivoService"
+        )
+        aditivo_service = self.patcher_aditivos.start().return_value
+        contrato = self.servico.contratos[1]
+        aditivo_service.resumo_contrato.return_value = (
+            {
+                "valor_original": contrato["valor_original"],
+                "total_acrescimos": Decimal("0.00"),
+                "total_supressoes": Decimal("0.00"),
+                "valor_atualizado": contrato["valor_original"],
+                "vigencia_inicio_original": contrato["vigencia_inicio"],
+                "vigencia_fim_original": contrato["vigencia_fim"],
+                "vigencia_fim_atual": contrato["vigencia_fim"],
+                "quantidade_aditivos_ativos": 0,
+            },
+            [],
+        )
 
     def tearDown(self):
+        self.patcher_aditivos.stop()
         self.patcher_servico.stop()
 
     @staticmethod
