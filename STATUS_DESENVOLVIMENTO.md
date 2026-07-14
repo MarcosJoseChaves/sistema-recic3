@@ -152,7 +152,7 @@ A tabela `fc_servidores` está funcionando corretamente com o cadastro de servid
 
 ## Etapa 2C — Contratos e vínculo de responsáveis
 
-O cadastro básico de contratos foi implementado dentro do módulo, ainda sem commit e sem executar a migração:
+A Etapa 2C foi concluída. O cadastro básico de contratos foi implementado dentro do módulo e registrado no commit `5723933280c8e8bf9b917773db9ef5220dda0ea3`:
 
 - listagem, cadastro, visualização e edição de contratos;
 - vínculo obrigatório com empresa ativa, gestor ativo e fiscal titular ativo;
@@ -167,13 +167,41 @@ O cadastro básico de contratos foi implementado dentro do módulo, ainda sem co
 - acesso restrito a administradores;
 - cartão de Contratos habilitado no painel do módulo.
 
-A migração idempotente e aditiva `003_criar_fc_contratos.sql` foi criada somente como arquivo para revisão. Ela **não foi executada**, o Neon não foi acessado e nenhuma tabela ou dado existente foi alterado.
+A migração idempotente e aditiva `003_criar_fc_contratos.sql` foi aplicada em **14/07/2026**, usando a conexão atualmente configurada no `.env`, conforme autorização expressa. Nenhuma credencial, URL ou hostname foi registrado neste documento.
+
+A primeira tentativa foi recusada pelo PostgreSQL porque a conexão estava em modo somente leitura e não criou nenhuma tabela. Em seguida, a conexão foi explicitamente configurada para leitura e escrita e a migração autorizada foi aplicada com sucesso em uma única transação.
+
+Verificações realizadas após a aplicação:
+
+- as tabelas `fc_contratos` e `fc_contrato_responsaveis` existem;
+- `fc_contratos` possui as 16 colunas esperadas;
+- `fc_contrato_responsaveis` possui as 12 colunas esperadas;
+- chaves primárias e estrangeiras para empresas, servidores e usuários foram conferidas;
+- número único, situações permitidas, valor não negativo e período de vigência foram conferidos;
+- tipos de responsabilidade, titularidade e período dos responsáveis foram conferidos;
+- índices normais e índices únicos parciais foram conferidos;
+- as duas tabelas foram criadas vazias, sem cadastro de contratos ou responsáveis;
+- o catálogo de colunas, restrições e índices das tabelas anteriores permaneceu idêntico;
+- nenhum dado anterior foi apagado ou alterado;
+- nenhuma outra migração foi executada.
 
 Foram executados **76 testes automatizados**: os 50 testes anteriores e 26 testes novos da Etapa 2C. Resultado: **76 passaram e 0 falharam**. Os testes usam serviços, banco e APIs simulados.
 
+Os testes manuais da Etapa 2C também foram concluídos com sucesso. Foram validados:
+
+- cadastro de contrato e vínculo com empresa;
+- gestor, fiscal titular e fiscais substitutos;
+- visualização e edição;
+- troca de responsável com preservação do histórico;
+- pesquisa e filtros;
+- alerta de vencimento;
+- inativação e reativação.
+
+As tabelas `fc_contratos` e `fc_contrato_responsaveis` estão funcionando corretamente com o cadastro de contratos e seus responsáveis.
+
 ## Próxima etapa recomendada
 
-Revisar a migração `003_criar_fc_contratos.sql`. Sua aplicação no banco e os testes manuais da interface exigem nova autorização expressa.
+A próxima etapa recomendada é o cadastro de aditivos contratuais. Ela não deve ser iniciada sem nova autorização expressa.
 
 ## Como continuar o trabalho
 
