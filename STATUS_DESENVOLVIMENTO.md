@@ -62,9 +62,29 @@ O banco de dados não foi acessado nem alterado nesta etapa. Não foram criadas 
 
 A pasta `_referencia_fiscaliza/` permanece somente para consulta. Nenhum arquivo dela foi alterado, movido, renomeado ou excluído.
 
+## Etapa 2A — Empresas contratadas
+
+O cadastro de empresas foi implementado no módulo, ainda sem commit e sem aplicar a migração:
+
+- listagem de empresas ativas e opção para mostrar inativas;
+- cadastro, visualização e edição;
+- inativação sem exclusão do registro;
+- reativação;
+- validação e normalização de CNPJ, CEP e UF;
+- consulta opcional de CNPJ e CEP, mantendo preenchimento manual em caso de falha;
+- acesso restrito a administradores;
+- serviço de empresas usando a função `conectar_banco` recebida do sistema principal;
+- migração idempotente mantida somente como arquivo para revisão.
+
+Foram executados 20 testes automatizados: 15 relacionados à Etapa 2A e 5 testes de regressão da Etapa 1. Resultado: **20 passaram e 0 falharam**. PostgreSQL foi bloqueado por mock e nenhum SQL real foi executado.
+
+A migração `001_criar_fc_empresas.sql` **não foi executada**. O Neon e qualquer outro banco de dados não foram acessados nesta etapa.
+
+O backup `stash@{0}`, identificado como `Backup parcial Etapa 2A antes da restauração`, continua preservado.
+
 ## Próxima etapa recomendada
 
-A próxima etapa recomendada é planejar e, somente após autorização expressa, iniciar a Etapa 2 com as estruturas principais de empresas e contratos. Antes de qualquer operação de banco, as migrações aditivas devem ser revisadas e limitadas à branch de desenvolvimento do Neon.
+Revisar o código e a migração da Etapa 2A. A aplicação da migração na branch de desenvolvimento do Neon exige nova autorização expressa. Contratos e as demais áreas do módulo não devem ser iniciados antes dessa revisão.
 
 ## Como continuar o trabalho
 
@@ -76,4 +96,4 @@ A próxima etapa recomendada é planejar e, somente após autorização expressa
 6. Solicitar autorização explícita antes de iniciar a Etapa 2.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
-As alterações da Etapa 1 permanecem sem commit, push, pull request ou merge.
+A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. As alterações da Etapa 2A permanecem sem commit, push, pull request ou merge.

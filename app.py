@@ -69,7 +69,7 @@ def conectar_banco():
         )
 
 app.register_blueprint(
-    criar_blueprint_fiscalizacao(),
+    criar_blueprint_fiscalizacao(conectar_banco),
     url_prefix="/fiscalizacao-contratos"
 )
 

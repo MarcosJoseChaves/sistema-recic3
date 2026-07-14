@@ -3,12 +3,15 @@
 from flask import render_template
 
 from ..permissions import admin_required
+from .empresas import registrar_rotas_empresas
 
 
-def registrar_rotas(blueprint):
-    """Registra somente a página provisória autorizada na Etapa 1."""
+def registrar_rotas(blueprint, conectar_banco):
+    """Registra a página do módulo e as rotas da etapa atual."""
 
     @blueprint.route("", methods=["GET"], strict_slashes=False)
     @admin_required
     def painel():
         return render_template("fiscalizacao_contratos/painel.html")
+
+    registrar_rotas_empresas(blueprint, conectar_banco)

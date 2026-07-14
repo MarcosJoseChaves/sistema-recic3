@@ -33,3 +33,51 @@ h1 {
 .card-body {
     padding: 1.25rem;
 }
+
+.card-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.unavailable-card {
+    opacity: 0.72;
+}
+
+.content-card {
+    border: 0;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+    overflow: hidden;
+}
+
+.content-card > .card-header {
+    border: 0;
+    font-weight: 700;
+    padding: 1rem 1.25rem;
+}
+
+.required-field::after {
+    color: #dc3545;
+    content: " *";
+}
+
+.detail-list dt,
+.detail-list dd {
+    border-bottom: 1px solid #eef0f2;
+    padding-bottom: 0.75rem;
+    padding-top: 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+    body {
+        font-size: 0.95rem;
+    }
+
+    .content-card .card-body {
+        padding: 1rem;
+    }
+
+    .detail-list dd {
+        padding-top: 0;
+    }
+}
