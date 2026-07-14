@@ -64,7 +64,7 @@ A pasta `_referencia_fiscaliza/` permanece somente para consulta. Nenhum arquivo
 
 ## Etapa 2A — Empresas contratadas
 
-O cadastro de empresas foi implementado no módulo e registrado no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`:
+A Etapa 2A foi concluída. O cadastro de empresas foi implementado no módulo e registrado no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`:
 
 - listagem de empresas ativas e opção para mostrar inativas;
 - cadastro, visualização e edição;
@@ -72,11 +72,24 @@ O cadastro de empresas foi implementado no módulo e registrado no commit `02231
 - reativação;
 - validação e normalização de CNPJ, CEP e UF;
 - consulta opcional de CNPJ e CEP, mantendo preenchimento manual em caso de falha;
+- consulta de CNPJ pela BrasilAPI, com OpenCNPJA como alternativa automática;
 - acesso restrito a administradores;
 - serviço de empresas usando a função `conectar_banco` recebida do sistema principal;
 - migração idempotente revisada e aplicada no ambiente Neon configurado no `.env`.
 
 Foram executados 20 testes automatizados: 15 relacionados à Etapa 2A e 5 testes de regressão da Etapa 1. Resultado: **20 passaram e 0 falharam**. PostgreSQL foi bloqueado por mock e nenhum SQL real foi executado.
+
+Após a correção da consulta externa, foram executados **29 testes automatizados**, incluindo os 20 testes anteriores e 9 testes específicos das APIs simuladas. Resultado: **29 passaram e 0 falharam**.
+
+Os testes manuais da Etapa 2A também foram concluídos com sucesso. Foram validados:
+
+- consulta de CNPJ e preenchimento automático;
+- cadastro e visualização dos detalhes da empresa;
+- edição;
+- inativação e exibição de empresas inativas;
+- reativação.
+
+A tabela `fc_empresas` está funcionando corretamente com o cadastro de empresas.
 
 A migração `001_criar_fc_empresas.sql` foi aplicada em **14/07/2026**, usando a conexão Neon atualmente configurada no `.env`, conforme autorização expressa. Nenhuma credencial, URL ou hostname foi registrado neste documento.
 
@@ -91,11 +104,11 @@ Verificações realizadas após a aplicação:
 - nenhum dado existente foi apagado ou alterado;
 - nenhuma outra migração foi executada.
 
-O backup `stash@{0}`, identificado como `Backup parcial Etapa 2A antes da restauração`, continua preservado.
+O backup temporário antigo da Etapa 2A foi revisado e confirmado como contendo somente arquivos parciais que já foram recuperados, concluídos e salvos nos commits atuais.
 
 ## Próxima etapa recomendada
 
-Validar o cadastro de empresas pela interface antes de iniciar qualquer nova parte do módulo. Contratos e as demais áreas não devem ser iniciados sem nova autorização expressa.
+A próxima etapa será o cadastro de contratos. Ela não deve ser iniciada sem nova autorização expressa.
 
 ## Como continuar o trabalho
 
@@ -104,7 +117,7 @@ Validar o cadastro de empresas pela interface antes de iniciar qualquer nova par
 3. Confirmar que a branch é `codex/modulo-fiscalizacao-contratos` e não `main`.
 4. Ler este arquivo e revisar o `git diff` pendente.
 5. Não modificar `_referencia_fiscaliza/`.
-6. Solicitar autorização explícita antes de iniciar a Etapa 2.
+6. Solicitar autorização explícita antes de iniciar o cadastro de contratos.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
-A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`. O registro da aplicação da migração permanece como alteração local, sem commit, push, pull request ou merge.
+A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
