@@ -4,6 +4,7 @@ from flask import render_template
 
 from ..permissions import admin_required
 from .empresas import registrar_rotas_empresas
+from .servidores import registrar_rotas_servidores
 
 
 def registrar_rotas(blueprint, conectar_banco):
@@ -15,3 +16,4 @@ def registrar_rotas(blueprint, conectar_banco):
         return render_template("fiscalizacao_contratos/painel.html")
 
     registrar_rotas_empresas(blueprint, conectar_banco)
+    registrar_rotas_servidores(blueprint, conectar_banco)

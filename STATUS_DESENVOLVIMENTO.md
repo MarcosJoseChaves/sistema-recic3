@@ -106,9 +106,31 @@ Verificações realizadas após a aplicação:
 
 O backup temporário antigo da Etapa 2A foi revisado e confirmado como contendo somente arquivos parciais que já foram recuperados, concluídos e salvos nos commits atuais.
 
+## Etapa 2B — Servidores e responsáveis
+
+O cadastro próprio de servidores e responsáveis foi implementado dentro do módulo, ainda sem commit e sem executar a migração:
+
+- listagem de servidores;
+- cadastro, visualização e edição;
+- pesquisa por nome, matrícula ou cargo;
+- opção para mostrar ou ocultar servidores inativos;
+- inativação sem exclusão física;
+- reativação;
+- validação de nome, matrícula e e-mail;
+- matrícula única;
+- acesso restrito a administradores;
+- cartão funcional no painel do módulo;
+- serviço próprio usando a função `conectar_banco` recebida do sistema principal.
+
+Os servidores ficam separados da tabela `usuarios`. A tabela `usuarios` é referenciada somente para registrar quem criou ou atualizou cada cadastro.
+
+A migração idempotente e aditiva `002_criar_fc_servidores.sql` foi criada somente como arquivo para revisão. Ela **não foi executada**, o Neon não foi acessado e nenhuma tabela ou dado existente foi alterado.
+
+Foram executados **50 testes automatizados**: os 29 testes anteriores e 21 testes novos da Etapa 2B. Resultado: **50 passaram e 0 falharam**. Os testes usam objetos simulados e bloqueiam qualquer conexão PostgreSQL real.
+
 ## Próxima etapa recomendada
 
-A próxima etapa será o cadastro de contratos. Ela não deve ser iniciada sem nova autorização expressa.
+Revisar a migração `002_criar_fc_servidores.sql`. Sua aplicação no banco e os testes manuais da interface exigem nova autorização expressa. O cadastro de contratos continua sendo a etapa seguinte, mas ainda não foi iniciado.
 
 ## Como continuar o trabalho
 
@@ -117,7 +139,7 @@ A próxima etapa será o cadastro de contratos. Ela não deve ser iniciada sem n
 3. Confirmar que a branch é `codex/modulo-fiscalizacao-contratos` e não `main`.
 4. Ler este arquivo e revisar o `git diff` pendente.
 5. Não modificar `_referencia_fiscaliza/`.
-6. Solicitar autorização explícita antes de iniciar o cadastro de contratos.
+6. Solicitar autorização explícita antes de aplicar a migração de servidores.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
