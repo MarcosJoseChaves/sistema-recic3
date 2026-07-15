@@ -18,6 +18,27 @@
 </div>
 {% endif %}
 
+<div class="card content-card mb-4" id="planilhas-orcamentarias">
+    <div class="card-header bg-dark text-white d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+        <span><i class="fas fa-table-list me-2"></i>Planilhas orçamentárias</span>
+        <a href="{{ url_for('fiscalizacao_contratos.planilhas_nova', contrato_id=contrato.id) }}" class="btn btn-sm btn-light"><i class="fas fa-plus me-1"></i>Nova planilha</a>
+    </div>
+    <div class="card-body">
+        {% if resumo_planilhas and resumo_planilhas.planilhas %}
+        <div class="row g-3 mb-4">
+            <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><div class="small text-muted">Versões</div><strong>{{ resumo_planilhas.planilhas|length }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><div class="small text-muted">Planilha vigente</div><strong>{{ resumo_planilhas.vigente.nome if resumo_planilhas.vigente else 'Não definida' }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><div class="small text-muted">Total vigente</div><strong>{{ resumo_planilhas.total_vigente|fc_moeda if resumo_planilhas.total_vigente is not none else '-' }}</strong></div></div>
+            <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><div class="small text-muted">Diferença para o contrato atualizado</div><strong>{{ resumo_planilhas.diferenca_atualizado_vigente|fc_moeda if resumo_planilhas.diferenca_atualizado_vigente is not none else '-' }}</strong></div></div>
+        </div>
+        {% if resumo_planilhas.original and resumo_planilhas.vigente %}
+        <div class="alert alert-light border"><strong>Original x vigente:</strong> diferença de {{ resumo_planilhas.diferenca_original_vigente|fc_moeda }} ({{ resumo_planilhas.percentual_original_vigente|fc_percentual_diferenca }}). <span class="text-muted">Diferença entre valor original do contrato e planilha original: {{ resumo_planilhas.diferenca_contrato_original|fc_moeda }}.</span></div>
+        {% endif %}
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Versão</th><th>Nome</th><th>Tipo</th><th>Estado</th><th>Total</th><th class="text-end">Ação</th></tr></thead><tbody>{% for p in resumo_planilhas.planilhas %}<tr><td>{{ p.versao }}</td><td>{{ p.nome }}{% if p.vigente %} <span class="badge text-bg-primary">Vigente</span>{% endif %}</td><td>{{ p.tipo_planilha }}</td><td>{{ p.status }}</td><td>{{ p.total_geral|fc_moeda }}</td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('fiscalizacao_contratos.planilhas_detalhe', planilha_id=p.id) }}"><i class="fas fa-eye"></i></a></td></tr>{% endfor %}</tbody></table></div>
+        {% else %}<p class="text-muted mb-0">Nenhuma planilha orçamentária cadastrada para este contrato.</p>{% endif %}
+    </div>
+</div>
+
 <div class="card content-card mb-4">
     <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
         <span><i class="fas fa-file-signature me-2"></i>Dados do contrato</span>

@@ -14,6 +14,10 @@ from .validacoes_aditivos import (
 )
 from .validacoes import formatar_cep, formatar_cnpj
 from .validacoes_documentos import formatar_tamanho_bytes
+from .validacoes_planilhas import (
+    formatar_decimal_brasileiro,
+    formatar_percentual_diferenca,
+)
 
 
 def criar_blueprint_fiscalizacao(conectar_banco):
@@ -37,5 +41,7 @@ def criar_blueprint_fiscalizacao(conectar_banco):
     blueprint.add_app_template_filter(formatar_percentual_brasileiro, "fc_percentual")
     blueprint.add_app_template_filter(formatar_percentual_campo, "fc_percentual_campo")
     blueprint.add_app_template_filter(formatar_tamanho_bytes, "fc_tamanho")
+    blueprint.add_app_template_filter(formatar_decimal_brasileiro, "fc_decimal")
+    blueprint.add_app_template_filter(formatar_percentual_diferenca, "fc_percentual_diferenca")
     registrar_rotas(blueprint, conectar_banco)
     return blueprint

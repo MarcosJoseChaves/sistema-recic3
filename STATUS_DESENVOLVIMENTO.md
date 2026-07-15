@@ -336,10 +336,44 @@ O Cloudinary está configurado e o cadastro de documentos de contratos e
 aditivos está funcionando. Nenhuma credencial, assinatura, chave interna
 completa ou endereço temporário foi registrada neste documento.
 
+## Etapa 2F — Planilha Orçamentária e Composição de Custos
+
+A implementação da Etapa 2F foi concluída em **15/07/2026** e permanece sem
+commit para revisão. Foram adicionadas planilhas orçamentárias versionadas por
+contrato, com itens de custo, subtotais por grupo e total geral calculado com
+`Decimal`, sem uso de `float` e sem armazenar totais duplicados no banco.
+
+Principais recursos preparados:
+
+- planilha Original e novas versões Aditivada, Reajustada, Repactuada, Revisada
+  ou Outra;
+- estados Em elaboração e Consolidada;
+- bloqueio permanente de edição da versão consolidada;
+- itens com quantidade, valor unitário e fator multiplicador;
+- inativação e reativação sem exclusão física;
+- cópia transacional somente dos itens ativos para uma nova versão;
+- escolha transacional de uma única planilha vigente por contrato;
+- comparação entre planilha original, vigente, valor original do contrato e
+  valor atualizado pelos aditivos;
+- pesquisa e filtros, cartão no painel e histórico no detalhe do contrato.
+
+A migração idempotente e aditiva
+`006_criar_fc_planilhas_orcamentarias.sql` foi criada para as tabelas
+`fc_planilhas_orcamentarias` e `fc_planilha_itens`. **A migração 006 não foi
+executada** e nenhuma execução automática foi adicionada.
+
+Foram executados **158 testes automatizados**: os 125 testes anteriores, 32
+testes funcionais da Etapa 2F e um teste global de proteção contra serviços
+reais. Resultado final: **158 passaram e 0 falharam**. PostgreSQL e Cloudinary
+são bloqueados globalmente por mocks que falham imediatamente se houver uma
+tentativa de acesso, mesmo quando o computador possui um `.env` válido. A
+verificação de sintaxe e o `git diff --check` também passaram.
+
 ## Próxima etapa recomendada
 
-A próxima etapa deve ser definida antes de qualquer nova implementação. Nenhuma
-etapa posterior deve ser iniciada sem nova autorização expressa.
+A próxima ação recomendada é revisar a Etapa 2F e, somente depois de nova
+autorização expressa, salvar o código ou aplicar a migração 006 no ambiente
+autorizado.
 
 ## Como continuar o trabalho
 

@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 from datetime import datetime
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import psycopg2
@@ -384,18 +385,20 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
     def test_documentos_aparecem_nos_detalhes(self):
         self.cadastrar_documento(aditivo_id="1")
         self.autenticar_como(1)
-        contrato = {"id": 1, "numero_contrato": "CT-001/2026", "ativo": True, "situacao": "Vigente", "vence_em_60_dias": False}
+        contrato = {"id": 1, "numero_contrato": "CT-001/2026", "valor_original": Decimal("100000.00"), "ativo": True, "situacao": "Vigente", "vence_em_60_dias": False}
         aditivo = self.servico.documentos[1]
         aditivo.update({"numero_termo": "TA-001", "tipo_aditivo": "Aditivo", "data_assinatura": None})
         with (
             patch("modulos.fiscalizacao_contratos.routes.contratos.ContratoService") as contrato_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.AditivoService") as aditivo_resumo_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService", return_value=self.servico),
+            patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService") as planilha_cls,
             patch("modulos.fiscalizacao_contratos.routes.aditivos.AditivoService") as aditivo_cls,
             patch("modulos.fiscalizacao_contratos.routes.aditivos.DocumentoService", return_value=self.servico),
         ):
             contrato_cls.return_value.obter.return_value = (contrato, [])
             aditivo_resumo_cls.return_value.resumo_contrato.return_value = (None, [])
+            planilha_cls.return_value.comparar_contrato.return_value = {"planilhas": []}
             aditivo_cls.return_value.obter.return_value = aditivo
             detalhe_contrato = self.client.get("/fiscalizacao-contratos/contratos/1")
             detalhe_aditivo = self.client.get("/fiscalizacao-contratos/aditivos/1")

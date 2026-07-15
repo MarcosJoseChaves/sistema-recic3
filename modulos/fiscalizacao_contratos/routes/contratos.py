@@ -6,6 +6,7 @@ from flask_login import current_user
 from ..permissions import admin_required
 from ..services.aditivos_service import AditivoService, AditivoServiceError
 from ..services.documentos_service import DocumentoService, DocumentoServiceError
+from ..services.planilhas_service import PlanilhaService, PlanilhaServiceError
 from ..services.contratos_service import (
     ContratoDuplicadoError,
     ContratoNaoEncontradoError,
@@ -156,6 +157,16 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             flash("Não foi possível carregar os documentos do contrato.", "danger")
             documentos = []
 
+        try:
+            valor_atualizado = resumo_aditivos["valor_atualizado"] if resumo_aditivos else contrato["valor_original"]
+            resumo_planilhas = PlanilhaService(conectar_banco).comparar_contrato(
+                contrato_id, valor_atualizado
+            )
+        except PlanilhaServiceError:
+            current_app.logger.exception("Falha ao carregar planilhas do contrato")
+            flash("Não foi possível carregar as planilhas do contrato.", "danger")
+            resumo_planilhas = None
+
         responsaveis_ativos = [item for item in responsaveis if item["ativo"]]
         historico_responsaveis = [item for item in responsaveis if not item["ativo"]]
         return render_template(
@@ -166,6 +177,7 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             resumo_aditivos=resumo_aditivos,
             aditivos=aditivos,
             documentos=documentos,
+            resumo_planilhas=resumo_planilhas,
         )
 
     @blueprint.route("/contratos/<int:contrato_id>/editar", methods=["GET", "POST"])

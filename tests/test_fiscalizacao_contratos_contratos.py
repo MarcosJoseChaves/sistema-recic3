@@ -303,8 +303,20 @@ class TestFiscalizacaoContratosContratos(unittest.TestCase):
             "modulos.fiscalizacao_contratos.routes.contratos.DocumentoService"
         )
         self.patcher_documentos.start().return_value.listar_do_contrato.return_value = []
+        self.patcher_planilhas = patch(
+            "modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService"
+        )
+        self.patcher_planilhas.start().return_value.comparar_contrato.return_value = {
+            "planilhas": [], "original": None, "vigente": None,
+            "total_original": None, "total_vigente": None,
+            "diferenca_original_vigente": None,
+            "percentual_original_vigente": None,
+            "diferenca_contrato_original": None,
+            "diferenca_atualizado_vigente": None,
+        }
 
     def tearDown(self):
+        self.patcher_planilhas.stop()
         self.patcher_documentos.stop()
         self.patcher_aditivos.stop()
         self.patcher_servico.stop()
