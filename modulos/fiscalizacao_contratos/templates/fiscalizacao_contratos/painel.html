@@ -5,7 +5,7 @@
 {% block content %}
 <div class="alert alert-warning border-0 shadow-sm" role="alert">
     <i class="fas fa-person-digging me-2"></i>
-    <strong>Módulo em construção.</strong> Empresas, servidores, contratos e aditivos já estão disponíveis; as demais áreas continuam bloqueadas.
+    <strong>Módulo em construção.</strong> Empresas, servidores, contratos, aditivos e documentos já estão disponíveis; as demais áreas continuam bloqueadas.
 </div>
 
 <section class="row g-4 mt-1" aria-label="Funcionalidades do módulo">
@@ -59,6 +59,20 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-2">Registre alterações de prazo e valor preservando o histórico.</p>
+                    <span class="text-primary fw-semibold">Acessar <i class="fas fa-arrow-right ms-1"></i></span>
+                </div>
+            </article>
+        </a>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+        <a class="card-link" href="{{ url_for('fiscalizacao_contratos.documentos_lista') }}">
+            <article class="card dashboard-card h-100">
+                <div class="card-header card-header-custom bg-secondary text-white">
+                    <i class="fas fa-paperclip me-2"></i>Documentos
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Anexe e consulte documentos de contratos e aditivos.</p>
                     <span class="text-primary fw-semibold">Acessar <i class="fas fa-arrow-right ms-1"></i></span>
                 </div>
             </article>

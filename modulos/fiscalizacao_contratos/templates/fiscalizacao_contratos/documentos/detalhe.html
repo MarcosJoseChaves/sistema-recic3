@@ -1,0 +1,26 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% block title %}Detalhes do Documento{% endblock %}
+{% block page_title %}{{ documento.titulo }}{% endblock %}
+
+{% block header_actions %}<a href="{{ url_for('fiscalizacao_contratos.documentos_lista', status_ativo='todos' if not documento.ativo else 'ativos') }}" class="btn btn-outline-secondary"><i class="fas fa-list me-2"></i>Lista de documentos</a>{% endblock %}
+
+{% block content %}
+<div class="card content-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center"><span><i class="fas fa-paperclip me-2"></i>Dados do documento</span><span class="badge {{ 'text-bg-success' if documento.ativo else 'text-bg-secondary' }}">{{ 'Ativo' if documento.ativo else 'Inativo' }}</span></div>
+    <div class="card-body"><dl class="row detail-list mb-0">
+        <dt class="col-sm-4 col-lg-3">Contrato</dt><dd class="col-sm-8 col-lg-9"><a href="{{ url_for('fiscalizacao_contratos.contratos_detalhe', contrato_id=documento.contrato_id) }}">{{ documento.numero_contrato }}</a> — {{ documento.empresa_nome }}</dd>
+        <dt class="col-sm-4 col-lg-3">Aditivo</dt><dd class="col-sm-8 col-lg-9">{% if documento.aditivo_id %}<a href="{{ url_for('fiscalizacao_contratos.aditivos_detalhe', aditivo_id=documento.aditivo_id) }}">{{ documento.aditivo_numero }}</a>{% else %}-{% endif %}</dd>
+        <dt class="col-sm-4 col-lg-3">Categoria</dt><dd class="col-sm-8 col-lg-9">{{ documento.categoria }}</dd>
+        <dt class="col-sm-4 col-lg-3">Arquivo</dt><dd class="col-sm-8 col-lg-9 text-break">{{ documento.nome_original }}</dd>
+        <dt class="col-sm-4 col-lg-3">Tipo e tamanho</dt><dd class="col-sm-8 col-lg-9">{{ documento.extensao|upper }} · {{ documento.tamanho_bytes|fc_tamanho }}</dd>
+        <dt class="col-sm-4 col-lg-3">Descrição</dt><dd class="col-sm-8 col-lg-9 text-break" style="white-space: pre-wrap;">{{ documento.descricao or '-' }}</dd>
+        <dt class="col-sm-4 col-lg-3">Enviado em</dt><dd class="col-sm-8 col-lg-9">{{ documento.criado_em.strftime('%d/%m/%Y %H:%M') if documento.criado_em else '-' }}</dd>
+    </dl></div>
+</div>
+<div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
+    <a href="{{ url_for('fiscalizacao_contratos.documentos_arquivo', documento_id=documento.id) }}" class="btn btn-outline-primary"><i class="fas fa-arrow-up-right-from-square me-2"></i>Abrir</a>
+    <a href="{{ url_for('fiscalizacao_contratos.documentos_arquivo', documento_id=documento.id, download=1) }}" class="btn btn-primary"><i class="fas fa-download me-2"></i>Baixar</a>
+    {% if documento.ativo %}<form method="POST" action="{{ url_for('fiscalizacao_contratos.documentos_inativar', documento_id=documento.id) }}" onsubmit="return confirm('Inativar este documento? O arquivo será preservado.');"><button class="btn btn-outline-danger w-100" type="submit"><i class="fas fa-ban me-2"></i>Inativar</button></form>{% else %}<form method="POST" action="{{ url_for('fiscalizacao_contratos.documentos_reativar', documento_id=documento.id) }}"><button class="btn btn-success w-100" type="submit"><i class="fas fa-rotate-left me-2"></i>Reativar</button></form>{% endif %}
+</div>
+{% endblock %}

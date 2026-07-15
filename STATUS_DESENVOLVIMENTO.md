@@ -255,10 +255,54 @@ validados:
 A tabela `fc_aditivos` está funcionando corretamente. Os cálculos de valor e
 vigência foram validados pelos testes automatizados e manuais.
 
+## Etapa 2E — Documentos e anexos
+
+A implementação inicial da Etapa 2E foi preparada e permanece sem commit para
+revisão:
+
+- armazenamento persistente no Cloudinary usando arquivos `raw` e
+  `authenticated`;
+- chaves internas com UUID, sem sobrescrita por nomes repetidos;
+- URLs privadas temporárias, geradas somente após autorização administrativa;
+- documentos vinculados a contratos e, opcionalmente, aos seus aditivos;
+- listagem geral, pesquisa, filtros, detalhes, abertura e download protegido;
+- documentos exibidos nos detalhes do contrato e do aditivo;
+- inativação e reativação sem excluir o arquivo ou o histórico;
+- validação de tamanho, extensão e conteúdo, com limite padrão de 20 MB;
+- nome original sanitizado e SHA-256 calculado;
+- compensação que tenta remover do Cloudinary um arquivo cujo registro falhou
+  no banco;
+- cartão de Documentos habilitado no painel do módulo.
+
+As variáveis `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` e
+`CLOUDINARY_API_SECRET` foram confirmadas no ambiente local, sem registrar seus
+valores. A dependência oficial `cloudinary` foi adicionada ao
+`requirements.txt`.
+
+O arquivo `.env` permanece fisicamente no computador, mas foi removido do
+rastreamento do Git. O `.gitignore` continua ignorando esse arquivo e o
+`.env.example` documenta somente nomes de variáveis e exemplos não sensíveis.
+
+A revisão técnica final confirmou que o conteúdo é inspecionado por assinatura
+binária ou estrutura interna, conforme o formato. O ponteiro do arquivo retorna
+ao início após a leitura. Se o banco falhar depois do upload, ocorre rollback e
+o serviço tenta remover o mesmo `public_id` privado do Cloudinary; eventual
+falha nessa limpeza gera somente um aviso técnico seguro e não substitui o erro
+principal do cadastro.
+
+A migração idempotente e aditiva `005_criar_fc_documentos.sql` foi criada
+somente como arquivo. **Ela não foi executada e o banco real não foi acessado
+nesta etapa.** Nenhum documento foi enviado ao Cloudinary real.
+
+Foram executados **125 testes automatizados**: os 100 testes anteriores e 25
+testes novos da Etapa 2E. Resultado: **125 passaram e 0 falharam**. Banco e
+Cloudinary foram substituídos por objetos simulados.
+
 ## Próxima etapa recomendada
 
-A próxima etapa recomendada é o cadastro de documentos e anexos. Ela não deve
-ser iniciada sem nova autorização expressa.
+O próximo passo recomendado é revisar tecnicamente a Etapa 2E e a migração
+`005_criar_fc_documentos.sql`. A migração não deve ser aplicada sem nova
+autorização expressa.
 
 ## Como continuar o trabalho
 
@@ -267,7 +311,7 @@ ser iniciada sem nova autorização expressa.
 3. Confirmar que a branch é `codex/modulo-fiscalizacao-contratos` e não `main`.
 4. Ler este arquivo e revisar o `git diff` pendente.
 5. Não modificar `_referencia_fiscaliza/`.
-6. Solicitar autorização explícita antes de iniciar documentos e anexos.
+6. Solicitar autorização explícita antes de aplicar a migração de documentos.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.

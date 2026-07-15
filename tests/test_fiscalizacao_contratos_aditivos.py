@@ -223,8 +223,13 @@ class TestFiscalizacaoContratosAditivos(unittest.TestCase):
             return_value=self.servico,
         )
         self.patcher.start()
+        self.patcher_documentos = patch(
+            "modulos.fiscalizacao_contratos.routes.aditivos.DocumentoService"
+        )
+        self.patcher_documentos.start().return_value.listar_do_aditivo.return_value = []
 
     def tearDown(self):
+        self.patcher_documentos.stop()
         self.patcher.stop()
 
     @staticmethod

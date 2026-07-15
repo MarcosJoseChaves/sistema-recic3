@@ -299,8 +299,13 @@ class TestFiscalizacaoContratosContratos(unittest.TestCase):
             },
             [],
         )
+        self.patcher_documentos = patch(
+            "modulos.fiscalizacao_contratos.routes.contratos.DocumentoService"
+        )
+        self.patcher_documentos.start().return_value.listar_do_contrato.return_value = []
 
     def tearDown(self):
+        self.patcher_documentos.stop()
         self.patcher_aditivos.stop()
         self.patcher_servico.stop()
 

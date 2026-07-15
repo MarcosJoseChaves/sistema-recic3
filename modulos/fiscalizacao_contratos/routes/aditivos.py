@@ -11,6 +11,7 @@ from ..services.aditivos_service import (
     AditivoServiceError,
     ContratoAditivoInvalidoError,
 )
+from ..services.documentos_service import DocumentoService, DocumentoServiceError
 from ..validacoes_aditivos import TIPOS_ADITIVO, normalizar_e_validar_aditivo
 
 
@@ -108,8 +109,16 @@ def registrar_rotas_aditivos(blueprint, conectar_banco):
             current_app.logger.exception("Falha ao carregar aditivo")
             flash("Não foi possível carregar o aditivo.", "danger")
             return redirect(url_for("fiscalizacao_contratos.aditivos_lista"))
+        try:
+            documentos = DocumentoService(conectar_banco).listar_do_aditivo(aditivo_id)
+        except DocumentoServiceError:
+            current_app.logger.exception("Falha ao carregar documentos do aditivo")
+            flash("Não foi possível carregar os documentos do aditivo.", "danger")
+            documentos = []
         return render_template(
-            "fiscalizacao_contratos/aditivos/detalhe.html", aditivo=aditivo
+            "fiscalizacao_contratos/aditivos/detalhe.html",
+            aditivo=aditivo,
+            documentos=documentos,
         )
 
     @blueprint.route("/aditivos/<int:aditivo_id>/editar", methods=["GET", "POST"])
