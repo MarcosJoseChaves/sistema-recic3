@@ -257,8 +257,8 @@ vigência foram validados pelos testes automatizados e manuais.
 
 ## Etapa 2E — Documentos e anexos
 
-A implementação inicial da Etapa 2E foi preparada e permanece sem commit para
-revisão:
+A Etapa 2E foi concluída. A implementação inicial foi registrada no commit
+`7b4cff6f523117b507cfef26b53006013b40f183`:
 
 - armazenamento persistente no Cloudinary usando arquivos `raw` e
   `authenticated`;
@@ -290,19 +290,56 @@ o serviço tenta remover o mesmo `public_id` privado do Cloudinary; eventual
 falha nessa limpeza gera somente um aviso técnico seguro e não substitui o erro
 principal do cadastro.
 
-A migração idempotente e aditiva `005_criar_fc_documentos.sql` foi criada
-somente como arquivo. **Ela não foi executada e o banco real não foi acessado
-nesta etapa.** Nenhum documento foi enviado ao Cloudinary real.
+A migração idempotente e aditiva `005_criar_fc_documentos.sql` foi aplicada em
+**15/07/2026**, usando a conexão atualmente configurada no `.env`, conforme
+autorização expressa. Nenhuma credencial, URL ou hostname foi registrado neste
+documento. Nenhum arquivo foi enviado ao Cloudinary durante a aplicação da
+migração.
+
+Verificações realizadas após a aplicação:
+
+- a tabela `fc_documentos` existe e possui as 19 colunas esperadas;
+- chave primária, chaves estrangeiras de contrato e autoria, e vínculo composto
+  entre aditivo e contrato foram conferidos;
+- `aditivo_id` continua opcional para documentos ligados diretamente ao
+  contrato;
+- categorias, extensões, SHA-256 em formato hexadecimal minúsculo, tamanho não
+  negativo e armazenamento Cloudinary foram conferidos;
+- a chave de armazenamento é única;
+- os índices de contrato, aditivo, categoria e título existem;
+- o índice composto `uq_fc_aditivos_id_contrato_id` foi criado após a
+  verificação de ausência de duplicidades;
+- a tabela foi criada vazia, com **0 registros**;
+- tabelas, colunas, restrições e quantidades de registros anteriores
+  permaneceram iguais;
+- o único índice acrescentado a uma tabela anterior foi o índice composto
+  expressamente autorizado;
+- nenhum dado anterior foi apagado ou alterado e nenhuma outra migração foi
+  executada.
 
 Foram executados **125 testes automatizados**: os 100 testes anteriores e 25
 testes novos da Etapa 2E. Resultado: **125 passaram e 0 falharam**. Banco e
 Cloudinary foram substituídos por objetos simulados.
 
+Os testes manuais da Etapa 2E também foram concluídos com sucesso. Foram
+validados:
+
+- funcionamento da tabela `fc_documentos` após a migração 005;
+- documentos vinculados a contratos e aditivos;
+- envio real para o Cloudinary;
+- armazenamento privado nos modos `raw` e `authenticated`;
+- organização dos documentos por contrato e aditivo;
+- registro e exibição do documento no sistema;
+- abertura por endereço privado temporário com validade de cinco minutos.
+
+O Cloudinary está configurado e o cadastro de documentos de contratos e
+aditivos está funcionando. Nenhuma credencial, assinatura, chave interna
+completa ou endereço temporário foi registrada neste documento.
+
 ## Próxima etapa recomendada
 
-O próximo passo recomendado é revisar tecnicamente a Etapa 2E e a migração
-`005_criar_fc_documentos.sql`. A migração não deve ser aplicada sem nova
-autorização expressa.
+A próxima etapa deve ser definida antes de qualquer nova implementação. Nenhuma
+etapa posterior deve ser iniciada sem nova autorização expressa.
 
 ## Como continuar o trabalho
 
@@ -311,7 +348,7 @@ autorização expressa.
 3. Confirmar que a branch é `codex/modulo-fiscalizacao-contratos` e não `main`.
 4. Ler este arquivo e revisar o `git diff` pendente.
 5. Não modificar `_referencia_fiscaliza/`.
-6. Solicitar autorização explícita antes de aplicar a migração de documentos.
+6. Solicitar autorização explícita antes de iniciar uma etapa posterior.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
