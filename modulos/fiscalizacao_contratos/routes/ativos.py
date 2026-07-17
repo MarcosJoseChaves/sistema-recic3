@@ -9,6 +9,7 @@ from ..services.ativos_service import (
     AtivoService, AtivoServiceError, ReferenciaAtivoInvalidaError,
     VinculoDuplicadoError, VinculoNaoEncontradoError,
 )
+from ..services.ocorrencias_service import OcorrenciaService, OcorrenciaServiceError
 from ..validacoes_ativos import (
     NATUREZAS_VINCULO, ORIGENS_ATIVO, SITUACOES_ATIVO, TIPOS_ATIVO,
     normalizar_data_encerramento, normalizar_e_validar_ativo,
@@ -107,7 +108,13 @@ def registrar_rotas_ativos(blueprint, conectar_banco):
             current_app.logger.exception("Falha ao carregar ativo")
             flash("Não foi possível carregar o ativo.", "danger")
             return redirect(url_for("fiscalizacao_contratos.ativos_lista"))
-        return render_template("fiscalizacao_contratos/ativos/detalhe.html", ativo=ativo, vinculos=vinculos)
+        try:
+            ocorrencias = OcorrenciaService(conectar_banco).listar_do_ativo(ativo_id)
+        except OcorrenciaServiceError:
+            current_app.logger.exception("Falha ao carregar ocorrências do ativo")
+            flash("Não foi possível carregar as ocorrências do ativo.", "danger")
+            ocorrencias = []
+        return render_template("fiscalizacao_contratos/ativos/detalhe.html", ativo=ativo, vinculos=vinculos, ocorrencias=ocorrencias)
 
     @blueprint.route("/ativos/<int:ativo_id>/editar", methods=["GET", "POST"])
     @admin_required

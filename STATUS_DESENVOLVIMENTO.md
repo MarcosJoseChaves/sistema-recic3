@@ -476,3 +476,29 @@ expressa, é implementar fiscalizações e ocorrências contratuais.
 7. Continuar usando o login, os usuários, os papéis e a conexão PostgreSQL existentes no sistema principal.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
+
+## Etapa 2H — Fiscalizações e ocorrências contratuais (pausada)
+
+A Etapa 2H foi iniciada em **17/07/2026** e pausada em um ponto seguro para
+continuação em outro computador. Foram criados parcialmente a migração 008,
+as validações, os serviços, as rotas e os templates básicos de fiscalizações,
+ocorrências e acompanhamentos. Também foi iniciada a integração das consultas
+com o painel, os contratos e os ativos contratuais.
+
+A migração `008_criar_fc_fiscalizacoes_ocorrencias.sql` **não foi executada** e
+nenhum banco real foi acessado durante este trabalho parcial. A sintaxe dos
+arquivos Python já criados e o `git diff --check` passaram antes da pausa.
+
+Ainda precisam ser concluídos e revisados:
+
+- os cartões e indicadores do painel;
+- as seções de fiscalizações e ocorrências nas telas de contrato e ativo;
+- a revisão das consultas, transações, filtros e regras de status;
+- todos os testes automatizados específicos da Etapa 2H;
+- a execução da suíte completa, preservando os 187 testes anteriores;
+- a atualização final deste registro após a validação técnica.
+
+Para continuar, usar a branch `codex/modulo-fiscalizacao-contratos`, revisar o
+commit temporário da Etapa 2H e retomar pela integração dos templates com o
+painel, o contrato e o ativo. Depois, criar os testes simulados antes de fazer
+qualquer revisão final. Não executar a migração 008 sem nova autorização.

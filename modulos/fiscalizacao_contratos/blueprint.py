@@ -19,6 +19,7 @@ from .validacoes_planilhas import (
     formatar_percentual_diferenca,
 )
 from .validacoes_ativos import formatar_capacidade
+from .validacoes_fiscalizacoes import formatar_hora
 
 
 def criar_blueprint_fiscalizacao(conectar_banco):
@@ -45,5 +46,6 @@ def criar_blueprint_fiscalizacao(conectar_banco):
     blueprint.add_app_template_filter(formatar_decimal_brasileiro, "fc_decimal")
     blueprint.add_app_template_filter(formatar_percentual_diferenca, "fc_percentual_diferenca")
     blueprint.add_app_template_filter(formatar_capacidade, "fc_capacidade")
+    blueprint.add_app_template_filter(formatar_hora, "fc_hora")
     registrar_rotas(blueprint, conectar_banco)
     return blueprint

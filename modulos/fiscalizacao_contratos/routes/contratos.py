@@ -8,6 +8,8 @@ from ..services.aditivos_service import AditivoService, AditivoServiceError
 from ..services.documentos_service import DocumentoService, DocumentoServiceError
 from ..services.planilhas_service import PlanilhaService, PlanilhaServiceError
 from ..services.ativos_service import AtivoService, AtivoServiceError
+from ..services.fiscalizacoes_service import FiscalizacaoService, FiscalizacaoServiceError
+from ..services.ocorrencias_service import OcorrenciaService, OcorrenciaServiceError
 from ..services.contratos_service import (
     ContratoDuplicadoError,
     ContratoNaoEncontradoError,
@@ -175,6 +177,14 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             flash("Não foi possível carregar os ativos do contrato.", "danger")
             ativos_contrato = []
 
+        try:
+            fiscalizacoes_contrato = FiscalizacaoService(conectar_banco).listar_do_contrato(contrato_id)
+            ocorrencias_contrato = OcorrenciaService(conectar_banco).listar_do_contrato(contrato_id)
+        except (FiscalizacaoServiceError, OcorrenciaServiceError):
+            current_app.logger.exception("Falha ao carregar fiscalizações e ocorrências do contrato")
+            flash("Não foi possível carregar fiscalizações e ocorrências do contrato.", "danger")
+            fiscalizacoes_contrato, ocorrencias_contrato = [], []
+
         responsaveis_ativos = [item for item in responsaveis if item["ativo"]]
         historico_responsaveis = [item for item in responsaveis if not item["ativo"]]
         return render_template(
@@ -187,6 +197,8 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             documentos=documentos,
             resumo_planilhas=resumo_planilhas,
             ativos_contrato=ativos_contrato,
+            fiscalizacoes_contrato=fiscalizacoes_contrato,
+            ocorrencias_contrato=ocorrencias_contrato,
         )
 
     @blueprint.route("/contratos/<int:contrato_id>/editar", methods=["GET", "POST"])
