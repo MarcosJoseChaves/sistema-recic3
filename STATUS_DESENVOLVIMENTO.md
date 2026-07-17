@@ -409,8 +409,8 @@ migração 006.
 
 ## Etapa 2G — Ativos vinculados aos contratos
 
-A implementação inicial da Etapa 2G foi concluída em **17/07/2026** e
-permanece sem commit para revisão. O novo cadastro usa exclusivamente os nomes
+A implementação da Etapa 2G foi concluída em **17/07/2026** e registrada no
+Git. O novo cadastro usa exclusivamente os nomes
 `fc_ativos_contratuais` e `fc_ativo_vinculos`, sem modificar o cadastro
 `patrimonio`, suas tabelas, rotas ou funções existentes no sistema principal.
 
@@ -429,9 +429,16 @@ Foram preparados:
 - cartão no painel e exibição de ativos atuais e anteriores no contrato.
 
 A migração idempotente e aditiva `007_criar_fc_ativos_contratuais.sql` foi
-criada para `fc_ativos_contratuais` e `fc_ativo_vinculos`. **A migração 007
-não foi executada**, nenhuma execução automática foi adicionada e nenhum banco
-real foi acessado nesta implementação.
+aplicada em **17/07/2026** usando o ambiente configurado localmente. Foram
+criadas e verificadas as tabelas `fc_ativos_contratuais` e
+`fc_ativo_vinculos`, ambas inicialmente com zero registros. Colunas, tipos,
+valores padrão, chaves estrangeiras, restrições e índices foram conferidos.
+Nenhuma execução automática foi adicionada e nenhuma credencial foi registrada.
+
+Antes e depois da aplicação, foram comparadas as estruturas e as quantidades
+de registros de todas as tabelas anteriores. Nenhuma estrutura ou quantidade
+anterior mudou, nenhum dado foi apagado ou atualizado e a tabela `patrimonio`
+permaneceu inalterada.
 
 Após a revisão técnica final, foram executados **187 testes automatizados**:
 os 161 anteriores e 26 testes da Etapa 2G. Resultado: **187 passaram e 0
@@ -442,13 +449,21 @@ e o `git diff --check` também passaram.
 A revisão final reforçou a validação direta no serviço, ampliou a cobertura de
 normalização e permissões e acrescentou à migração uma restrição de coerência:
 vínculo ativo permanece sem data final; vínculo encerrado permanece inativo e
-com data final. A migração continuou apenas como arquivo e não foi executada.
+com data final. Essas regras também foram confirmadas na estrutura criada.
+
+Os testes manuais da Etapa 2G foram concluídos e aprovados em **17/07/2026**.
+Foram validados o cadastro e a edição do ativo, a normalização e as
+duplicidades, os vínculos com contratos, os bloqueios de segurança, o
+encerramento e a preservação do histórico, além da criação de vínculo
+posterior. As tabelas `fc_ativos_contratuais` e `fc_ativo_vinculos` estão
+funcionando. O cadastro patrimonial antigo permaneceu preservado e funcionando
+normalmente. Nenhuma operação do novo cadastro utiliza `DELETE`.
 
 ## Próxima etapa recomendada
 
-A Etapa 2G foi revisada tecnicamente e está pronta para salvamento. A próxima
-ação recomendada, somente depois de nova autorização expressa, é aplicar a
-migração 007 no ambiente autorizado e realizar os testes manuais.
+A Etapa 2G está concluída, com migração, testes automatizados e testes manuais
+aprovados. A próxima etapa recomendada, somente depois de nova autorização
+expressa, é implementar fiscalizações e ocorrências contratuais.
 
 ## Como continuar o trabalho
 
