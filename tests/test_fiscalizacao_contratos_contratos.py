@@ -314,8 +314,13 @@ class TestFiscalizacaoContratosContratos(unittest.TestCase):
             "diferenca_contrato_original": None,
             "diferenca_atualizado_vigente": None,
         }
+        self.patcher_ativos = patch(
+            "modulos.fiscalizacao_contratos.routes.contratos.AtivoService"
+        )
+        self.patcher_ativos.start().return_value.listar_do_contrato.return_value = []
 
     def tearDown(self):
+        self.patcher_ativos.stop()
         self.patcher_planilhas.stop()
         self.patcher_documentos.stop()
         self.patcher_aditivos.stop()

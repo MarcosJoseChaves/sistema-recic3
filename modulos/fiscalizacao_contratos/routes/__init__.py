@@ -4,6 +4,7 @@ from flask import render_template
 
 from ..permissions import admin_required
 from .aditivos import registrar_rotas_aditivos
+from .ativos import registrar_rotas_ativos
 from .contratos import registrar_rotas_contratos
 from .documentos import registrar_rotas_documentos
 from .empresas import registrar_rotas_empresas
@@ -25,3 +26,4 @@ def registrar_rotas(blueprint, conectar_banco):
     registrar_rotas_aditivos(blueprint, conectar_banco)
     registrar_rotas_documentos(blueprint, conectar_banco)
     registrar_rotas_planilhas(blueprint, conectar_banco)
+    registrar_rotas_ativos(blueprint, conectar_banco)

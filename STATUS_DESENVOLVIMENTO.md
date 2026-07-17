@@ -407,10 +407,48 @@ valor original do contrato. As tabelas `fc_planilhas_orcamentarias` e
 `fc_planilha_itens` estão funcionando após a aplicação e verificação da
 migração 006.
 
+## Etapa 2G — Ativos vinculados aos contratos
+
+A implementação inicial da Etapa 2G foi concluída em **17/07/2026** e
+permanece sem commit para revisão. O novo cadastro usa exclusivamente os nomes
+`fc_ativos_contratuais` e `fc_ativo_vinculos`, sem modificar o cadastro
+`patrimonio`, suas tabelas, rotas ou funções existentes no sistema principal.
+
+Foram preparados:
+
+- cadastro, detalhes, edição, inativação e reativação de ativos contratuais;
+- normalização e validação de código, placa, chassi, patrimônio, ano e
+  capacidade com `Decimal`;
+- empresa proprietária opcional, validada como existente e ativa;
+- vínculos transacionais entre ativos e contratos;
+- encerramento sem exclusão, com data final e preservação do histórico;
+- bloqueio de novos vínculos para ativos inativos ou baixados e contratos
+  inativos;
+- bloqueio de inativação enquanto houver vínculo ativo;
+- pesquisa, filtros, contadores e listagem geral de vínculos;
+- cartão no painel e exibição de ativos atuais e anteriores no contrato.
+
+A migração idempotente e aditiva `007_criar_fc_ativos_contratuais.sql` foi
+criada para `fc_ativos_contratuais` e `fc_ativo_vinculos`. **A migração 007
+não foi executada**, nenhuma execução automática foi adicionada e nenhum banco
+real foi acessado nesta implementação.
+
+Após a revisão técnica final, foram executados **187 testes automatizados**:
+os 161 anteriores e 26 testes da Etapa 2G. Resultado: **187 passaram e 0
+falharam**. PostgreSQL e
+Cloudinary permaneceram bloqueados por mocks globais. A verificação de sintaxe
+e o `git diff --check` também passaram.
+
+A revisão final reforçou a validação direta no serviço, ampliou a cobertura de
+normalização e permissões e acrescentou à migração uma restrição de coerência:
+vínculo ativo permanece sem data final; vínculo encerrado permanece inativo e
+com data final. A migração continuou apenas como arquivo e não foi executada.
+
 ## Próxima etapa recomendada
 
-A próxima etapa recomendada é o cadastro de ativos vinculados aos contratos,
-que somente deve ser iniciado depois de nova autorização expressa.
+A Etapa 2G foi revisada tecnicamente e está pronta para salvamento. A próxima
+ação recomendada, somente depois de nova autorização expressa, é aplicar a
+migração 007 no ambiente autorizado e realizar os testes manuais.
 
 ## Como continuar o trabalho
 

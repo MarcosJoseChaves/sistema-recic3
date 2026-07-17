@@ -393,12 +393,14 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
             patch("modulos.fiscalizacao_contratos.routes.contratos.AditivoService") as aditivo_resumo_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService", return_value=self.servico),
             patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService") as planilha_cls,
+            patch("modulos.fiscalizacao_contratos.routes.contratos.AtivoService") as ativo_cls,
             patch("modulos.fiscalizacao_contratos.routes.aditivos.AditivoService") as aditivo_cls,
             patch("modulos.fiscalizacao_contratos.routes.aditivos.DocumentoService", return_value=self.servico),
         ):
             contrato_cls.return_value.obter.return_value = (contrato, [])
             aditivo_resumo_cls.return_value.resumo_contrato.return_value = (None, [])
             planilha_cls.return_value.comparar_contrato.return_value = {"planilhas": []}
+            ativo_cls.return_value.listar_do_contrato.return_value = []
             aditivo_cls.return_value.obter.return_value = aditivo
             detalhe_contrato = self.client.get("/fiscalizacao-contratos/contratos/1")
             detalhe_aditivo = self.client.get("/fiscalizacao-contratos/aditivos/1")

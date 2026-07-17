@@ -166,6 +166,18 @@
     </div>
 </div>
 
+<div class="card content-card mb-4" id="ativos-contratuais">
+    <div class="card-header bg-primary text-white d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+        <span><i class="fas fa-truck-ramp-box me-2"></i>Ativos contratuais</span>
+        <a href="{{ url_for('fiscalizacao_contratos.ativos_lista', contrato_id=contrato.id, status_ativo='todos') }}" class="btn btn-sm btn-light">Consultar ativos</a>
+    </div>
+    <div class="card-body">
+        {% set atuais = ativos_contrato|selectattr('ativo')|list %}
+        <p class="mb-3"><strong>{{ atuais|length }}</strong> ativo(s) atualmente vinculado(s).</p>
+        {% if ativos_contrato %}<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Ativo</th><th>Tipo / identificação</th><th>Situação</th><th>Natureza</th><th>Período</th><th>Vínculo</th></tr></thead><tbody>{% for v in ativos_contrato %}<tr><td><a href="{{ url_for('fiscalizacao_contratos.ativos_detalhe', ativo_id=v.ativo_id) }}">{{ v.codigo_interno }}</a><div class="small text-muted">{{ v.ativo_descricao }}</div></td><td>{{ v.tipo_ativo }}<div class="small text-muted">{{ v.placa or v.numero_patrimonio or 'Não informado' }}</div></td><td>{{ v.situacao }}</td><td>{{ v.natureza_vinculo }}</td><td>{{ v.data_inicio|fc_data }} a {{ v.data_fim|fc_data }}</td><td><span class="badge {{ 'text-bg-success' if v.ativo else 'text-bg-secondary' }}">{{ 'Atual' if v.ativo else 'Encerrado' }}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">Nenhum ativo vinculado a este contrato.</p>{% endif %}
+    </div>
+</div>
+
 <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
     <a href="{{ url_for('fiscalizacao_contratos.contratos_editar', contrato_id=contrato.id) }}" class="btn btn-primary">
         <i class="fas fa-pen me-2"></i>Editar

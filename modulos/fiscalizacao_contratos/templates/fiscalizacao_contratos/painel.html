@@ -5,7 +5,7 @@
 {% block content %}
 <div class="alert alert-warning border-0 shadow-sm" role="alert">
     <i class="fas fa-person-digging me-2"></i>
-    <strong>Módulo em construção.</strong> Empresas, servidores, contratos, aditivos, documentos e planilhas orçamentárias já estão disponíveis; as demais áreas continuam bloqueadas.
+    <strong>Módulo em construção.</strong> Empresas, servidores, contratos, aditivos, documentos, planilhas orçamentárias e ativos contratuais já estão disponíveis; as demais áreas continuam bloqueadas.
 </div>
 
 <section class="row g-4 mt-1" aria-label="Funcionalidades do módulo">
@@ -87,6 +87,20 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-2">Crie composições de custos e preserve todas as versões.</p>
+                    <span class="text-primary fw-semibold">Acessar <i class="fas fa-arrow-right ms-1"></i></span>
+                </div>
+            </article>
+        </a>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+        <a class="card-link" href="{{ url_for('fiscalizacao_contratos.ativos_lista') }}">
+            <article class="card dashboard-card h-100">
+                <div class="card-header card-header-custom bg-primary text-white">
+                    <i class="fas fa-truck-ramp-box me-2"></i>Ativos Contratuais
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Cadastre bens operacionais e preserve o histórico de contratos.</p>
                     <span class="text-primary fw-semibold">Acessar <i class="fas fa-arrow-right ms-1"></i></span>
                 </div>
             </article>

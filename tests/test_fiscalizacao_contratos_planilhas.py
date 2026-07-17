@@ -386,10 +386,12 @@ class TestFiscalizacaoContratosPlanilhas(unittest.TestCase):
             patch("modulos.fiscalizacao_contratos.routes.contratos.AditivoService") as aditivo_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService") as documento_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService", return_value=self.servico),
+            patch("modulos.fiscalizacao_contratos.routes.contratos.AtivoService") as ativo_cls,
         ):
             contrato_cls.return_value.obter.return_value = (contrato, [])
             aditivo_cls.return_value.resumo_contrato.return_value = (None, [])
             documento_cls.return_value.listar_do_contrato.return_value = []
+            ativo_cls.return_value.listar_do_contrato.return_value = []
             resposta = self.client.get("/fiscalizacao-contratos/contratos/1")
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("Planilha Orçamentária Original".encode(), resposta.data)
