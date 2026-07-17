@@ -3,6 +3,8 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from jinja2 import Undefined
+
 
 TIPOS_PLANILHA = (
     "Original",
@@ -128,13 +130,19 @@ def calcular_total_item(item):
 
 
 def formatar_decimal_brasileiro(valor, casas=8):
-    if valor is None or valor == "":
+    if valor is None or isinstance(valor, Undefined):
         return ""
-    numero = Decimal(str(valor))
-    texto = f"{numero:.{casas}f}".rstrip("0").rstrip(".")
-    inteiro, _, decimal = texto.partition(".")
-    inteiro = f"{int(inteiro):,}".replace(",", ".")
-    return inteiro + (f",{decimal}" if decimal else "")
+    try:
+        texto_valor = str(valor).strip()
+        if not texto_valor:
+            return ""
+        numero = Decimal(texto_valor)
+        texto = f"{numero:.{casas}f}".rstrip("0").rstrip(".")
+        inteiro, _, decimal = texto.partition(".")
+        inteiro = f"{int(inteiro):,}".replace(",", ".")
+        return inteiro + (f",{decimal}" if decimal else "")
+    except (InvalidOperation, TypeError, ValueError):
+        return ""
 
 
 def formatar_percentual_diferenca(valor):

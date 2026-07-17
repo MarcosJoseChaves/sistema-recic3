@@ -358,22 +358,50 @@ Principais recursos preparados:
 - pesquisa e filtros, cartão no painel e histórico no detalhe do contrato.
 
 A migração idempotente e aditiva
-`006_criar_fc_planilhas_orcamentarias.sql` foi criada para as tabelas
-`fc_planilhas_orcamentarias` e `fc_planilha_itens`. **A migração 006 não foi
-executada** e nenhuma execução automática foi adicionada.
+`006_criar_fc_planilhas_orcamentarias.sql` foi aplicada em **15/07/2026** usando
+a conexão configurada localmente no ambiente autorizado. Nenhuma credencial,
+URL ou hostname foi registrado neste documento e nenhuma execução automática
+foi adicionada.
 
-Foram executados **158 testes automatizados**: os 125 testes anteriores, 32
-testes funcionais da Etapa 2F e um teste global de proteção contra serviços
-reais. Resultado final: **158 passaram e 0 falharam**. PostgreSQL e Cloudinary
-são bloqueados globalmente por mocks que falham imediatamente se houver uma
-tentativa de acesso, mesmo quando o computador possui um `.env` válido. A
-verificação de sintaxe e o `git diff --check` também passaram.
+Verificações realizadas após a aplicação:
+
+- `fc_planilhas_orcamentarias` e `fc_planilha_itens` existem;
+- as duas tabelas foram criadas vazias, com **0 registros** em cada uma;
+- colunas, tipos, obrigatoriedade, valores padrão e auditoria com `TIMESTAMPTZ`
+  foram conferidos;
+- chaves primárias e estrangeiras para contratos, aditivos, usuários e
+  planilhas foram conferidas;
+- o vínculo composto garante que um aditivo pertença ao mesmo contrato;
+- versão por contrato, planilha Original e planilha vigente possuem as
+  restrições únicas esperadas;
+- tipos, estados, nome preenchido, versão positiva e regra de planilha vigente
+  consolidada e ativa foram confirmados;
+- quantidade e valor unitário usam `NUMERIC(24,8)` não negativo, e o fator
+  multiplicador usa `NUMERIC(24,8)` maior que zero;
+- todos os índices previstos na migração existem;
+- o índice composto de aditivos já existia e permaneceu compatível;
+- nenhuma planilha ou item foi cadastrado;
+- estruturas e quantidades das tabelas anteriores permaneceram iguais;
+- nenhum dado anterior foi apagado ou atualizado e nenhuma outra migração foi
+  executada.
+
+Em **17/07/2026**, foi corrigida a abertura do formulário de novo item da
+planilha. A rota passou a inicializar explicitamente todos os campos esperados,
+o filtro de apresentação decimal passou a tratar valores ausentes ou inválidos
+com segurança, e o template recebeu proteção adicional para campos ainda não
+preenchidos. Cálculos, consolidação e estrutura do banco não foram alterados.
+
+Foram executados **161 testes automatizados**: os 158 testes anteriores e três
+testes específicos da correção. Resultado final: **161 passaram e 0 falharam**.
+PostgreSQL e Cloudinary são bloqueados globalmente por mocks que falham
+imediatamente se houver uma tentativa de acesso, mesmo quando o computador
+possui um `.env` válido. A verificação de sintaxe e o `git diff --check` também
+passaram.
 
 ## Próxima etapa recomendada
 
-A próxima ação recomendada é revisar a Etapa 2F e, somente depois de nova
-autorização expressa, salvar o código ou aplicar a migração 006 no ambiente
-autorizado.
+A próxima ação recomendada é validar manualmente a Etapa 2F e, somente
+depois de nova autorização expressa, registrar o resultado dessa validação.
 
 ## Como continuar o trabalho
 

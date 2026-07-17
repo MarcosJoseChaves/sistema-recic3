@@ -182,7 +182,17 @@ def registrar_rotas_planilhas(blueprint, conectar_banco):
             flash("Somente planilhas ativas em elaboração podem receber itens.", "warning")
             return redirect(url_for("fiscalizacao_contratos.planilhas_detalhe", planilha_id=planilha_id))
         if request.method == "GET":
-            item = {"ordem": len(itens) + 1, "fator_multiplicador": 1}
+            item = {
+                "ordem": len(itens) + 1,
+                "grupo": "",
+                "codigo_item": "",
+                "descricao": "",
+                "unidade": "",
+                "quantidade": "",
+                "valor_unitario": "",
+                "fator_multiplicador": 1,
+                "observacoes": "",
+            }
             return render_template("fiscalizacao_contratos/planilhas/item_form.html", planilha=planilha, item=item, modo="novo")
         dados, erros = normalizar_e_validar_item(request.form)
         if erros:

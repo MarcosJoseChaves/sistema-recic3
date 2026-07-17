@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import psycopg2
+from jinja2 import Undefined
 
 from modulos.fiscalizacao_contratos.services.planilhas_service import (
     PlanilhaBloqueadaError,
@@ -20,6 +21,7 @@ from modulos.fiscalizacao_contratos.services.planilhas_service import (
 )
 from modulos.fiscalizacao_contratos.validacoes_planilhas import (
     calcular_total_item,
+    formatar_decimal_brasileiro,
     normalizar_e_validar_item,
     normalizar_e_validar_planilha,
 )
@@ -245,6 +247,35 @@ class TestFiscalizacaoContratosPlanilhas(unittest.TestCase):
         self.assertFalse(self.servico.itens[1][-1]["ativo"])
         self.client.post(f"/fiscalizacao-contratos/planilhas/1/itens/{item_id}/reativar")
         self.assertTrue(self.servico.itens[1][-1]["ativo"])
+
+    def test_formulario_novo_renderiza_campos_iniciais(self):
+        self.autenticar(1)
+        resposta = self.client.get("/fiscalizacao-contratos/planilhas/1/itens/novo")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(b'id="quantidade" name="quantidade" required value=""', resposta.data)
+        self.assertIn(b'id="valor_unitario" name="valor_unitario" required value=""', resposta.data)
+        self.assertIn(b'id="fator_multiplicador" name="fator_multiplicador" required value="1"', resposta.data)
+
+    def test_formatador_decimal_e_seguro_para_template(self):
+        class ValorInesperado:
+            def __str__(self):
+                return "valor inesperado"
+
+        self.assertEqual(formatar_decimal_brasileiro(None), "")
+        self.assertEqual(formatar_decimal_brasileiro(Undefined(name="ausente")), "")
+        self.assertEqual(formatar_decimal_brasileiro(""), "")
+        self.assertEqual(formatar_decimal_brasileiro(Decimal("0")), "0")
+        self.assertEqual(formatar_decimal_brasileiro(Decimal("1.5")), "1,5")
+        self.assertEqual(formatar_decimal_brasileiro(Decimal("2345.6789")), "2.345,6789")
+        self.assertEqual(formatar_decimal_brasileiro(ValorInesperado()), "")
+
+    def test_edicao_item_renderiza_valores_existentes(self):
+        self.autenticar(1)
+        resposta = self.client.get("/fiscalizacao-contratos/planilhas/1/itens/1/editar")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(b'id="quantidade" name="quantidade" required value="6"', resposta.data)
+        self.assertIn(b'id="valor_unitario" name="valor_unitario" required value="2.000"', resposta.data)
+        self.assertIn(b'id="fator_multiplicador" name="fator_multiplicador" required value="12"', resposta.data)
 
     def test_descricao_e_unidade_obrigatorias(self):
         for campo in ("descricao", "unidade"):
