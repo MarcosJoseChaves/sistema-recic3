@@ -338,10 +338,10 @@ completa ou endereço temporário foi registrada neste documento.
 
 ## Etapa 2F — Planilha Orçamentária e Composição de Custos
 
-A implementação da Etapa 2F foi concluída em **15/07/2026** e permanece sem
-commit para revisão. Foram adicionadas planilhas orçamentárias versionadas por
-contrato, com itens de custo, subtotais por grupo e total geral calculado com
-`Decimal`, sem uso de `float` e sem armazenar totais duplicados no banco.
+A Etapa 2F foi concluída e validada manualmente em **17/07/2026**. Foram
+adicionadas planilhas orçamentárias versionadas por contrato, com itens de
+custo, subtotais por grupo e total geral calculado com `Decimal`, sem uso de
+`float` e sem armazenar totais duplicados no banco.
 
 Principais recursos preparados:
 
@@ -398,10 +398,19 @@ imediatamente se houver uma tentativa de acesso, mesmo quando o computador
 possui um `.env` válido. A verificação de sintaxe e o `git diff --check` também
 passaram.
 
+Os testes manuais também foram aprovados. Foram validados o formulário e o
+cadastro de itens, os cálculos com `Decimal`, a edição, inativação e
+reativação, subtotais e total geral, consolidação e bloqueio posterior,
+definição da planilha vigente, criação de nova versão por cópia, preservação
+das versões anteriores, comparação entre original e vigente e preservação do
+valor original do contrato. As tabelas `fc_planilhas_orcamentarias` e
+`fc_planilha_itens` estão funcionando após a aplicação e verificação da
+migração 006.
+
 ## Próxima etapa recomendada
 
-A próxima ação recomendada é validar manualmente a Etapa 2F e, somente
-depois de nova autorização expressa, registrar o resultado dessa validação.
+A próxima etapa recomendada é o cadastro de ativos vinculados aos contratos,
+que somente deve ser iniciado depois de nova autorização expressa.
 
 ## Como continuar o trabalho
 
