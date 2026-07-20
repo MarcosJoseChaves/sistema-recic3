@@ -477,28 +477,41 @@ expressa, é implementar fiscalizações e ocorrências contratuais.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
 
-## Etapa 2H — Fiscalizações e ocorrências contratuais (pausada)
+## Etapa 2H — Fiscalizações e ocorrências contratuais (aguardando revisão)
 
-A Etapa 2H foi iniciada em **17/07/2026** e pausada em um ponto seguro para
-continuação em outro computador. Foram criados parcialmente a migração 008,
-as validações, os serviços, as rotas e os templates básicos de fiscalizações,
-ocorrências e acompanhamentos. Também foi iniciada a integração das consultas
-com o painel, os contratos e os ativos contratuais.
+A implementação da Etapa 2H foi retomada e concluída tecnicamente em
+**20/07/2026**. O módulo agora possui cadastro, edição, detalhamento,
+finalização e cancelamento de fiscalizações, além de cadastro, acompanhamento,
+inativação e reativação de ocorrências contratuais.
 
-A migração `008_criar_fc_fiscalizacoes_ocorrencias.sql` **não foi executada** e
-nenhum banco real foi acessado durante este trabalho parcial. A sintaxe dos
-arquivos Python já criados e o `git diff --check` passaram antes da pausa.
+As ocorrências podem ser vinculadas ao contrato, a uma fiscalização compatível
+e, opcionalmente, a um ativo contratual compatível. Os acompanhamentos preservam
+o histórico de mudanças de situação, sem exclusão física. As telas de painel,
+contrato e ativo receberam os respectivos atalhos, indicadores e listagens.
 
-Ainda precisam ser concluídos e revisados:
+A revisão técnica confirmou validações de contratos, servidores e ativos
+ativos; prazos e datas coerentes; justificativa para cancelamento; preservação
+da regularização anterior; consultas SQL parametrizadas; transações com
+`commit` somente ao final e `rollback` em caso de falha; e acesso restrito a
+administradores.
 
-- os cartões e indicadores do painel;
-- as seções de fiscalizações e ocorrências nas telas de contrato e ativo;
-- a revisão das consultas, transações, filtros e regras de status;
-- todos os testes automatizados específicos da Etapa 2H;
-- a execução da suíte completa, preservando os 187 testes anteriores;
-- a atualização final deste registro após a validação técnica.
+Foram executados **217 testes automatizados**: os 187 testes anteriores e 30
+testes específicos da Etapa 2H. Resultado: **217 passaram e 0 falharam**. Os
+testes usaram serviços e conexões simulados; nenhum PostgreSQL, Cloudinary,
+consulta externa ou arquivo real foi acessado.
 
-Para continuar, usar a branch `codex/modulo-fiscalizacao-contratos`, revisar o
-commit temporário da Etapa 2H e retomar pela integração dos templates com o
-painel, o contrato e o ativo. Depois, criar os testes simulados antes de fazer
-qualquer revisão final. Não executar a migração 008 sem nova autorização.
+Na revisão técnica final, a edição da ocorrência passou a bloquear a linha com
+`SELECT ... FOR UPDATE` antes de verificar a existência de acompanhamentos.
+Isso evita que uma edição e um novo acompanhamento simultâneos utilizem um
+estado antigo. Também foi confirmado por teste que a reabertura de uma
+ocorrência regularizada preserva no histórico a data anterior e a justificativa.
+
+A migração idempotente e aditiva
+`008_criar_fc_fiscalizacoes_ocorrencias.sql` permanece somente como arquivo para
+revisão e **não foi executada**. Nenhuma tabela ou dado do banco foi alterado.
+
+### Próximo passo da Etapa 2H
+
+Revisar o código, a migração 008 e as telas em ambiente local. Somente após
+nova autorização expressa, aplicar a migração 008 no ambiente configurado e
+realizar os testes manuais. Não criar commit definitivo antes dessa revisão.

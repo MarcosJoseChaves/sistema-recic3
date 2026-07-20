@@ -3,6 +3,8 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from ..validacoes_ocorrencias import STATUS_OCORRENCIA
+
 
 class OcorrenciaServiceError(Exception): pass
 class OcorrenciaNaoEncontradaError(OcorrenciaServiceError): pass
@@ -109,11 +111,11 @@ class OcorrenciaService:
         conexao=self._conectar_banco()
         try:
             with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("""SELECT o.ativo,COUNT(a.id) AS acompanhamentos FROM fc_ocorrencias o
-                    LEFT JOIN fc_ocorrencia_acompanhamentos a ON a.ocorrencia_id=o.id
-                    WHERE o.id=%s GROUP BY o.id""",(ocorrencia_id,)); atual=cursor.fetchone()
+                cursor.execute("SELECT ativo FROM fc_ocorrencias WHERE id=%s FOR UPDATE",(ocorrencia_id,)); atual=cursor.fetchone()
                 if not atual: raise OcorrenciaNaoEncontradaError("Ocorrência não encontrada.")
-                if not atual["ativo"] or atual["acompanhamentos"]: raise OcorrenciaBloqueadaError("Somente ocorrências ativas sem acompanhamento podem ser editadas.")
+                cursor.execute("SELECT EXISTS (SELECT 1 FROM fc_ocorrencia_acompanhamentos WHERE ocorrencia_id=%s) AS possui_acompanhamento",(ocorrencia_id,))
+                possui_acompanhamento=cursor.fetchone()["possui_acompanhamento"]
+                if not atual["ativo"] or possui_acompanhamento: raise OcorrenciaBloqueadaError("Somente ocorrências ativas sem acompanhamento podem ser editadas.")
                 self._validar_referencias(cursor,dados)
                 cursor.execute("""UPDATE fc_ocorrencias SET contrato_id=%s,fiscalizacao_id=%s,ativo_contratual_id=%s,
                     servidor_responsavel_id=%s,titulo=%s,categoria=%s,gravidade=%s,descricao=%s,data_identificacao=%s,
@@ -147,10 +149,26 @@ class OcorrenciaService:
                 cursor.execute("SELECT * FROM fc_ocorrencias WHERE id=%s FOR UPDATE",(ocorrencia_id,)); atual=cursor.fetchone()
                 if not atual: raise OcorrenciaNaoEncontradaError("Ocorrência não encontrada.")
                 if not atual["ativo"]: raise OcorrenciaBloqueadaError("A ocorrência está inativa.")
+                if dados.get("status_novo") not in STATUS_OCORRENCIA:
+                    raise OcorrenciaBloqueadaError("O novo status é inválido.")
+                if not dados.get("data_acompanhamento") or dados["data_acompanhamento"] < atual["data_identificacao"]:
+                    raise OcorrenciaBloqueadaError("A data do acompanhamento é inválida.")
+                if not str(dados.get("descricao") or "").strip():
+                    raise OcorrenciaBloqueadaError("Descreva o acompanhamento ou a justificativa.")
+                if dados["status_novo"] == "Regularizada" and not dados.get("data_regularizacao"):
+                    raise OcorrenciaBloqueadaError("Informe a data da regularização.")
+                if dados.get("data_regularizacao") and dados["data_regularizacao"] < atual["data_identificacao"]:
+                    raise OcorrenciaBloqueadaError("A regularização não pode ser anterior à identificação.")
+                observacoes = dados.get("observacoes")
+                if atual["status"] == "Regularizada" and dados["status_novo"] != "Regularizada":
+                    if not dados.get("confirmar_saida_regularizada") or not observacoes:
+                        raise OcorrenciaBloqueadaError("Confirme e explique a saída do status Regularizada.")
+                    data_anterior = atual.get("data_regularizacao")
+                    observacoes = f"Regularização anterior: {data_anterior:%d/%m/%Y}. {observacoes}" if data_anterior else observacoes
                 cursor.execute("""INSERT INTO fc_ocorrencia_acompanhamentos
                     (ocorrencia_id,data_acompanhamento,status_anterior,status_novo,descricao,
                      providencia_contratada,observacoes,criado_por_usuario_id)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",(ocorrencia_id,dados["data_acompanhamento"],atual["status"],dados["status_novo"],dados["descricao"],dados.get("providencia_contratada"),dados.get("observacoes"),usuario_id))
+                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",(ocorrencia_id,dados["data_acompanhamento"],atual["status"],dados["status_novo"],dados["descricao"],dados.get("providencia_contratada"),observacoes,usuario_id))
                 data_reg = dados.get("data_regularizacao") if dados["status_novo"] in ("Regularizada","Não regularizada") else None
                 cursor.execute("""UPDATE fc_ocorrencias SET status=%s,data_regularizacao=%s,
                     atualizado_em=CURRENT_TIMESTAMP,atualizado_por_usuario_id=%s WHERE id=%s""",

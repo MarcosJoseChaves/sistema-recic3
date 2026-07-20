@@ -181,8 +181,11 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
         )
         self.mock_storage = self.patcher_storage.start()
         self.patcher_servico.start()
+        self.patcher_indicadores = patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService")
+        self.patcher_indicadores.start().return_value.indicadores.return_value = {"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
 
     def tearDown(self):
+        self.patcher_indicadores.stop()
         self.patcher_servico.stop()
         self.patcher_storage.stop()
 
@@ -394,6 +397,8 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
             patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService", return_value=self.servico),
             patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService") as planilha_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.AtivoService") as ativo_cls,
+            patch("modulos.fiscalizacao_contratos.routes.contratos.FiscalizacaoService") as fiscalizacao_cls,
+            patch("modulos.fiscalizacao_contratos.routes.contratos.OcorrenciaService") as ocorrencia_cls,
             patch("modulos.fiscalizacao_contratos.routes.aditivos.AditivoService") as aditivo_cls,
             patch("modulos.fiscalizacao_contratos.routes.aditivos.DocumentoService", return_value=self.servico),
         ):
@@ -401,6 +406,8 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
             aditivo_resumo_cls.return_value.resumo_contrato.return_value = (None, [])
             planilha_cls.return_value.comparar_contrato.return_value = {"planilhas": []}
             ativo_cls.return_value.listar_do_contrato.return_value = []
+            fiscalizacao_cls.return_value.listar_do_contrato.return_value = []
+            ocorrencia_cls.return_value.listar_do_contrato.return_value = []
             aditivo_cls.return_value.obter.return_value = aditivo
             detalhe_contrato = self.client.get("/fiscalizacao-contratos/contratos/1")
             detalhe_aditivo = self.client.get("/fiscalizacao-contratos/aditivos/1")

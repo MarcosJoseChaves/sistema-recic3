@@ -178,6 +178,19 @@
     </div>
 </div>
 
+<div class="card content-card mb-4" id="fiscalizacoes-contratuais">
+    <div class="card-header bg-success text-white d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2"><span><i class="fas fa-clipboard-check me-2"></i>Fiscalizações</span><a class="btn btn-sm btn-light" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_nova', contrato_id=contrato.id) }}">Nova fiscalização</a></div>
+    <div class="card-body"><p><strong>{{ fiscalizacoes_contrato|length }}</strong> fiscalização(ões) recente(s).</p>{% if fiscalizacoes_contrato %}<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Data</th><th>Tipo</th><th>Responsável</th><th>Resultado</th><th>Status</th></tr></thead><tbody>{% for f in fiscalizacoes_contrato %}<tr><td><a href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_detalhe',fiscalizacao_id=f.id) }}">{{ f.data_fiscalizacao|fc_data }}</a></td><td>{{ f.tipo_fiscalizacao }}</td><td>{{ f.servidor_nome }}</td><td>{{ f.resultado }}</td><td><span class="badge text-bg-secondary">{{ f.status }}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">Nenhuma fiscalização registrada.</p>{% endif %}</div>
+</div>
+
+<div class="card content-card mb-4" id="ocorrencias-contratuais">
+    {% set ocorrencias_abertas = ocorrencias_contrato|selectattr('status','in',['Aberta','Em acompanhamento'])|selectattr('ativo')|list %}
+    {% set ocorrencias_vencidas = ocorrencias_contrato|selectattr('vencida')|list %}
+    {% set ocorrencias_graves = ocorrencias_contrato|selectattr('gravidade','in',['Grave','Crítica'])|selectattr('ativo')|list %}
+    <div class="card-header bg-danger text-white d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2"><span><i class="fas fa-triangle-exclamation me-2"></i>Ocorrências</span><a class="btn btn-sm btn-light" href="{{ url_for('fiscalizacao_contratos.ocorrencias_nova', contrato_id=contrato.id) }}">Nova ocorrência</a></div>
+    <div class="card-body"><div class="row g-2 mb-3"><div class="col-sm-4"><div class="border rounded p-2"><small>Abertas</small><div class="fw-bold">{{ ocorrencias_abertas|length }}</div></div></div><div class="col-sm-4"><div class="border border-danger rounded p-2"><small>Vencidas</small><div class="fw-bold text-danger">{{ ocorrencias_vencidas|length }}</div></div></div><div class="col-sm-4"><div class="border border-warning rounded p-2"><small>Graves/críticas</small><div class="fw-bold">{{ ocorrencias_graves|length }}</div></div></div></div>{% if ocorrencias_contrato %}<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Título</th><th>Data</th><th>Gravidade</th><th>Status</th><th>Prazo</th></tr></thead><tbody>{% for o in ocorrencias_contrato %}<tr class="{{ 'table-danger' if o.vencida else '' }}"><td><a href="{{ url_for('fiscalizacao_contratos.ocorrencias_detalhe',ocorrencia_id=o.id) }}">{{ o.titulo }}</a></td><td>{{ o.data_identificacao|fc_data }}</td><td><span class="badge {{ 'text-bg-danger' if o.gravidade in ('Grave','Crítica') else 'text-bg-warning' }}">{{ o.gravidade }}</span></td><td>{{ o.status }}</td><td>{{ o.prazo_correcao|fc_data }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">Nenhuma ocorrência registrada.</p>{% endif %}</div>
+</div>
+
 <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
     <a href="{{ url_for('fiscalizacao_contratos.contratos_editar', contrato_id=contrato.id) }}" class="btn btn-primary">
         <i class="fas fa-pen me-2"></i>Editar

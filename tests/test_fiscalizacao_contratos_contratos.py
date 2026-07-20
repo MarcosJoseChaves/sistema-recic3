@@ -318,8 +318,14 @@ class TestFiscalizacaoContratosContratos(unittest.TestCase):
             "modulos.fiscalizacao_contratos.routes.contratos.AtivoService"
         )
         self.patcher_ativos.start().return_value.listar_do_contrato.return_value = []
+        self.patcher_fiscalizacoes = patch("modulos.fiscalizacao_contratos.routes.contratos.FiscalizacaoService")
+        self.patcher_fiscalizacoes.start().return_value.listar_do_contrato.return_value = []
+        self.patcher_ocorrencias = patch("modulos.fiscalizacao_contratos.routes.contratos.OcorrenciaService")
+        self.patcher_ocorrencias.start().return_value.listar_do_contrato.return_value = []
 
     def tearDown(self):
+        self.patcher_ocorrencias.stop()
+        self.patcher_fiscalizacoes.stop()
         self.patcher_ativos.stop()
         self.patcher_planilhas.stop()
         self.patcher_documentos.stop()

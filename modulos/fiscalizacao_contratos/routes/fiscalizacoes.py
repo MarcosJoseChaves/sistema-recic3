@@ -83,7 +83,7 @@ def registrar_rotas_fiscalizacoes(blueprint, conectar_banco):
         try:
             item=servico().obter(fiscalizacao_id)
             ocorrencias=OcorrenciaService(conectar_banco).listar("",{"fiscalizacao_id":fiscalizacao_id,"status_ativo":"todos"})
-        except (FiscalizacaoNaoEncontradaError,OcorrenciaServiceError):
+        except (FiscalizacaoServiceError,OcorrenciaServiceError):
             flash("Fiscalização não encontrada ou indisponível.","warning"); return redirect(url_for("fiscalizacao_contratos.fiscalizacoes_lista"))
         return render_template("fiscalizacao_contratos/fiscalizacoes/detalhe.html",fiscalizacao=item,ocorrencias=ocorrencias)
 

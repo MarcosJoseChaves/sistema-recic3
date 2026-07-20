@@ -66,7 +66,8 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
     def test_usuario_comum_recebe_acesso_negado(self):
         self.autenticar_como(2)
 
-        with patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
+        with patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService") as fiscalizacao_cls, patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
+            fiscalizacao_cls.return_value.indicadores.return_value = {"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
             resposta = self.client.get("/fiscalizacao-contratos")
 
         self.assertEqual(resposta.status_code, 403)
@@ -74,7 +75,8 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
     def test_administrador_acessa_o_modulo(self):
         self.autenticar_como(1)
 
-        with patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
+        with patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService") as fiscalizacao_cls, patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
+            fiscalizacao_cls.return_value.indicadores.return_value = {"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
             resposta = self.client.get("/fiscalizacao-contratos")
 
         self.assertEqual(resposta.status_code, 200)

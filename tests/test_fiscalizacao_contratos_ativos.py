@@ -161,7 +161,9 @@ class TestFiscalizacaoContratosAtivos(unittest.TestCase):
     def setUp(self):
         self.client=self.app.test_client(); self.servico=AtivoServiceFake(); APP_MODULE.login_manager._user_callback=self._usuario
         self.patcher=patch("modulos.fiscalizacao_contratos.routes.ativos.AtivoService", return_value=self.servico); self.patcher.start()
-    def tearDown(self): self.patcher.stop()
+        self.patcher_ocorrencias=patch("modulos.fiscalizacao_contratos.routes.ativos.OcorrenciaService"); self.patcher_ocorrencias.start().return_value.listar_do_ativo.return_value=[]
+        self.patcher_indicadores=patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService"); self.patcher_indicadores.start().return_value.indicadores.return_value={"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
+    def tearDown(self): self.patcher_indicadores.stop(); self.patcher_ocorrencias.stop(); self.patcher.stop()
     @staticmethod
     def _usuario(uid): return {"1":APP_MODULE.User(1,"admin","admin",None),"2":APP_MODULE.User(2,"comum","usuario",None)}.get(str(uid))
     def autenticar(self, uid):
@@ -255,8 +257,8 @@ class TestFiscalizacaoContratosAtivos(unittest.TestCase):
     def test_ativos_aparecem_no_detalhe_do_contrato(self):
         dados,_=normalizar_e_validar_vinculo({"ativo_id":"1",**self.dados_vinculo()}); self.servico.criar_vinculo(dados,1); self.autenticar(1)
         contrato={"id":1,"numero_contrato":"CT-001/2026","valor_original":Decimal("1"),"ativo":True,"situacao":"Vigente","vence_em_60_dias":False,"objeto":"Objeto","empresa_nome":"Empresa","processo_administrativo":None,"data_assinatura":None,"vigencia_inicio":None,"vigencia_fim":None,"observacoes":None,"criado_em":None,"atualizado_em":None}
-        with patch("modulos.fiscalizacao_contratos.routes.contratos.ContratoService") as c, patch("modulos.fiscalizacao_contratos.routes.contratos.AditivoService") as ad, patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService") as doc, patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService") as pl, patch("modulos.fiscalizacao_contratos.routes.contratos.AtivoService",return_value=self.servico):
-            c.return_value.obter.return_value=(contrato,[]); ad.return_value.resumo_contrato.return_value=(None,[]); doc.return_value.listar_do_contrato.return_value=[]; pl.return_value.comparar_contrato.return_value={"planilhas":[]}; r=self.client.get("/fiscalizacao-contratos/contratos/1")
+        with patch("modulos.fiscalizacao_contratos.routes.contratos.ContratoService") as c, patch("modulos.fiscalizacao_contratos.routes.contratos.AditivoService") as ad, patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService") as doc, patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService") as pl, patch("modulos.fiscalizacao_contratos.routes.contratos.AtivoService",return_value=self.servico), patch("modulos.fiscalizacao_contratos.routes.contratos.FiscalizacaoService") as fis, patch("modulos.fiscalizacao_contratos.routes.contratos.OcorrenciaService") as ocorr:
+            c.return_value.obter.return_value=(contrato,[]); ad.return_value.resumo_contrato.return_value=(None,[]); doc.return_value.listar_do_contrato.return_value=[]; pl.return_value.comparar_contrato.return_value={"planilhas":[]}; fis.return_value.listar_do_contrato.return_value=[]; ocorr.return_value.listar_do_contrato.return_value=[]; r=self.client.get("/fiscalizacao-contratos/contratos/1")
         self.assertEqual(r.status_code,200); self.assertIn(b"AT-001",r.data)
     def test_rotas_antigas_continuam_registradas(self):
         rotas={x.rule for x in self.app.url_map.iter_rules()}; self.assertTrue({"/","/login","/fiscalizacao-contratos/empresas","/fiscalizacao-contratos/contratos","/fiscalizacao-contratos/ativos"}.issubset(rotas))

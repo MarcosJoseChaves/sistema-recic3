@@ -75,7 +75,10 @@ def normalizar_e_validar_acompanhamento(formulario, ocorrencia):
     if dados["status_novo"] == "Regularizada" and not dados["data_regularizacao"]: erros.append("Informe a data da regularização.")
     if dados["data_regularizacao"] and dados["data_acompanhamento"] and dados["data_regularizacao"] > dados["data_acompanhamento"]:
         erros.append("A data da regularização não pode ser posterior ao acompanhamento.")
-    if dados["status_novo"] == "Cancelada" and not dados["descricao"]: erros.append("Informe a justificativa do cancelamento.")
+    if dados["status_novo"] == "Cancelada" and not dados["descricao"]:
+        erros.append("Informe a justificativa do cancelamento.")
+    if dados["data_regularizacao"] and dados["data_regularizacao"] < ocorrencia["data_identificacao"]:
+        erros.append("A regularização não pode ser anterior à identificação.")
     if ocorrencia["status"] == "Regularizada" and dados["status_novo"] != "Regularizada":
         if not dados["confirmar_saida_regularizada"]: erros.append("Confirme explicitamente a saída do status Regularizada.")
         if not dados["observacoes"]: erros.append("Explique por que a ocorrência deixou de estar regularizada.")

@@ -93,7 +93,10 @@ CREATE TABLE IF NOT EXISTS fc_ocorrencias (
         exige_notificacao = FALSE OR BTRIM(COALESCE(numero_notificacao, '')) <> ''
     ),
     CONSTRAINT ck_fc_ocorrencias_data_regularizacao CHECK (
-        data_regularizacao IS NULL OR status IN ('Regularizada', 'Não regularizada')
+        data_regularizacao IS NULL OR (
+            status IN ('Regularizada', 'Não regularizada')
+            AND data_regularizacao >= data_identificacao
+        )
     ),
     CONSTRAINT ck_fc_ocorrencias_regularizada_com_data CHECK (
         status <> 'Regularizada' OR data_regularizacao IS NOT NULL

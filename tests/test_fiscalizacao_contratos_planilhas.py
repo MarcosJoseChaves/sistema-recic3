@@ -173,8 +173,9 @@ class TestFiscalizacaoContratosPlanilhas(unittest.TestCase):
         self.client = self.app.test_client(); self.servico = PlanilhaServiceFake()
         APP_MODULE.login_manager._user_callback = self._usuario
         self.patcher = patch("modulos.fiscalizacao_contratos.routes.planilhas.PlanilhaService", return_value=self.servico); self.patcher.start()
+        self.patcher_indicadores=patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService"); self.patcher_indicadores.start().return_value.indicadores.return_value={"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
 
-    def tearDown(self): self.patcher.stop()
+    def tearDown(self): self.patcher_indicadores.stop(); self.patcher.stop()
 
     @staticmethod
     def _usuario(uid):
@@ -387,11 +388,15 @@ class TestFiscalizacaoContratosPlanilhas(unittest.TestCase):
             patch("modulos.fiscalizacao_contratos.routes.contratos.DocumentoService") as documento_cls,
             patch("modulos.fiscalizacao_contratos.routes.contratos.PlanilhaService", return_value=self.servico),
             patch("modulos.fiscalizacao_contratos.routes.contratos.AtivoService") as ativo_cls,
+            patch("modulos.fiscalizacao_contratos.routes.contratos.FiscalizacaoService") as fiscalizacao_cls,
+            patch("modulos.fiscalizacao_contratos.routes.contratos.OcorrenciaService") as ocorrencia_cls,
         ):
             contrato_cls.return_value.obter.return_value = (contrato, [])
             aditivo_cls.return_value.resumo_contrato.return_value = (None, [])
             documento_cls.return_value.listar_do_contrato.return_value = []
             ativo_cls.return_value.listar_do_contrato.return_value = []
+            fiscalizacao_cls.return_value.listar_do_contrato.return_value = []
+            ocorrencia_cls.return_value.listar_do_contrato.return_value = []
             resposta = self.client.get("/fiscalizacao-contratos/contratos/1")
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("Planilha Orçamentária Original".encode(), resposta.data)

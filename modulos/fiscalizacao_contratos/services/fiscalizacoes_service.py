@@ -1,12 +1,7 @@
 """Persistência e regras das fiscalizações contratuais."""
 
-from datetime import date
-
 import psycopg2
 from psycopg2.extras import RealDictCursor
-
-from ..validacoes_fiscalizacoes import RESULTADOS_FISCALIZACAO, TIPOS_FISCALIZACAO
-
 
 class FiscalizacaoServiceError(Exception):
     """Erro tratado sem expor detalhes do PostgreSQL ao usuário."""
@@ -25,12 +20,6 @@ class FiscalizacaoService:
         filtros = filtros or {}
         padrao = f"%{(busca or '').strip()}%"
         status_ativo = filtros.get("status_ativo", "ativos")
-        parametros = [padrao] * 6 + [
-            filtros.get("contrato_id"), filtros.get("empresa_id"),
-            filtros.get("servidor_id"), filtros.get("tipo"),
-            filtros.get("resultado"), filtros.get("status"),
-            filtros.get("data_inicio"), filtros.get("data_fim"), status_ativo,
-        ]
         try:
             with self._conectar_banco() as conexao:
                 with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -146,7 +135,7 @@ class FiscalizacaoService:
                 if not atual: raise FiscalizacaoNaoEncontradaError("Fiscalização não encontrada.")
                 if atual["status"] != "Em elaboração" or not atual["ativo"]:
                     raise FiscalizacaoBloqueadaError("Somente fiscalizações ativas em elaboração podem ser editadas.")
-                self._validar_referencias(cursor, dados, False)
+                self._validar_referencias(cursor, dados, True)
                 cursor.execute("""UPDATE fc_fiscalizacoes SET contrato_id=%s,
                     servidor_responsavel_id=%s,data_fiscalizacao=%s,hora_inicio=%s,hora_fim=%s,
                     tipo_fiscalizacao=%s,local_fiscalizacao=%s,objeto_verificado=%s,resultado=%s,
@@ -202,7 +191,8 @@ class FiscalizacaoService:
                         COUNT(*) FILTER (WHERE o.ativo AND o.status IN ('Aberta','Em acompanhamento')) AS ocorrencias_abertas,
                         COUNT(*) FILTER (WHERE o.ativo AND o.status IN ('Aberta','Em acompanhamento') AND o.prazo_correcao<CURRENT_DATE) AS ocorrencias_vencidas,
                         COUNT(*) FILTER (WHERE o.ativo AND o.status IN ('Aberta','Em acompanhamento') AND o.gravidade IN ('Grave','Crítica')) AS graves_criticas,
-                        (SELECT COUNT(*) FROM fc_fiscalizacoes f WHERE f.ativo AND f.data_fiscalizacao>=CURRENT_DATE-30) AS fiscalizacoes_30_dias
+                        (SELECT COUNT(*) FROM fc_fiscalizacoes f WHERE f.ativo
+                         AND f.data_fiscalizacao BETWEEN CURRENT_DATE-30 AND CURRENT_DATE) AS fiscalizacoes_30_dias
                         FROM fc_ocorrencias o""")
                     return cursor.fetchone()
         except psycopg2.Error as erro: raise FiscalizacaoServiceError("Falha ao consultar indicadores.") from erro

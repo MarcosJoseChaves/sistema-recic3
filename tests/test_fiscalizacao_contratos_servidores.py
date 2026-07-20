@@ -153,8 +153,11 @@ class TestFiscalizacaoContratosServidores(unittest.TestCase):
             return_value=self.servico,
         )
         self.patcher_servico.start()
+        self.patcher_indicadores = patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService")
+        self.patcher_indicadores.start().return_value.indicadores.return_value = {"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
 
     def tearDown(self):
+        self.patcher_indicadores.stop()
         self.patcher_servico.stop()
 
     @staticmethod
