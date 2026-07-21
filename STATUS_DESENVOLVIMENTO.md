@@ -551,3 +551,48 @@ validados detalhes de fiscalizações antigas, nova fiscalização, finalizaçã
 reabertura com justificativa, retorno para `Em elaboração`, edição, nova
 finalização e o histórico completo. Ocorrências e acompanhamentos permaneceram
 preservados. A Etapa 2H e a melhoria 2H.1 estão concluídas.
+
+## Etapa 2I — Medições contratuais (implementada para revisão)
+
+A Etapa 2I foi implementada tecnicamente em **21/07/2026**, sem acessar o banco
+real e sem executar a migração. O módulo agora possui cadastro de medições por
+contrato e competência, itens manuais ou copiados como fotografia da planilha
+orçamentária, acréscimos, descontos, glosas e vínculos com documentos já
+armazenados pelo sistema.
+
+O fluxo permite elaborar, enviar para análise, devolver para correção, aprovar
+e cancelar. Uma medição aprovada permanece imutável; correções posteriores
+geram uma nova versão, com cópia dos registros ativos e preservação integral
+da versão anterior. Todos os eventos guardam uma fotografia dos totais.
+
+Os cálculos usam `Decimal`, são refeitos no servidor e não confiam em totais
+enviados pelo navegador. Inclusão, edição e inativação de itens ou ajustes
+recalculam os valores dentro da mesma transação. Falhas provocam `rollback` e
+nenhuma operação utiliza `DELETE`.
+
+Foi criada a migração aditiva e idempotente
+`010_criar_fc_medicoes.sql`, que prepara `fc_medicoes`, `fc_medicao_itens`,
+`fc_medicao_ajustes`, `fc_medicao_documentos` e `fc_medicao_eventos`, com suas
+chaves, restrições e índices. **A migração 010 ainda não foi executada.**
+
+Foram preservados os **230 testes anteriores** e acrescentados **38 testes** da
+Etapa 2I, que cobrem os 72 cenários obrigatórios de permissão, validação,
+cálculo, fluxo, histórico, integração e segurança. Resultado atual:
+**268 testes aprovados e 0 falhas**. PostgreSQL e Cloudinary reais permaneceram
+bloqueados; nenhum arquivo real foi alterado pelos testes.
+
+Na revisão técnica final, o cancelamento passou a definir `atual = FALSE`,
+mantendo a medição cancelada ativa e consultável, mas liberando a competência
+para uma nova medição com numeração própria. Atualização, evento e mudança
+de situação permanecem na mesma transação, com rollback integral em falhas.
+
+Também foi reforçada a fotografia dos itens de planilha: depois de copiado para
+a medição, o item preserva código, descrição, unidade, quantidade prevista e
+preço unitário originais, sem consultar novamente a planilha durante a edição.
+Foram adicionados bloqueios nas telas acessadas diretamente por URL, validação
+defensiva de ajustes e categorias de documentos, testes de concorrência e uma
+matriz relacionando os 72 requisitos obrigatórios aos testes automatizados.
+
+A Etapa 2I está pronta para revisão técnica e funcional. O próximo passo
+seguro, somente mediante nova autorização, é revisar e depois aplicar
+exclusivamente a migração 010 no ambiente configurado.

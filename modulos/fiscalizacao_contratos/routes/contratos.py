@@ -10,6 +10,7 @@ from ..services.planilhas_service import PlanilhaService, PlanilhaServiceError
 from ..services.ativos_service import AtivoService, AtivoServiceError
 from ..services.fiscalizacoes_service import FiscalizacaoService, FiscalizacaoServiceError
 from ..services.ocorrencias_service import OcorrenciaService, OcorrenciaServiceError
+from ..services.medicoes_service import MedicaoService, MedicaoServiceError
 from ..services.contratos_service import (
     ContratoDuplicadoError,
     ContratoNaoEncontradoError,
@@ -185,6 +186,15 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             flash("Não foi possível carregar fiscalizações e ocorrências do contrato.", "danger")
             fiscalizacoes_contrato, ocorrencias_contrato = [], []
 
+        try:
+            medicoes_contrato, resumo_medicoes = MedicaoService(
+                conectar_banco
+            ).listar_do_contrato(contrato_id)
+        except Exception:
+            current_app.logger.exception("Falha ao carregar medições do contrato")
+            flash("Não foi possível carregar as medições do contrato.", "danger")
+            medicoes_contrato, resumo_medicoes = [], None
+
         responsaveis_ativos = [item for item in responsaveis if item["ativo"]]
         historico_responsaveis = [item for item in responsaveis if not item["ativo"]]
         return render_template(
@@ -199,6 +209,8 @@ def registrar_rotas_contratos(blueprint, conectar_banco):
             ativos_contrato=ativos_contrato,
             fiscalizacoes_contrato=fiscalizacoes_contrato,
             ocorrencias_contrato=ocorrencias_contrato,
+            medicoes_contrato=medicoes_contrato,
+            resumo_medicoes=resumo_medicoes,
         )
 
     @blueprint.route("/contratos/<int:contrato_id>/editar", methods=["GET", "POST"])

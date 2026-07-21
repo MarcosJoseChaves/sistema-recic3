@@ -9,10 +9,12 @@ from .contratos import registrar_rotas_contratos
 from .documentos import registrar_rotas_documentos
 from .empresas import registrar_rotas_empresas
 from .fiscalizacoes import registrar_rotas_fiscalizacoes
+from .medicoes import registrar_rotas_medicoes
 from .ocorrencias import registrar_rotas_ocorrencias
 from .planilhas import registrar_rotas_planilhas
 from .servidores import registrar_rotas_servidores
 from ..services.fiscalizacoes_service import FiscalizacaoService, FiscalizacaoServiceError
+from ..services.medicoes_service import MedicaoService, MedicaoServiceError
 
 
 def registrar_rotas(blueprint, conectar_banco):
@@ -29,7 +31,19 @@ def registrar_rotas(blueprint, conectar_banco):
                 "ocorrencias_abertas": 0, "ocorrencias_vencidas": 0,
                 "graves_criticas": 0, "fiscalizacoes_30_dias": 0,
             }
-        return render_template("fiscalizacao_contratos/painel.html", indicadores=indicadores)
+        try:
+            indicadores_medicoes = MedicaoService(conectar_banco).indicadores()
+        except Exception:
+            current_app.logger.exception("Falha ao carregar indicadores de medições")
+            indicadores_medicoes = {
+                "elaboracao": 0, "analise": 0, "devolvidas": 0,
+                "aprovadas_mes": 0, "liquido_aprovado_mes": 0, "glosas_mes": 0,
+            }
+        return render_template(
+            "fiscalizacao_contratos/painel.html",
+            indicadores=indicadores,
+            indicadores_medicoes=indicadores_medicoes,
+        )
 
     registrar_rotas_empresas(blueprint, conectar_banco)
     registrar_rotas_servidores(blueprint, conectar_banco)
@@ -40,3 +54,4 @@ def registrar_rotas(blueprint, conectar_banco):
     registrar_rotas_ativos(blueprint, conectar_banco)
     registrar_rotas_fiscalizacoes(blueprint, conectar_banco)
     registrar_rotas_ocorrencias(blueprint, conectar_banco)
+    registrar_rotas_medicoes(blueprint, conectar_banco)
