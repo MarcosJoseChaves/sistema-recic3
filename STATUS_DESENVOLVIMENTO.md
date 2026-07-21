@@ -477,7 +477,7 @@ expressa, é implementar fiscalizações e ocorrências contratuais.
 
 A Etapa 1 está registrada no commit `c52ecb8488577aa2d859917a003ef19808a42668`. A Etapa 2A está registrada no commit `02231cdc3dfc1e74a029483c72e46d78bc2cf142`, a aplicação da migração no commit `8d81d3a40e8ffe81a59e9a09d18589ba330f25ae` e a correção da consulta externa no commit `87d55dee19ca8c16e4e14be7888bd603e27c2473`.
 
-## Etapa 2H — Fiscalizações e ocorrências contratuais (aguardando revisão)
+## Etapa 2H — Fiscalizações e ocorrências contratuais (concluída)
 
 A implementação da Etapa 2H foi retomada e concluída tecnicamente em
 **20/07/2026**. O módulo agora possui cadastro, edição, detalhamento,
@@ -507,11 +507,47 @@ estado antigo. Também foi confirmado por teste que a reabertura de uma
 ocorrência regularizada preserva no histórico a data anterior e a justificativa.
 
 A migração idempotente e aditiva
-`008_criar_fc_fiscalizacoes_ocorrencias.sql` permanece somente como arquivo para
-revisão e **não foi executada**. Nenhuma tabela ou dado do banco foi alterado.
+`008_criar_fc_fiscalizacoes_ocorrencias.sql` foi aplicada em **20/07/2026** no
+ambiente configurado localmente. Foram criadas e verificadas as tabelas
+`fc_fiscalizacoes`, `fc_ocorrencias` e `fc_ocorrencia_acompanhamentos`, todas
+inicialmente com zero registros.
 
-### Próximo passo da Etapa 2H
+Foram conferidos colunas, tipos, obrigatoriedade, valores padrão, chaves
+primárias e estrangeiras, restrições e índices. A chave estrangeira composta
+entre ocorrência, fiscalização e contrato está ativa. As estruturas e as
+quantidades de registros das 51 tabelas anteriores foram comparadas antes e
+depois e permaneceram inalteradas. Nenhuma fiscalização, ocorrência ou
+acompanhamento foi cadastrado e nenhuma credencial foi registrada.
 
-Revisar o código, a migração 008 e as telas em ambiente local. Somente após
-nova autorização expressa, aplicar a migração 008 no ambiente configurado e
-realizar os testes manuais. Não criar commit definitivo antes dessa revisão.
+Os testes manuais da Etapa 2H foram concluídos e aprovados. Fiscalizações,
+ocorrências e acompanhamentos estão funcionando com a migração 008 aplicada.
+
+## Etapa 2H.1 — Reabertura de fiscalização finalizada (concluída)
+
+A melhoria de reabertura foi implementada em **20/07/2026**. Fiscalizações
+ativas e finalizadas podem voltar para `Em elaboração` mediante justificativa
+obrigatória. Fiscalizações em elaboração, canceladas ou inativas permanecem
+bloqueadas, inclusive por acesso direto à rota.
+
+Foi criada e aplicada a migração aditiva
+`009_criar_fc_fiscalizacao_eventos.sql`. A tabela
+`fc_fiscalizacao_eventos` foi verificada e está funcionando para armazenar
+permanentemente eventos de finalização, cancelamento e reabertura. O histórico
+não possui rotas de edição, inativação ou exclusão e não foram criados eventos
+retroativos.
+
+Finalização, cancelamento e reabertura bloqueiam a fiscalização com
+`SELECT ... FOR UPDATE`, inserem o evento, atualizam o status e a auditoria e
+somente então confirmam a transação. Qualquer falha provoca `rollback` completo.
+Ocorrências, acompanhamentos, ativos, documentos e demais vínculos não são
+alterados pela reabertura.
+
+Foram executados **230 testes automatizados**: os 217 anteriores e 13 novos da
+Etapa 2H.1. Resultado: **230 passaram e 0 falharam**. PostgreSQL e Cloudinary
+reais permaneceram bloqueados por simulações.
+
+Os testes manuais foram concluídos e aprovados em **21/07/2026**. Foram
+validados detalhes de fiscalizações antigas, nova fiscalização, finalização,
+reabertura com justificativa, retorno para `Em elaboração`, edição, nova
+finalização e o histórico completo. Ocorrências e acompanhamentos permaneceram
+preservados. A Etapa 2H e a melhoria 2H.1 estão concluídas.

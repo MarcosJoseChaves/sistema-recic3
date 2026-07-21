@@ -94,6 +94,19 @@ class FiscalizacaoService:
         except psycopg2.Error as erro:
             raise FiscalizacaoServiceError("Falha ao consultar fiscalização.") from erro
 
+    def listar_eventos_fiscalizacao(self, fiscalizacao_id):
+        try:
+            with self._conectar_banco() as conexao:
+                with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""SELECT ev.*,u.username AS usuario_nome
+                        FROM fc_fiscalizacao_eventos ev
+                        JOIN usuarios u ON u.id=ev.criado_por_usuario_id
+                        WHERE ev.fiscalizacao_id=%s
+                        ORDER BY ev.criado_em DESC,ev.id DESC""", (fiscalizacao_id,))
+                    return cursor.fetchall()
+        except psycopg2.Error as erro:
+            raise FiscalizacaoServiceError("Falha ao consultar o histórico da fiscalização.") from erro
+
     def _validar_referencias(self, cursor, dados, exigir_contrato_ativo):
         cursor.execute("SELECT ativo FROM fc_contratos WHERE id=%s", (dados["contrato_id"],))
         contrato = cursor.fetchone()
@@ -151,9 +164,12 @@ class FiscalizacaoService:
             raise FiscalizacaoServiceError("Falha ao atualizar fiscalização.") from erro
         finally: conexao.close()
 
-    def alterar_status(self, fiscalizacao_id, novo_status, usuario_id):
+    def alterar_status(self, fiscalizacao_id, novo_status, usuario_id, justificativa=None):
         if novo_status not in ("Finalizada", "Cancelada"):
             raise FiscalizacaoBloqueadaError("Status de fiscalização inválido.")
+        justificativa = str(justificativa or "").strip() or None
+        if novo_status == "Cancelada" and not justificativa:
+            raise FiscalizacaoBloqueadaError("Informe a justificativa do cancelamento.")
         conexao = self._conectar_banco()
         try:
             with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -165,12 +181,44 @@ class FiscalizacaoService:
                 obrigatorios = (atual["contrato_id"], atual["servidor_responsavel_id"], atual["data_fiscalizacao"], atual["tipo_fiscalizacao"], atual["objeto_verificado"], atual["resultado"])
                 if novo_status == "Finalizada" and not all(obrigatorios):
                     raise FiscalizacaoBloqueadaError("Complete os dados obrigatórios antes de finalizar.")
+                tipo_evento = "Finalização" if novo_status == "Finalizada" else "Cancelamento"
+                cursor.execute("""INSERT INTO fc_fiscalizacao_eventos
+                    (fiscalizacao_id,tipo_evento,status_anterior,status_novo,justificativa,criado_por_usuario_id)
+                    VALUES (%s,%s,%s,%s,%s,%s)""",
+                    (fiscalizacao_id,tipo_evento,atual["status"],novo_status,justificativa,usuario_id))
                 cursor.execute("UPDATE fc_fiscalizacoes SET status=%s,atualizado_em=CURRENT_TIMESTAMP,atualizado_por_usuario_id=%s WHERE id=%s", (novo_status,usuario_id,fiscalizacao_id))
             conexao.commit()
         except (FiscalizacaoNaoEncontradaError, FiscalizacaoBloqueadaError, psycopg2.Error) as erro:
             conexao.rollback()
             if not isinstance(erro, psycopg2.Error): raise
             raise FiscalizacaoServiceError("Falha ao alterar fiscalização.") from erro
+        finally: conexao.close()
+
+    def reabrir_fiscalizacao(self, fiscalizacao_id, justificativa, usuario_id):
+        justificativa = str(justificativa or "").strip()
+        if not justificativa:
+            raise FiscalizacaoBloqueadaError("Informe a justificativa da reabertura.")
+        conexao = self._conectar_banco()
+        try:
+            with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT status,ativo FROM fc_fiscalizacoes WHERE id=%s FOR UPDATE", (fiscalizacao_id,))
+                atual = cursor.fetchone()
+                if not atual:
+                    raise FiscalizacaoNaoEncontradaError("Fiscalização não encontrada.")
+                if not atual["ativo"] or atual["status"] != "Finalizada":
+                    raise FiscalizacaoBloqueadaError("Somente uma fiscalização ativa e finalizada pode ser reaberta.")
+                cursor.execute("""INSERT INTO fc_fiscalizacao_eventos
+                    (fiscalizacao_id,tipo_evento,status_anterior,status_novo,justificativa,criado_por_usuario_id)
+                    VALUES (%s,'Reabertura','Finalizada','Em elaboração',%s,%s)""",
+                    (fiscalizacao_id,justificativa,usuario_id))
+                cursor.execute("""UPDATE fc_fiscalizacoes SET status='Em elaboração',
+                    atualizado_em=CURRENT_TIMESTAMP,atualizado_por_usuario_id=%s WHERE id=%s""",
+                    (usuario_id,fiscalizacao_id))
+            conexao.commit()
+        except (FiscalizacaoNaoEncontradaError, FiscalizacaoBloqueadaError, psycopg2.Error) as erro:
+            conexao.rollback()
+            if not isinstance(erro, psycopg2.Error): raise
+            raise FiscalizacaoServiceError("Falha ao reabrir fiscalização.") from erro
         finally: conexao.close()
 
     def listar_do_contrato(self, contrato_id, limite=10):

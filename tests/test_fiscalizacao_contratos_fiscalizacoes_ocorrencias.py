@@ -4,14 +4,15 @@ import importlib
 import os
 import sys
 import unittest
-from datetime import date, time
+from copy import deepcopy
+from datetime import date, datetime, time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import psycopg2
 
 from modulos.fiscalizacao_contratos.services.fiscalizacoes_service import (
-    FiscalizacaoBloqueadaError, FiscalizacaoService,
+    FiscalizacaoBloqueadaError, FiscalizacaoService, FiscalizacaoServiceError,
     ReferenciaFiscalizacaoInvalidaError,
 )
 from modulos.fiscalizacao_contratos.services.ocorrencias_service import (
@@ -40,7 +41,7 @@ class FiscalizacaoServiceFake:
         self.contratos={1:{"id":1,"numero_contrato":"CT-001/2026","empresa_id":1,"empresa_nome":"Empresa","ativo":True},2:{"id":2,"numero_contrato":"CT-002/2026","empresa_id":1,"empresa_nome":"Empresa","ativo":False}}
         self.servidores={1:{"id":1,"nome":"Fiscal Ativo","matricula":"F-1","ativo":True},2:{"id":2,"nome":"Fiscal Inativo","matricula":"F-2","ativo":False}}
         self.empresas=[{"id":1,"razao_social":"Empresa"}]
-        self.itens={1:self._item(1)}; self.proximo=2; self.ultimo_filtro=None
+        self.itens={1:self._item(1)}; self.eventos={1:[]}; self.proximo=2; self.ultimo_filtro=None
     def _item(self,i,**extra):
         base={"id":i,"contrato_id":1,"servidor_responsavel_id":1,"data_fiscalizacao":date(2026,7,20),"hora_inicio":time(8),"hora_fim":time(9),"tipo_fiscalizacao":"Rotina","local_fiscalizacao":"Garagem","objeto_verificado":"Veículos e equipe","resultado":"Conforme","status":"Em elaboração","observacoes":None,"ativo":True,"numero_contrato":"CT-001/2026","processo_administrativo":"PA-1","empresa_nome":"Empresa","servidor_nome":"Fiscal Ativo","matricula":"F-1"};base.update(extra);return base
     def indicadores(self): return {"ocorrencias_abertas":2,"ocorrencias_vencidas":1,"graves_criticas":1,"fiscalizacoes_30_dias":3}
@@ -54,14 +55,22 @@ class FiscalizacaoServiceFake:
         if not s: raise ReferenciaFiscalizacaoInvalidaError("Servidor responsável não encontrado.")
         if not s["ativo"]: raise ReferenciaFiscalizacaoInvalidaError("O servidor responsável está inativo.")
     def criar(self,dados,usuario):
-        self._refs(dados);i=self.proximo;self.proximo+=1;self.itens[i]=self._item(i,**{**dados,"status":"Em elaboração"});return i
+        self._refs(dados);i=self.proximo;self.proximo+=1;self.itens[i]=self._item(i,**{**dados,"status":"Em elaboração"});self.eventos[i]=[];return i
     def atualizar(self,i,dados,usuario):
         if self.itens[i]["status"]!="Em elaboração": raise FiscalizacaoBloqueadaError("Bloqueada")
         self._refs(dados);self.itens[i].update(dados)
-    def alterar_status(self,i,status,usuario):
+    def alterar_status(self,i,status,usuario,justificativa=None):
         item=self.itens[i]
         if item["status"]!="Em elaboração" or not item["ativo"]: raise FiscalizacaoBloqueadaError("Bloqueada")
+        if status=="Cancelada" and not str(justificativa or "").strip(): raise FiscalizacaoBloqueadaError("Informe a justificativa")
+        self.eventos.setdefault(i,[]).append({"id":len(self.eventos.setdefault(i,[]))+1,"tipo_evento":"Finalização" if status=="Finalizada" else "Cancelamento","status_anterior":item["status"],"status_novo":status,"justificativa":justificativa,"criado_em":datetime(2026,7,20,10),"usuario_nome":"admin","criado_por_usuario_id":usuario})
         item["status"]=status
+    def reabrir_fiscalizacao(self,i,justificativa,usuario):
+        item=self.itens[i]
+        if item["status"]!="Finalizada" or not item["ativo"] or not str(justificativa or "").strip(): raise FiscalizacaoBloqueadaError("Bloqueada")
+        self.eventos.setdefault(i,[]).append({"id":len(self.eventos.setdefault(i,[]))+1,"tipo_evento":"Reabertura","status_anterior":"Finalizada","status_novo":"Em elaboração","justificativa":justificativa.strip(),"criado_em":datetime(2026,7,20,11),"usuario_nome":"admin","criado_por_usuario_id":usuario})
+        item["status"]="Em elaboração"
+    def listar_eventos_fiscalizacao(self,i): return list(reversed(self.eventos.setdefault(i,[])))
     def listar_do_contrato(self,contrato_id,limite=10): return [x for x in self.itens.values() if x["contrato_id"]==contrato_id]
 
 
@@ -135,8 +144,8 @@ class TestFiscalizacoesOcorrencias(unittest.TestCase):
             self.assertEqual(self.client.get(caminho).status_code,200,caminho)
         self.assertIn("Ocorrências vencidas".encode(),self.client.get("/fiscalizacao-contratos").data)
     def test_visitante_e_comum_bloqueados_em_todas_as_rotas(self):
-        caminhos_get=["/fiscalizacao-contratos/fiscalizacoes","/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1","/fiscalizacao-contratos/fiscalizacoes/1/editar","/fiscalizacao-contratos/ocorrencias","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1","/fiscalizacao-contratos/ocorrencias/1/editar","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"]
-        caminhos_post=["/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1/editar","/fiscalizacao-contratos/fiscalizacoes/1/finalizar","/fiscalizacao-contratos/fiscalizacoes/1/cancelar","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1/editar","/fiscalizacao-contratos/ocorrencias/1/inativar","/fiscalizacao-contratos/ocorrencias/1/reativar","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"]
+        caminhos_get=["/fiscalizacao-contratos/fiscalizacoes","/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1","/fiscalizacao-contratos/fiscalizacoes/1/editar","/fiscalizacao-contratos/fiscalizacoes/1/cancelar","/fiscalizacao-contratos/fiscalizacoes/1/reabrir","/fiscalizacao-contratos/ocorrencias","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1","/fiscalizacao-contratos/ocorrencias/1/editar","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"]
+        caminhos_post=["/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1/editar","/fiscalizacao-contratos/fiscalizacoes/1/finalizar","/fiscalizacao-contratos/fiscalizacoes/1/cancelar","/fiscalizacao-contratos/fiscalizacoes/1/reabrir","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1/editar","/fiscalizacao-contratos/ocorrencias/1/inativar","/fiscalizacao-contratos/ocorrencias/1/reativar","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"]
         self.assertTrue(all(self.client.get(x).status_code==302 for x in caminhos_get));self.autenticar(2);self.assertTrue(all(self.client.get(x).status_code==403 for x in caminhos_get));self.assertTrue(all(self.client.post(x).status_code==403 for x in caminhos_post))
     def test_cria_fiscalizacao_com_status_inicial(self):
         self.autenticar(1);r=self.client.post("/fiscalizacao-contratos/fiscalizacoes/nova",data=self.dados_fiscal());self.assertEqual(r.status_code,302);self.assertEqual(self.fiscal.itens[2]["status"],"Em elaboração")
@@ -151,9 +160,50 @@ class TestFiscalizacoesOcorrencias(unittest.TestCase):
     def test_edita_somente_em_elaboracao_e_revalida_contrato(self):
         self.autenticar(1);self.assertEqual(self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/editar",data=self.dados_fiscal(local_fiscalizacao="Pátio")).status_code,302);self.fiscal.itens[1]["status"]="Finalizada";self.assertEqual(self.client.get("/fiscalizacao-contratos/fiscalizacoes/1/editar").status_code,302)
     def test_finaliza_e_cancela_sem_apagar(self):
-        self.autenticar(1);self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/finalizar");self.assertEqual(self.fiscal.itens[1]["status"],"Finalizada");self.fiscal.itens[2]=self.fiscal._item(2);self.client.post("/fiscalizacao-contratos/fiscalizacoes/2/cancelar");self.assertEqual(self.fiscal.itens[2]["status"],"Cancelada");self.assertIn(2,self.fiscal.itens)
+        self.autenticar(1);self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/finalizar");self.assertEqual(self.fiscal.itens[1]["status"],"Finalizada");self.fiscal.itens[2]=self.fiscal._item(2);self.client.post("/fiscalizacao-contratos/fiscalizacoes/2/cancelar",data={"justificativa":"Preenchimento indevido"});self.assertEqual(self.fiscal.itens[2]["status"],"Cancelada");self.assertIn(2,self.fiscal.itens)
     def test_finalizada_ou_cancelada_nao_muda_novamente(self):
         self.fiscal.itens[1]["status"]="Finalizada";self.autenticar(1);self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/cancelar");self.assertEqual(self.fiscal.itens[1]["status"],"Finalizada")
+
+    def test_botao_reabrir_aparece_somente_finalizada_ativa(self):
+        self.autenticar(1)
+        self.fiscal.itens[1]["status"]="Finalizada"
+        self.assertIn("Reabrir fiscalização".encode(),self.client.get("/fiscalizacao-contratos/fiscalizacoes/1").data)
+        self.fiscal.itens[1]["status"]="Em elaboração"
+        self.assertNotIn("Reabrir fiscalização".encode(),self.client.get("/fiscalizacao-contratos/fiscalizacoes/1").data)
+        self.fiscal.itens[1]["status"]="Cancelada"
+        self.assertNotIn("Reabrir fiscalização".encode(),self.client.get("/fiscalizacao-contratos/fiscalizacoes/1").data)
+
+    def test_reabertura_exige_justificativa_e_bloqueia_status_invalido(self):
+        self.autenticar(1);self.fiscal.itens[1]["status"]="Finalizada"
+        self.assertEqual(self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/reabrir",data={"justificativa":"   "}).status_code,400)
+        self.assertEqual(self.fiscal.itens[1]["status"],"Finalizada")
+        self.fiscal.itens[1]["status"]="Em elaboração"
+        self.assertEqual(self.client.get("/fiscalizacao-contratos/fiscalizacoes/1/reabrir").status_code,302)
+        self.fiscal.itens[1]["status"]="Cancelada"
+        self.assertEqual(self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/reabrir",data={"justificativa":"Erro"}).status_code,302)
+
+    def test_reabertura_preserva_vinculos_e_permite_editar_e_finalizar_novamente(self):
+        self.autenticar(1);self.fiscal.itens[1]["status"]="Finalizada";self.ocorr.itens[1]["fiscalizacao_id"]=1
+        ocorrencias=deepcopy(self.ocorr.itens);acompanhamentos=deepcopy(self.ocorr.acompanhamentos)
+        self.assertEqual(self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/reabrir",data={"justificativa":"Complementar informação"}).status_code,302)
+        self.assertEqual(self.fiscal.itens[1]["status"],"Em elaboração");self.assertEqual(ocorrencias,self.ocorr.itens);self.assertEqual(acompanhamentos,self.ocorr.acompanhamentos)
+        self.assertEqual(self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/editar",data=self.dados_fiscal(local_fiscalizacao="Pátio")).status_code,302)
+        self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/finalizar")
+        self.assertEqual([e["tipo_evento"] for e in self.fiscal.eventos[1]],["Reabertura","Finalização"])
+
+    def test_varias_reaberturas_preservam_historico_em_ordem_recente(self):
+        self.autenticar(1);self.fiscal.itens[1]["status"]="Finalizada"
+        self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/reabrir",data={"justificativa":"Primeira complementação"})
+        self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/finalizar")
+        self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/reabrir",data={"justificativa":"Segunda complementação"})
+        pagina=self.client.get("/fiscalizacao-contratos/fiscalizacoes/1").data.decode()
+        self.assertEqual(len(self.fiscal.eventos[1]),3);self.assertLess(pagina.index("Segunda complementação"),pagina.index("Primeira complementação"))
+
+    def test_finalizacao_e_cancelamento_geram_eventos(self):
+        self.autenticar(1);self.client.post("/fiscalizacao-contratos/fiscalizacoes/1/finalizar")
+        evento=self.fiscal.eventos[1][0];self.assertEqual((evento["tipo_evento"],evento["status_anterior"],evento["status_novo"]),("Finalização","Em elaboração","Finalizada"));self.assertEqual(evento["criado_por_usuario_id"],1);self.assertTrue(evento["criado_em"])
+        self.fiscal.itens[2]=self.fiscal._item(2);self.client.post("/fiscalizacao-contratos/fiscalizacoes/2/cancelar",data={"justificativa":"Registro incorreto"})
+        self.assertEqual(self.fiscal.eventos[2][0]["tipo_evento"],"Cancelamento");self.assertEqual(self.fiscal.eventos[2][0]["justificativa"],"Registro incorreto")
     def test_cria_ocorrencia_independente_e_em_fiscalizacao(self):
         self.autenticar(1);self.assertEqual(self.client.post("/fiscalizacao-contratos/ocorrencias/nova",data=self.dados_ocorr()).status_code,302);self.fiscal.itens[2]=self.fiscal._item(2);r=self.client.post("/fiscalizacao-contratos/ocorrencias/nova",data=self.dados_ocorr(fiscalizacao_id="2"));self.assertEqual(r.status_code,302);self.assertEqual(self.ocorr.itens[3]["status"],"Aberta")
     def test_fiscalizacao_e_ativo_de_outro_contrato_sao_rejeitados(self):
@@ -200,10 +250,18 @@ class TestFiscalizacoesOcorrencias(unittest.TestCase):
         for comando in ("DROP","TRUNCATE","DELETE","UPDATE","INSERT","ALTER TABLE"):self.assertNotIn(comando,sql)
     def test_codigo_nao_usa_delete_e_rotas_exigem_admin(self):
         raiz=Path(__file__).parents[1]/"modulos/fiscalizacao_contratos";fontes="\n".join((raiz/p).read_text(encoding="utf-8") for p in ("services/fiscalizacoes_service.py","services/ocorrencias_service.py"));self.assertNotIn("DELETE FROM",fontes.upper());rotas="\n".join((raiz/p).read_text(encoding="utf-8") for p in ("routes/fiscalizacoes.py","routes/ocorrencias.py"));self.assertEqual(rotas.count("@blueprint.route"),rotas.count("@admin_required"))
+    def test_migracao_009_e_aditiva_e_preserva_eventos(self):
+        caminho=Path(__file__).parents[1]/"modulos/fiscalizacao_contratos/migrations/009_criar_fc_fiscalizacao_eventos.sql";sql=caminho.read_text(encoding="utf-8").upper()
+        self.assertIn("CREATE TABLE IF NOT EXISTS FC_FISCALIZACAO_EVENTOS",sql);self.assertIn("TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP",sql);self.assertIn("CRIADO_POR_USUARIO_ID INTEGER NOT NULL",sql);self.assertIn("REABERTURA",sql);self.assertIn("FINALIZAÇÃO",sql);self.assertIn("CANCELAMENTO",sql)
+        for comando in ("DROP","TRUNCATE","DELETE","UPDATE","INSERT","ALTER TABLE"):self.assertNotIn(comando,sql)
     def test_barreira_global_permanece_sem_uso_real(self): MOCK_CONNECT.assert_not_called()
 
 
 class TestTransacoesEtapa2H(unittest.TestCase):
+    @staticmethod
+    def _fiscalizacao(status="Finalizada",ativo=True):
+        return {"id":1,"ativo":ativo,"status":status,"contrato_id":1,"servidor_responsavel_id":1,"data_fiscalizacao":date.today(),"tipo_fiscalizacao":"Rotina","objeto_verificado":"Objeto","resultado":"Conforme"}
+
     def test_edicao_trava_ocorrencia_e_bloqueia_quando_ha_acompanhamento(self):
         conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value
         cursor.fetchone.side_effect=[{"ativo":True},{"possui_acompanhamento":True}]
@@ -216,6 +274,47 @@ class TestTransacoesEtapa2H(unittest.TestCase):
         conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value;cursor.fetchone.return_value={"id":1,"ativo":True,"status":"Em elaboração","contrato_id":1,"servidor_responsavel_id":1,"data_fiscalizacao":date.today(),"tipo_fiscalizacao":"Rotina","objeto_verificado":"Objeto","resultado":"Conforme"};cursor.execute.side_effect=[None,psycopg2.OperationalError("falha simulada")]
         with self.assertRaises(Exception):FiscalizacaoService(lambda:conexao).alterar_status(1,"Finalizada",1)
         conexao.rollback.assert_called_once();conexao.commit.assert_not_called()
+
+    def test_reabertura_grava_evento_e_status_na_mesma_transacao(self):
+        conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value;cursor.fetchone.return_value=self._fiscalizacao()
+        FiscalizacaoService(lambda:conexao).reabrir_fiscalizacao(1,"Complementar dados",7)
+        self.assertIn("FOR UPDATE",cursor.execute.call_args_list[0].args[0]);self.assertIn("INSERT INTO fc_fiscalizacao_eventos",cursor.execute.call_args_list[1].args[0]);self.assertIn("UPDATE fc_fiscalizacoes",cursor.execute.call_args_list[2].args[0])
+        self.assertEqual(cursor.execute.call_args_list[1].args[1],(1,"Complementar dados",7));conexao.commit.assert_called_once();conexao.rollback.assert_not_called()
+
+    def test_reabertura_bloqueia_elaboracao_cancelada_inativa_e_justificativa_vazia(self):
+        for status,ativo in (("Em elaboração",True),("Cancelada",True),("Finalizada",False)):
+            conexao=MagicMock();conexao.cursor.return_value.__enter__.return_value.fetchone.return_value=self._fiscalizacao(status,ativo)
+            with self.assertRaises(FiscalizacaoBloqueadaError):FiscalizacaoService(lambda:conexao).reabrir_fiscalizacao(1,"Motivo",1)
+            conexao.rollback.assert_called_once();conexao.commit.assert_not_called()
+        conectar=MagicMock()
+        with self.assertRaises(FiscalizacaoBloqueadaError):FiscalizacaoService(conectar).reabrir_fiscalizacao(1,"   ",1)
+        conectar.assert_not_called()
+
+    def test_falha_ao_inserir_evento_de_reabertura_executa_rollback(self):
+        conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value;cursor.fetchone.return_value=self._fiscalizacao();cursor.execute.side_effect=[None,psycopg2.OperationalError("falha simulada")]
+        with self.assertRaises(FiscalizacaoServiceError):FiscalizacaoService(lambda:conexao).reabrir_fiscalizacao(1,"Motivo",1)
+        conexao.rollback.assert_called_once();conexao.commit.assert_not_called();self.assertEqual(cursor.execute.call_count,2)
+
+    def test_falha_ao_atualizar_reabertura_desfaz_evento(self):
+        conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value;cursor.fetchone.return_value=self._fiscalizacao();cursor.execute.side_effect=[None,None,psycopg2.OperationalError("falha simulada")]
+        with self.assertRaises(FiscalizacaoServiceError):FiscalizacaoService(lambda:conexao).reabrir_fiscalizacao(1,"Motivo",1)
+        conexao.rollback.assert_called_once();conexao.commit.assert_not_called()
+
+    def test_finalizacao_e_cancelamento_inserem_evento_antes_da_atualizacao(self):
+        for novo,justificativa,tipo in (("Finalizada",None,"Finalização"),("Cancelada","Registro incorreto","Cancelamento")):
+            conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value;cursor.fetchone.return_value=self._fiscalizacao("Em elaboração")
+            FiscalizacaoService(lambda:conexao).alterar_status(1,novo,9,justificativa)
+            self.assertIn("INSERT INTO fc_fiscalizacao_eventos",cursor.execute.call_args_list[1].args[0]);self.assertEqual(cursor.execute.call_args_list[1].args[1],(1,tipo,"Em elaboração",novo,justificativa,9));self.assertIn("UPDATE fc_fiscalizacoes",cursor.execute.call_args_list[2].args[0]);conexao.commit.assert_called_once()
+
+    def test_cancelamento_exige_justificativa_sem_abrir_conexao(self):
+        conectar=MagicMock()
+        with self.assertRaises(FiscalizacaoBloqueadaError):FiscalizacaoService(conectar).alterar_status(1,"Cancelada",1,"  ")
+        conectar.assert_not_called()
+
+    def test_historico_consulta_usuario_e_ordena_mais_recente(self):
+        conexao=MagicMock();cursor=conexao.__enter__.return_value.cursor.return_value.__enter__.return_value;cursor.fetchall.return_value=[]
+        FiscalizacaoService(lambda:conexao).listar_eventos_fiscalizacao(1)
+        consulta=cursor.execute.call_args.args[0];self.assertIn("JOIN usuarios",consulta);self.assertIn("ORDER BY ev.criado_em DESC,ev.id DESC",consulta);self.assertEqual(cursor.execute.call_args.args[1],(1,))
     def _conexao_acompanhamento(self,falha_na_chamada):
         conexao=MagicMock();cursor=conexao.cursor.return_value.__enter__.return_value;cursor.fetchone.return_value={"id":1,"ativo":True,"status":"Aberta","data_identificacao":date(2026,7,1),"data_regularizacao":None};efeitos=[None,None,None];efeitos[falha_na_chamada-1]=psycopg2.OperationalError("falha simulada");cursor.execute.side_effect=efeitos;return conexao
     def test_falha_no_historico_executa_rollback(self):

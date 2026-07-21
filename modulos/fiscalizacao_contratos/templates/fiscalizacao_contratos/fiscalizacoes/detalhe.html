@@ -1,7 +1,49 @@
-{% extends "fiscalizacao_contratos/layout.html" %}{% block title %}Fiscalização{% endblock %}{% block page_title %}Fiscalização de {{ fiscalizacao.data_fiscalizacao|fc_data }}{% endblock %}
-{% block header_actions %}<a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_lista') }}">Lista</a>{% endblock %}{% block content %}
-<div class="card content-card mb-4"><div class="card-header d-flex justify-content-between"><span>Dados da fiscalização</span><span class="badge {{ 'text-bg-success' if fiscalizacao.status=='Finalizada' else ('text-bg-secondary' if fiscalizacao.status=='Cancelada' else 'text-bg-warning') }}">{{ fiscalizacao.status }}</span></div><div class="card-body"><dl class="row detail-list mb-0">
-{% for rotulo,valor in [('Contrato',fiscalizacao.numero_contrato),('Empresa',fiscalizacao.empresa_nome),('Responsável',fiscalizacao.servidor_nome),('Data',fiscalizacao.data_fiscalizacao|fc_data),('Tipo',fiscalizacao.tipo_fiscalizacao),('Local',fiscalizacao.local_fiscalizacao),('Objeto verificado',fiscalizacao.objeto_verificado),('Resultado',fiscalizacao.resultado),('Observações',fiscalizacao.observacoes)] %}<dt class="col-md-3">{{ rotulo }}</dt><dd class="col-md-9">{{ valor or 'Não informado' }}</dd>{% endfor %}<dt class="col-md-3">Horário</dt><dd class="col-md-9">{{ fiscalizacao.hora_inicio|fc_hora }} a {{ fiscalizacao.hora_fim|fc_hora }}</dd></dl></div></div>
-<div class="card content-card mb-4"><div class="card-header d-flex justify-content-between"><span>Ocorrências vinculadas</span><a class="btn btn-sm btn-danger" href="{{ url_for('fiscalizacao_contratos.ocorrencias_nova',contrato_id=fiscalizacao.contrato_id,fiscalizacao_id=fiscalizacao.id) }}">Registrar ocorrência</a></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Título</th><th>Gravidade</th><th>Status</th><th>Prazo</th></tr></thead><tbody>{% for o in ocorrencias %}<tr><td><a href="{{ url_for('fiscalizacao_contratos.ocorrencias_detalhe',ocorrencia_id=o.id) }}">{{ o.titulo }}</a></td><td><span class="badge {{ 'text-bg-danger' if o.gravidade in ('Grave','Crítica') else 'text-bg-warning' }}">{{ o.gravidade }}</span></td><td>{{ o.status }}</td><td class="{{ 'text-danger fw-bold' if o.vencida else '' }}">{{ o.prazo_correcao|fc_data }}</td></tr>{% else %}<tr><td colspan="4" class="text-center text-muted py-3">Nenhuma ocorrência.</td></tr>{% endfor %}</tbody></table></div></div>
-{% if fiscalizacao.status=='Em elaboração' and fiscalizacao.ativo %}<div class="d-flex flex-wrap justify-content-end gap-2"><a class="btn btn-primary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_editar',fiscalizacao_id=fiscalizacao.id) }}">Editar</a><form method="post" action="{{ url_for('fiscalizacao_contratos.fiscalizacoes_finalizar',fiscalizacao_id=fiscalizacao.id) }}" onsubmit="return confirm('Finalizar esta fiscalização?');"><button class="btn btn-success">Finalizar</button></form><form method="post" action="{{ url_for('fiscalizacao_contratos.fiscalizacoes_cancelar',fiscalizacao_id=fiscalizacao.id) }}" onsubmit="return confirm('Cancelar preservando o registro?');"><button class="btn btn-outline-danger">Cancelar</button></form></div>{% endif %}
+{% extends "fiscalizacao_contratos/layout.html" %}
+{% block title %}Fiscalização{% endblock %}
+{% block page_title %}Fiscalização de {{ fiscalizacao.data_fiscalizacao|fc_data }}{% endblock %}
+{% block header_actions %}<a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_lista') }}">Lista</a>{% endblock %}
+{% block content %}
+<div class="card content-card mb-4">
+  <div class="card-header d-flex justify-content-between">
+    <span>Dados da fiscalização</span>
+    <span class="badge {{ 'text-bg-success' if fiscalizacao.status=='Finalizada' else ('text-bg-secondary' if fiscalizacao.status=='Cancelada' else 'text-bg-warning') }}">{{ fiscalizacao.status }}</span>
+  </div>
+  <div class="card-body"><dl class="row detail-list mb-0">
+    {% for rotulo,valor in [('Contrato',fiscalizacao.numero_contrato),('Empresa',fiscalizacao.empresa_nome),('Responsável',fiscalizacao.servidor_nome),('Data',fiscalizacao.data_fiscalizacao|fc_data),('Tipo',fiscalizacao.tipo_fiscalizacao),('Local',fiscalizacao.local_fiscalizacao),('Objeto verificado',fiscalizacao.objeto_verificado),('Resultado',fiscalizacao.resultado),('Observações',fiscalizacao.observacoes)] %}
+    <dt class="col-md-3">{{ rotulo }}</dt><dd class="col-md-9">{{ valor or 'Não informado' }}</dd>
+    {% endfor %}
+    <dt class="col-md-3">Horário</dt><dd class="col-md-9">{{ fiscalizacao.hora_inicio|fc_hora }} a {{ fiscalizacao.hora_fim|fc_hora }}</dd>
+  </dl></div>
+</div>
+
+<div class="card content-card mb-4">
+  <div class="card-header d-flex justify-content-between"><span>Ocorrências vinculadas</span><a class="btn btn-sm btn-danger" href="{{ url_for('fiscalizacao_contratos.ocorrencias_nova',contrato_id=fiscalizacao.contrato_id,fiscalizacao_id=fiscalizacao.id) }}">Registrar ocorrência</a></div>
+  <div class="table-responsive"><table class="table mb-0"><thead><tr><th>Título</th><th>Gravidade</th><th>Status</th><th>Prazo</th></tr></thead><tbody>
+    {% for o in ocorrencias %}<tr><td><a href="{{ url_for('fiscalizacao_contratos.ocorrencias_detalhe',ocorrencia_id=o.id) }}">{{ o.titulo }}</a></td><td><span class="badge {{ 'text-bg-danger' if o.gravidade in ('Grave','Crítica') else 'text-bg-warning' }}">{{ o.gravidade }}</span></td><td>{{ o.status }}</td><td class="{{ 'text-danger fw-bold' if o.vencida else '' }}">{{ o.prazo_correcao|fc_data }}</td></tr>
+    {% else %}<tr><td colspan="4" class="text-center text-muted py-3">Nenhuma ocorrência.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+
+<div class="card content-card mb-4">
+  <div class="card-header">Histórico de situação</div>
+  <div class="table-responsive"><table class="table mb-0"><thead><tr><th>Data e hora</th><th>Evento</th><th>Alteração</th><th>Justificativa</th><th>Usuário</th></tr></thead><tbody>
+    {% for evento in eventos %}<tr>
+      <td>{{ evento.criado_em.strftime('%d/%m/%Y %H:%M') if evento.criado_em else 'Não informado' }}</td>
+      <td>{{ evento.tipo_evento }}</td>
+      <td>{{ evento.status_anterior }} → {{ evento.status_novo }}</td>
+      <td>{{ evento.justificativa or 'Não informada' }}</td>
+      <td>{{ evento.usuario_nome }}</td>
+    </tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-3">Nenhum evento registrado. O histórico começa após a migração 009.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+
+{% if fiscalizacao.status=='Em elaboração' and fiscalizacao.ativo %}
+<div class="d-flex flex-wrap justify-content-end gap-2">
+  <a class="btn btn-primary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_editar',fiscalizacao_id=fiscalizacao.id) }}">Editar</a>
+  <form method="post" action="{{ url_for('fiscalizacao_contratos.fiscalizacoes_finalizar',fiscalizacao_id=fiscalizacao.id) }}" onsubmit="return confirm('Finalizar esta fiscalização?');"><button class="btn btn-success">Finalizar</button></form>
+  <a class="btn btn-outline-danger" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_cancelar',fiscalizacao_id=fiscalizacao.id) }}">Cancelar</a>
+</div>
+{% elif fiscalizacao.status=='Finalizada' and fiscalizacao.ativo %}
+<div class="d-flex justify-content-end"><a class="btn btn-warning" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_reabrir',fiscalizacao_id=fiscalizacao.id) }}">Reabrir fiscalização</a></div>
+{% endif %}
 {% endblock %}
