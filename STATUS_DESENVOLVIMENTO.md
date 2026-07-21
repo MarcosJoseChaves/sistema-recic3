@@ -552,10 +552,10 @@ reabertura com justificativa, retorno para `Em elaboração`, edição, nova
 finalização e o histórico completo. Ocorrências e acompanhamentos permaneceram
 preservados. A Etapa 2H e a melhoria 2H.1 estão concluídas.
 
-## Etapa 2I — Medições contratuais (implementada para revisão)
+## Etapa 2I — Medições contratuais (concluída)
 
-A Etapa 2I foi implementada tecnicamente em **21/07/2026**, sem acessar o banco
-real e sem executar a migração. O módulo agora possui cadastro de medições por
+A Etapa 2I foi implementada tecnicamente em **21/07/2026**. O módulo agora
+possui cadastro de medições por
 contrato e competência, itens manuais ou copiados como fotografia da planilha
 orçamentária, acréscimos, descontos, glosas e vínculos com documentos já
 armazenados pelo sistema.
@@ -573,7 +573,7 @@ nenhuma operação utiliza `DELETE`.
 Foi criada a migração aditiva e idempotente
 `010_criar_fc_medicoes.sql`, que prepara `fc_medicoes`, `fc_medicao_itens`,
 `fc_medicao_ajustes`, `fc_medicao_documentos` e `fc_medicao_eventos`, com suas
-chaves, restrições e índices. **A migração 010 ainda não foi executada.**
+chaves, restrições e índices.
 
 Foram preservados os **230 testes anteriores** e acrescentados **38 testes** da
 Etapa 2I, que cobrem os 72 cenários obrigatórios de permissão, validação,
@@ -593,6 +593,59 @@ Foram adicionados bloqueios nas telas acessadas diretamente por URL, validação
 defensiva de ajustes e categorias de documentos, testes de concorrência e uma
 matriz relacionando os 72 requisitos obrigatórios aos testes automatizados.
 
-A Etapa 2I está pronta para revisão técnica e funcional. O próximo passo
-seguro, somente mediante nova autorização, é revisar e depois aplicar
-exclusivamente a migração 010 no ambiente configurado.
+A Etapa 2I foi concluída técnica e funcionalmente.
+
+### Aplicação da migração 010
+
+Em **21/07/2026**, a migração `010_criar_fc_medicoes.sql` foi aplicada no
+ambiente configurado e verificada. Foram criadas as cinco tabelas previstas:
+`fc_medicoes`, `fc_medicao_itens`, `fc_medicao_ajustes`,
+`fc_medicao_documentos` e `fc_medicao_eventos`.
+
+As colunas, tipos, obrigatoriedades, valores padrão, chaves estrangeiras,
+restrições e índices foram conferidos. A quantidade inicial verificada foi de
+**zero registros em cada uma das cinco tabelas**. Nenhuma medição, item, ajuste,
+vínculo de documento ou evento foi criado automaticamente.
+
+As contagens de registros e a estrutura das tabelas anteriores foram comparadas
+antes e depois da execução e permaneceram inalteradas. Nenhum dado anterior foi
+apagado ou atualizado e nenhuma credencial foi registrada neste documento.
+
+### Envio de documentos pela medição
+
+Em **21/07/2026**, a área de documentos comprobatórios da medição passou a
+oferecer duas opções: vincular um documento existente ou enviar um arquivo novo.
+O novo arquivo é validado, armazenado de forma privada pelo serviço de documentos
+já existente e vinculado automaticamente à medição.
+
+O cadastro do documento e o vínculo com a medição são confirmados na mesma
+transação. Se o banco não concluir a operação depois do envio, ocorre rollback e
+o arquivo recém-enviado é removido do armazenamento para evitar arquivo órfão.
+Também foi explicitada, na tela de detalhes, a composição `valor bruto +
+acréscimos - descontos - glosas = valor líquido`, com sinais e formatação
+monetária brasileira. O cenário manual de R$ 7.500,00 + R$ 5,00 - R$ 0,00 -
+R$ 10,00 = R$ 7.495,00 foi coberto por teste de cálculo e de renderização.
+
+Foram executados **274 testes automatizados**, todos aprovados, sem acesso ao
+PostgreSQL ou ao Cloudinary reais.
+
+### Encerramento da Etapa 2I
+
+Os testes manuais foram concluídos e aprovados em **21/07/2026**. Foram
+validados cadastro, competência, período, itens manuais e da planilha,
+fiscalizações, ocorrências, ajustes, documentos, eventos, indicadores e a
+exibição das medições nos contratos.
+
+Os cálculos com `Decimal` e `ROUND_HALF_UP`, o recálculo no servidor, o envio
+para análise, a devolução, a aprovação, o cancelamento e o versionamento foram
+validados. Versões aprovadas permanecem imutáveis e revisões preservam os itens,
+ajustes, documentos e eventos das versões anteriores.
+
+Itens, ajustes e vínculos são inativados sem exclusão física. Documentos
+armazenados não são apagados pelas operações normais da medição. A aprovação é
+apresentada como uma etapa administrativa distinta do pagamento, e a glosa é
+apresentada somente como redução do valor medido, não como multa ou sanção.
+
+A migração 010 e as cinco tabelas de medições estão aplicadas, verificadas e
+funcionando. A Etapa 2I está encerrada com **274 testes automatizados aprovados,
+0 falhas e 0 erros**, além dos testes manuais aprovados.

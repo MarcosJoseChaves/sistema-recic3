@@ -1,16 +1,21 @@
 """Persistência transacional das medições contratuais."""
 
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from .cloudinary_storage import CloudinaryStorageError
 from ..validacoes_medicoes import (
     CATEGORIAS_DOCUMENTO_MEDICAO,
     CENTAVOS,
     TIPOS_AJUSTE,
     calcular_valor_item,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MedicaoServiceError(Exception): pass
@@ -375,6 +380,61 @@ class MedicaoService:
             if isinstance(erro,psycopg2.IntegrityError): raise MedicaoDuplicadaError("Este documento já está vinculado à medição.") from erro
             raise MedicaoServiceError("Falha ao vincular documento.") from erro
         finally: conexao.close()
+
+    def enviar_documento(self,medicao_id,dados,arquivo,categoria,observacoes,usuario_id,armazenamento):
+        """Envia um documento novo e o vincula à medição atomicamente."""
+        if categoria not in CATEGORIAS_DOCUMENTO_MEDICAO:
+            raise ReferenciaMedicaoInvalidaError("Selecione uma categoria de documento válida.")
+        conexao=None
+        enviado=None
+        try:
+            conexao=self._conectar_banco()
+            with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
+                medicao=self._obter_bloqueada(cursor,medicao_id);self._exigir_editavel(medicao)
+                enviado=armazenamento.enviar(arquivo,medicao["contrato_id"],None)
+                cursor.execute("""INSERT INTO fc_documentos (
+                    contrato_id,aditivo_id,categoria,titulo,descricao,nome_original,
+                    armazenamento_provedor,armazenamento_chave,armazenamento_versao,
+                    mime_type,extensao,tamanho_bytes,sha256,
+                    criado_por_usuario_id,atualizado_por_usuario_id
+                ) VALUES (
+                    %s,NULL,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                ) RETURNING id""",(
+                    medicao["contrato_id"],dados["categoria"],dados["titulo"],
+                    dados.get("descricao"),arquivo["nome_original"],
+                    enviado["armazenamento_provedor"],enviado["armazenamento_chave"],
+                    enviado.get("armazenamento_versao"),arquivo["mime_type"],
+                    arquivo["extensao"],arquivo["tamanho_bytes"],arquivo["sha256"],
+                    usuario_id,usuario_id,
+                ))
+                documento_id=cursor.fetchone()["id"]
+                cursor.execute("""INSERT INTO fc_medicao_documentos
+                    (medicao_id,documento_id,categoria,observacoes,
+                     criado_por_usuario_id,atualizado_por_usuario_id)
+                    VALUES (%s,%s,%s,%s,%s,%s)""",
+                    (medicao_id,documento_id,categoria,observacoes,usuario_id,usuario_id))
+            conexao.commit()
+            return documento_id
+        except (MedicaoBloqueadaError,ReferenciaMedicaoInvalidaError,CloudinaryStorageError):
+            if conexao: conexao.rollback()
+            if enviado: self._remover_upload_incompleto(armazenamento,enviado)
+            raise
+        except Exception as erro:
+            if conexao: conexao.rollback()
+            if enviado: self._remover_upload_incompleto(armazenamento,enviado)
+            raise MedicaoServiceError("Falha ao enviar documento da medição.") from erro
+        finally:
+            if conexao: conexao.close()
+
+    @staticmethod
+    def _remover_upload_incompleto(armazenamento,enviado):
+        try:
+            armazenamento.remover(enviado["armazenamento_chave"])
+        except CloudinaryStorageError as erro:
+            LOGGER.warning(
+                "Falha na limpeza compensatória do documento da medição: tipo_erro=%s",
+                type(erro).__name__,
+            )
 
     def inativar_documento(self,medicao_id,vinculo_id,usuario_id):
         conexao=self._conectar_banco()

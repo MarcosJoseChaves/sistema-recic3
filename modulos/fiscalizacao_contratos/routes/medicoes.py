@@ -6,6 +6,7 @@ from flask import current_app, flash, redirect, render_template, request, url_fo
 from flask_login import current_user
 
 from ..permissions import admin_required
+from ..services.cloudinary_storage import CloudinaryStorage, CloudinaryStorageError
 from ..services.medicoes_service import (
     MedicaoBloqueadaError,
     MedicaoDuplicadaError,
@@ -24,6 +25,11 @@ from ..validacoes_medicoes import (
     normalizar_e_validar_item,
     normalizar_e_validar_medicao,
 )
+from ..validacoes_documentos import (
+    ValidacaoDocumentoError,
+    limite_upload_bytes,
+    validar_arquivo_documento,
+)
 
 
 ERROS_NEGOCIO = (
@@ -32,6 +38,16 @@ ERROS_NEGOCIO = (
     MedicaoNaoEncontradaError,
     ReferenciaMedicaoInvalidaError,
 )
+
+TIPO_DOCUMENTO_POR_CATEGORIA_MEDICAO = {
+    "Memória de cálculo": "Planilha Orçamentária",
+    "Relatório de medição": "Relatório",
+    "Evidência da execução": "Comprovante",
+    "Nota fiscal": "Comprovante",
+    "Planilha": "Planilha Orçamentária",
+    "Ordem de serviço": "Ordem de Serviço",
+    "Outro": "Outro",
+}
 
 
 def registrar_rotas_medicoes(blueprint, conectar_banco):
@@ -397,6 +413,70 @@ def registrar_rotas_medicoes(blueprint, conectar_banco):
                 documentos=documentos,
                 categorias=CATEGORIAS_DOCUMENTO_MEDICAO,
                 vinculo=dados,
+            ),
+            400 if request.method == "POST" else 200,
+        )
+
+    @blueprint.route("/medicoes/<int:medicao_id>/documentos/enviar", methods=["GET", "POST"])
+    @admin_required
+    def medicoes_documento_enviar(medicao_id):
+        try:
+            medicao = obter_detalhes(medicao_id)[0]
+            if not exigir_editavel_na_tela(medicao):
+                return voltar(medicao_id)
+        except MedicaoServiceError:
+            flash("Não foi possível carregar a medição.", "danger")
+            return voltar(medicao_id)
+
+        dados = {
+            "titulo": (request.form.get("titulo") or "").strip(),
+            "categoria": (request.form.get("categoria") or "").strip(),
+            "descricao": (request.form.get("descricao") or "").strip() or None,
+            "observacoes": (request.form.get("observacoes") or "").strip() or None,
+        }
+        if request.method == "POST":
+            erros = []
+            arquivo = None
+            if not dados["titulo"]:
+                erros.append("O título do documento é obrigatório.")
+            if dados["categoria"] not in CATEGORIAS_DOCUMENTO_MEDICAO:
+                erros.append("Selecione uma categoria válida.")
+            try:
+                arquivo = validar_arquivo_documento(request.files.get("arquivo"))
+            except ValidacaoDocumentoError as erro:
+                erros.append(str(erro))
+            if not erros:
+                metadados = {
+                    "titulo": dados["titulo"],
+                    "descricao": dados["descricao"],
+                    "categoria": TIPO_DOCUMENTO_POR_CATEGORIA_MEDICAO[dados["categoria"]],
+                }
+                try:
+                    armazenamento = CloudinaryStorage()
+                    servico().enviar_documento(
+                        medicao_id, metadados, arquivo, dados["categoria"],
+                        dados["observacoes"], current_user.id, armazenamento,
+                    )
+                except ERROS_NEGOCIO as erro:
+                    erros.append(str(erro))
+                except CloudinaryStorageError:
+                    current_app.logger.exception("Falha no armazenamento do documento da medição")
+                    erros.append("Não foi possível enviar o documento agora. Tente novamente.")
+                except MedicaoServiceError:
+                    current_app.logger.exception("Falha ao registrar documento da medição")
+                    erros.append("Não foi possível registrar o documento.")
+                else:
+                    flash("Documento enviado e vinculado à medição.", "success")
+                    return voltar(medicao_id)
+            for erro in erros:
+                flash(erro, "danger")
+        return (
+            render_template(
+                "fiscalizacao_contratos/medicoes/documento_upload_form.html",
+                medicao=medicao,
+                categorias=CATEGORIAS_DOCUMENTO_MEDICAO,
+                documento=dados,
+                limite_mb=limite_upload_bytes() // (1024 * 1024),
             ),
             400 if request.method == "POST" else 200,
         )

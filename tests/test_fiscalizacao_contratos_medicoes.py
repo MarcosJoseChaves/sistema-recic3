@@ -2,6 +2,7 @@
 
 import ast
 import importlib
+import io
 import os
 import sys
 import unittest
@@ -40,6 +41,23 @@ with patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False), patch(
     APP_MODULE = importlib.import_module("app")
 MOCK_CONNECT.reset_mock()
 MOCK_CONNECT.side_effect = AssertionError("PostgreSQL real bloqueado nos testes")
+
+
+class ArmazenamentoMedicaoFake:
+    def __init__(self):
+        self.enviados = []
+        self.removidos = []
+
+    def enviar(self, arquivo, contrato_id, aditivo_id=None):
+        self.enviados.append((arquivo, contrato_id, aditivo_id))
+        return {
+            "armazenamento_provedor": "cloudinary",
+            "armazenamento_chave": f"medicoes/{contrato_id}/arquivo-unico",
+            "armazenamento_versao": 1,
+        }
+
+    def remover(self, chave):
+        self.removidos.append(chave)
 
 
 class MedicaoServiceFake:
@@ -220,6 +238,30 @@ class MedicaoServiceFake:
         self.vinculos[identificador].append({"id": self.proximo_registro, "documento_id": documento_id, "categoria": categoria, "observacoes": observacoes, "ativo": True, **{k: documento[k] for k in ("titulo", "nome_original")}})
         self.proximo_registro += 1
 
+    def enviar_documento(self, identificador, dados, arquivo, categoria, observacoes, usuario_id, armazenamento):
+        medicao = self._editavel(identificador)
+        armazenamento.enviar(arquivo, medicao["contrato_id"], None)
+        documento_id = max((x["id"] for x in self.documentos), default=0) + 1
+        documento = {
+            "id": documento_id,
+            "contrato_id": medicao["contrato_id"],
+            "titulo": dados["titulo"],
+            "nome_original": arquivo["nome_original"],
+            "categoria": dados["categoria"],
+        }
+        self.documentos.append(documento)
+        self.vinculos[identificador].append({
+            "id": self.proximo_registro,
+            "documento_id": documento_id,
+            "categoria": categoria,
+            "observacoes": observacoes,
+            "ativo": True,
+            "titulo": documento["titulo"],
+            "nome_original": documento["nome_original"],
+        })
+        self.proximo_registro += 1
+        return documento_id
+
     def inativar_documento(self, identificador, vinculo_id, usuario_id):
         self._editavel(identificador)
         next(x for x in self.vinculos[identificador] if x["id"] == vinculo_id)["ativo"] = False
@@ -369,6 +411,7 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         self.client = self.app.test_client()
         APP_MODULE.login_manager._user_callback = self._usuario
         self.servico = MedicaoServiceFake()
+        self.armazenamento = ArmazenamentoMedicaoFake()
         self.conexoes_reais_antes = MOCK_CONNECT.call_count
         fiscalizacao_painel = MagicMock()
         fiscalizacao_painel.indicadores.return_value = {
@@ -382,6 +425,7 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
             patch("modulos.fiscalizacao_contratos.routes.MedicaoService", return_value=self.servico),
             patch("modulos.fiscalizacao_contratos.routes.contratos.MedicaoService", return_value=self.servico),
             patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService", return_value=fiscalizacao_painel),
+            patch("modulos.fiscalizacao_contratos.routes.medicoes.CloudinaryStorage", return_value=self.armazenamento),
         ]
         for p in self.patchers:
             p.start()
@@ -424,8 +468,8 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         self.assertIn("Medições".encode(), self.client.get("/fiscalizacao-contratos").data)
 
     def test_visitante_e_usuario_comum_bloqueados_em_todas_as_rotas(self):
-        get = ["/fiscalizacao-contratos/medicoes", "/fiscalizacao-contratos/medicoes/nova", "/fiscalizacao-contratos/medicoes/1", "/fiscalizacao-contratos/medicoes/1/editar", "/fiscalizacao-contratos/medicoes/1/itens/novo", "/fiscalizacao-contratos/medicoes/1/ajustes/novo", "/fiscalizacao-contratos/medicoes/1/documentos/vincular", "/fiscalizacao-contratos/medicoes/1/devolver", "/fiscalizacao-contratos/medicoes/1/aprovar", "/fiscalizacao-contratos/medicoes/1/cancelar", "/fiscalizacao-contratos/medicoes/1/revisao", "/fiscalizacao-contratos/medicoes/1/eventos", "/fiscalizacao-contratos/medicoes/1/versoes"]
-        post = ["/fiscalizacao-contratos/medicoes/nova", "/fiscalizacao-contratos/medicoes/1/editar", "/fiscalizacao-contratos/medicoes/1/itens/novo", "/fiscalizacao-contratos/medicoes/1/itens/1/editar", "/fiscalizacao-contratos/medicoes/1/itens/1/inativar", "/fiscalizacao-contratos/medicoes/1/ajustes/novo", "/fiscalizacao-contratos/medicoes/1/ajustes/1/editar", "/fiscalizacao-contratos/medicoes/1/ajustes/1/inativar", "/fiscalizacao-contratos/medicoes/1/documentos/vincular", "/fiscalizacao-contratos/medicoes/1/documentos/1/inativar", "/fiscalizacao-contratos/medicoes/1/enviar", "/fiscalizacao-contratos/medicoes/1/devolver", "/fiscalizacao-contratos/medicoes/1/aprovar", "/fiscalizacao-contratos/medicoes/1/cancelar", "/fiscalizacao-contratos/medicoes/1/revisao"]
+        get = ["/fiscalizacao-contratos/medicoes", "/fiscalizacao-contratos/medicoes/nova", "/fiscalizacao-contratos/medicoes/1", "/fiscalizacao-contratos/medicoes/1/editar", "/fiscalizacao-contratos/medicoes/1/itens/novo", "/fiscalizacao-contratos/medicoes/1/ajustes/novo", "/fiscalizacao-contratos/medicoes/1/documentos/vincular", "/fiscalizacao-contratos/medicoes/1/documentos/enviar", "/fiscalizacao-contratos/medicoes/1/devolver", "/fiscalizacao-contratos/medicoes/1/aprovar", "/fiscalizacao-contratos/medicoes/1/cancelar", "/fiscalizacao-contratos/medicoes/1/revisao", "/fiscalizacao-contratos/medicoes/1/eventos", "/fiscalizacao-contratos/medicoes/1/versoes"]
+        post = ["/fiscalizacao-contratos/medicoes/nova", "/fiscalizacao-contratos/medicoes/1/editar", "/fiscalizacao-contratos/medicoes/1/itens/novo", "/fiscalizacao-contratos/medicoes/1/itens/1/editar", "/fiscalizacao-contratos/medicoes/1/itens/1/inativar", "/fiscalizacao-contratos/medicoes/1/ajustes/novo", "/fiscalizacao-contratos/medicoes/1/ajustes/1/editar", "/fiscalizacao-contratos/medicoes/1/ajustes/1/inativar", "/fiscalizacao-contratos/medicoes/1/documentos/vincular", "/fiscalizacao-contratos/medicoes/1/documentos/enviar", "/fiscalizacao-contratos/medicoes/1/documentos/1/inativar", "/fiscalizacao-contratos/medicoes/1/enviar", "/fiscalizacao-contratos/medicoes/1/devolver", "/fiscalizacao-contratos/medicoes/1/aprovar", "/fiscalizacao-contratos/medicoes/1/cancelar", "/fiscalizacao-contratos/medicoes/1/revisao"]
         self.assertTrue(all(self.client.get(x).status_code == 302 for x in get))
         self.autenticar(2)
         self.assertTrue(all(self.client.get(x).status_code == 403 for x in get))
@@ -462,6 +506,42 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         item = self.servico.itens[1][0]
         self.assertEqual(item["valor_medido"], Decimal("10.50"))
         self.assertEqual(self.servico.medicoes[1]["valor_bruto"], Decimal("10.50"))
+
+    def test_formula_financeira_com_valores_do_teste_manual(self):
+        itens = [{"valor_medido": Decimal("7500.00"), "ativo": True}]
+        ajustes = [
+            {"tipo_ajuste": "Acréscimo", "valor": Decimal("5.00"), "ativo": True},
+            {"tipo_ajuste": "Desconto", "valor": Decimal("0.00"), "ativo": True},
+            {"tipo_ajuste": "Glosa", "valor": Decimal("10.00"), "ativo": True},
+        ]
+        bruto, acrescimos, descontos, glosas, liquido = calcular_totais(itens, ajustes)
+        self.assertEqual(
+            (bruto, acrescimos, descontos, glosas, liquido),
+            (
+                Decimal("7500.00"), Decimal("5.00"), Decimal("0.00"),
+                Decimal("10.00"), Decimal("7495.00"),
+            ),
+        )
+
+    def test_detalhe_mostra_composicao_explicita_do_valor_liquido(self):
+        self.autenticar(1)
+        self.servico.medicoes[1].update(
+            valor_bruto=Decimal("7500.00"),
+            total_acrescimos=Decimal("5.00"),
+            total_descontos=Decimal("0.00"),
+            total_glosas=Decimal("10.00"),
+            valor_liquido=Decimal("7495.00"),
+        )
+        resposta = self.client.get("/fiscalizacao-contratos/medicoes/1")
+        self.assertEqual(resposta.status_code, 200)
+        conteudo = resposta.data.decode("utf-8")
+        for texto in (
+            "R$ 7.500,00", "(+) Acréscimos", "R$ 5,00", "(-) Glosas",
+            "R$ 10,00", "R$ 7.495,00",
+        ):
+            self.assertIn(texto, conteudo)
+        self.assertIn("Aprovação da medição não significa pagamento", conteudo)
+        self.assertIn("Reduzem o valor medido", conteudo)
 
     def test_item_de_planilha_copia_fotografia_e_rejeita_outro_contrato(self):
         self.autenticar(1)
@@ -543,6 +623,77 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         self.client.post("/fiscalizacao-contratos/medicoes/1/documentos/1/inativar")
         self.assertFalse(self.servico.vinculos[1][0]["ativo"])
         self.assertEqual(len(self.servico.documentos), 2)
+
+    def test_admin_pode_abrir_envio_de_documento_na_medicao(self):
+        self.autenticar(1)
+        resposta = self.client.get(
+            "/fiscalizacao-contratos/medicoes/1/documentos/enviar"
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(b'multipart/form-data', resposta.data)
+        self.assertIn("Enviar documento comprobatório".encode(), resposta.data)
+
+    def test_upload_cria_documento_e_vincula_a_medicao(self):
+        self.autenticar(1)
+        resposta = self.client.post(
+            "/fiscalizacao-contratos/medicoes/1/documentos/enviar",
+            data={
+                "titulo": "Boletim da medição",
+                "categoria": "Relatório de medição",
+                "descricao": "Período de julho",
+                "observacoes": "Conferido pelo fiscal",
+                "arquivo": (io.BytesIO(b"%PDF-1.4\nconteudo de teste"), "boletim.pdf"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(len(self.armazenamento.enviados), 1)
+        self.assertEqual(self.servico.documentos[-1]["categoria"], "Relatório")
+        self.assertEqual(self.servico.vinculos[1][-1]["categoria"], "Relatório de medição")
+        self.assertEqual(self.servico.vinculos[1][-1]["titulo"], "Boletim da medição")
+
+    def test_upload_invalido_nao_chama_cloudinary(self):
+        self.autenticar(1)
+        resposta = self.client.post(
+            "/fiscalizacao-contratos/medicoes/1/documentos/enviar",
+            data={
+                "titulo": "Arquivo inválido",
+                "categoria": "Relatório de medição",
+                "arquivo": (io.BytesIO(b"nao e pdf"), "arquivo.pdf"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(self.armazenamento.enviados)
+
+    def test_upload_e_vinculo_reais_sao_atomicos_e_compensam_falha(self):
+        arquivo = {
+            "nome_original": "boletim.pdf", "mime_type": "application/pdf",
+            "extensao": "pdf", "tamanho_bytes": 12, "sha256": "a" * 64,
+            "conteudo": b"%PDF-1.4",
+        }
+        dados = {"titulo": "Boletim", "descricao": None, "categoria": "Relatório"}
+        for falha, commits, rollbacks, removidos in (
+            (None, 1, 0, 0),
+            ("INSERT INTO fc_medicao_documentos", 0, 1, 1),
+        ):
+            cursor = CursorTransacaoFake(falhar_em=falha)
+            conexao = ConexaoTransacaoFake(cursor)
+            armazenamento = ArmazenamentoMedicaoFake()
+            servico = MedicaoService(lambda: conexao)
+            if falha:
+                with self.assertRaises(MedicaoServiceError):
+                    servico.enviar_documento(
+                        1, dados, arquivo, "Relatório de medição", None, 7,
+                        armazenamento,
+                    )
+            else:
+                servico.enviar_documento(
+                    1, dados, arquivo, "Relatório de medição", None, 7,
+                    armazenamento,
+                )
+            self.assertEqual((conexao.commits, conexao.rollbacks), (commits, rollbacks))
+            self.assertEqual(len(armazenamento.removidos), removidos)
 
     def test_envio_exige_item_e_bloqueia_edicao(self):
         self.autenticar(1)
