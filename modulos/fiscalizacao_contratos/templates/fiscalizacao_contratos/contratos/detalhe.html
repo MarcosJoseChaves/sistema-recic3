@@ -210,6 +210,23 @@
     </div>
 </div>
 
+<div class="card content-card mb-4" id="atestes-contratuais">
+    <div class="card-header bg-success text-white d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+        <span><i class="fas fa-file-circle-check me-2"></i>Atestes da execução</span>
+        <a class="btn btn-sm btn-light" href="{{ url_for('fiscalizacao_contratos.atestes_lista', contrato_id=contrato.id) }}">Consultar atestes</a>
+    </div>
+    <div class="card-body">
+        {% if resumo_atestes %}<div class="row g-2 mb-3">
+            <div class="col-6 col-lg"><div class="border rounded p-2"><small>Em elaboração</small><div class="fw-bold">{{ resumo_atestes.elaboracao }}</div></div></div>
+            <div class="col-6 col-lg"><div class="border rounded p-2"><small>Devolvidos</small><div class="fw-bold">{{ resumo_atestes.devolvidos }}</div></div></div>
+            <div class="col-6 col-lg"><div class="border rounded p-2"><small>Atestados</small><div class="fw-bold">{{ resumo_atestes.atestados }}</div></div></div>
+            <div class="col-6 col-lg"><div class="border rounded p-2"><small>Encaminhados</small><div class="fw-bold">{{ resumo_atestes.encaminhados }}</div></div></div>
+            <div class="col-12 col-lg"><div class="border border-success rounded p-2"><small>Valor encaminhado acumulado</small><div class="fw-bold">{{ resumo_atestes.valor_encaminhado|fc_moeda }}</div><small class="text-muted">Não representa pagamento efetivo.</small></div></div>
+        </div>{% endif %}
+        {% if atestes_contrato %}<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Ateste</th><th>Medição</th><th>Status</th><th>Valor atestado</th><th>Total das notas</th></tr></thead><tbody>{% for a in atestes_contrato %}<tr><td><a href="{{ url_for('fiscalizacao_contratos.atestes_detalhe',ateste_id=a.id) }}">{{ a.numero_ateste }}</a></td><td>{{ a.numero_medicao }} · {{ a.competencia.strftime('%m/%Y') }}</td><td>{{ a.status }}</td><td>{{ a.valor_atestado|fc_moeda }}</td><td>{{ a.total_notas|fc_moeda }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">Nenhum ateste registrado para este contrato.</p>{% endif %}
+    </div>
+</div>
+
 <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
     <a href="{{ url_for('fiscalizacao_contratos.contratos_editar', contrato_id=contrato.id) }}" class="btn btn-primary">
         <i class="fas fa-pen me-2"></i>Editar

@@ -5,6 +5,7 @@ from flask import current_app, render_template
 from ..permissions import admin_required
 from .aditivos import registrar_rotas_aditivos
 from .ativos import registrar_rotas_ativos
+from .atestes import registrar_rotas_atestes
 from .contratos import registrar_rotas_contratos
 from .documentos import registrar_rotas_documentos
 from .empresas import registrar_rotas_empresas
@@ -15,6 +16,7 @@ from .planilhas import registrar_rotas_planilhas
 from .servidores import registrar_rotas_servidores
 from ..services.fiscalizacoes_service import FiscalizacaoService, FiscalizacaoServiceError
 from ..services.medicoes_service import MedicaoService, MedicaoServiceError
+from ..services.atestes_service import AtesteService, AtesteServiceError
 
 
 def registrar_rotas(blueprint, conectar_banco):
@@ -39,10 +41,19 @@ def registrar_rotas(blueprint, conectar_banco):
                 "elaboracao": 0, "analise": 0, "devolvidas": 0,
                 "aprovadas_mes": 0, "liquido_aprovado_mes": 0, "glosas_mes": 0,
             }
+        try:
+            indicadores_atestes = AtesteService(conectar_banco).indicadores()
+        except Exception:
+            current_app.logger.exception("Falha ao carregar indicadores de atestes")
+            indicadores_atestes = {
+                "elaboracao": 0, "devolvidos": 0, "aguardando": 0,
+                "encaminhados_mes": 0, "valor_encaminhado_mes": 0,
+            }
         return render_template(
             "fiscalizacao_contratos/painel.html",
             indicadores=indicadores,
             indicadores_medicoes=indicadores_medicoes,
+            indicadores_atestes=indicadores_atestes,
         )
 
     registrar_rotas_empresas(blueprint, conectar_banco)
@@ -55,3 +66,4 @@ def registrar_rotas(blueprint, conectar_banco):
     registrar_rotas_fiscalizacoes(blueprint, conectar_banco)
     registrar_rotas_ocorrencias(blueprint, conectar_banco)
     registrar_rotas_medicoes(blueprint, conectar_banco)
+    registrar_rotas_atestes(blueprint, conectar_banco)

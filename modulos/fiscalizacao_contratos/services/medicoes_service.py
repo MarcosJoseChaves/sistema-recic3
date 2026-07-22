@@ -505,6 +505,13 @@ class MedicaoService:
             with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
                 origem=self._obter_bloqueada(cursor,medicao_id)
                 if origem["status"]!="Aprovada" or not origem["ativo"] or not origem["atual"]: raise MedicaoBloqueadaError("Somente uma medição aprovada, ativa e atual pode gerar revisão.")
+                cursor.execute("""SELECT EXISTS (SELECT 1 FROM fc_atestes
+                    WHERE medicao_id=%s AND ativo AND status<>'Cancelado') AS possui_ateste""",(medicao_id,))
+                verificacao_ateste=cursor.fetchone()
+                if verificacao_ateste and verificacao_ateste["possui_ateste"]:
+                    raise MedicaoBloqueadaError(
+                        "Esta medição possui um ateste ativo. Cancele ou regularize o ateste antes de criar uma revisão."
+                    )
                 cursor.execute("UPDATE fc_medicoes SET atual=FALSE,atualizado_em=CURRENT_TIMESTAMP,atualizado_por_usuario_id=%s WHERE id=%s",(usuario_id,medicao_id))
                 cursor.execute("""INSERT INTO fc_medicoes
                     (contrato_id,numero_medicao,competencia,periodo_inicio,periodo_fim,versao,medicao_origem_id,

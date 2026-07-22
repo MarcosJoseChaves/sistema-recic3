@@ -7,6 +7,7 @@ from flask_login import current_user
 
 from ..permissions import admin_required
 from ..services.cloudinary_storage import CloudinaryStorage, CloudinaryStorageError
+from ..services.atestes_service import AtesteService, AtesteServiceError
 from ..services.medicoes_service import (
     MedicaoBloqueadaError,
     MedicaoDuplicadaError,
@@ -178,6 +179,11 @@ def registrar_rotas_medicoes(blueprint, conectar_banco):
         except MedicaoServiceError:
             flash("Medição não encontrada ou indisponível.", "warning")
             return redirect(url_for("fiscalizacao_contratos.medicoes_lista"))
+        try:
+            ateste = AtesteService(conectar_banco).obter_da_medicao(medicao_id)
+        except Exception:
+            current_app.logger.exception("Falha ao carregar ateste da medição")
+            ateste = None
         return render_template(
             "fiscalizacao_contratos/medicoes/detalhe.html",
             medicao=medicao,
@@ -186,6 +192,7 @@ def registrar_rotas_medicoes(blueprint, conectar_banco):
             documentos=documentos,
             eventos=eventos,
             versoes=versoes,
+            ateste=ateste,
         )
 
     @blueprint.route("/medicoes/<int:medicao_id>/editar", methods=["GET", "POST"])

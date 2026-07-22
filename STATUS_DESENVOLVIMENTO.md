@@ -649,3 +649,49 @@ apresentada somente como redução do valor medido, não como multa ou sanção.
 A migração 010 e as cinco tabelas de medições estão aplicadas, verificadas e
 funcionando. A Etapa 2I está encerrada com **274 testes automatizados aprovados,
 0 falhas e 0 erros**, além dos testes manuais aprovados.
+
+## Etapa 2J — Ateste da execução e encaminhamento para pagamento (implementada para revisão)
+
+A Etapa 2J foi implementada tecnicamente em **21/07/2026**, sem acessar o banco
+real, sem acessar o Cloudinary real e sem executar migrações. O módulo agora
+permite criar um ateste a partir de uma medição aprovada, ativa e atual, registrar
+o servidor atestador, parecer, notas fiscais e documentos complementares.
+
+O fluxo permite atestar a execução, devolver para correção, retornar para
+elaboração, encaminhar documentalmente ao setor financeiro e cancelar antes do
+encaminhamento. Cada mudança cria um evento permanente com a fotografia do valor
+atestado e do total das notas. Notas, vínculos e eventos são preservados; nenhuma
+operação normal utiliza exclusão física.
+
+O valor atestado é copiado do valor líquido aprovado da medição e os totais são
+calculados no servidor com `Decimal` e `ROUND_HALF_UP`. O encaminhamento exige
+nota ativa, arquivo em todas as notas, protocolo, servidor ativo e soma das notas
+igual ao valor atestado. “Encaminhado para pagamento” representa somente o envio
+ao setor financeiro e não significa liquidação, pagamento ou quitação.
+
+Medições com ateste ativo e não cancelado não podem gerar revisão. A medição, o
+contrato e o painel passaram a exibir informações e indicadores de atestes sem
+alterar `app.py` ou o patrimônio antigo.
+
+Foi criada a migração aditiva e idempotente `011_criar_fc_atestes.sql`, que
+prepara `fc_atestes`, `fc_ateste_notas_fiscais`, `fc_ateste_documentos` e
+`fc_ateste_eventos`, com chaves, restrições e índices. **A migração 011 não foi
+executada.**
+
+Foram preservados os **274 testes anteriores** e acrescentados **30 testes** da
+Etapa 2J, cobrindo os 66 requisitos de permissão, validação, fluxo, documentos,
+valores, histórico, transações, integração e segurança. Resultado: **304 testes
+aprovados, 0 falhas e 0 erros**. PostgreSQL e Cloudinary reais permaneceram
+bloqueados e nenhum arquivo real foi alterado pelos testes.
+
+Na revisão técnica final de **22/07/2026**, a migração foi alinhada ao padrão
+das tabelas anteriores, mantendo `atualizado_por_usuario_id` opcional na criação
+e preenchido pelo serviço nas inclusões e atualizações. O encaminhamento também
+passou a reconfirmar que cada arquivo de nota fiscal continua ativo e pertence
+ao contrato. Foram acrescentados testes para concorrência, diferença de um
+centavo, nota inativa, documento posteriormente invalidado e repetição do ateste
+após devolução.
+
+A Etapa 2J está pronta para revisão técnica e funcional. O próximo passo seguro,
+somente mediante nova autorização, é revisar e depois aplicar exclusivamente a
+migração 011 no ambiente configurado.
