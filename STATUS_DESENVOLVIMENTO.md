@@ -826,3 +826,19 @@ migrations, rotação de credenciais
 históricas, Neon e Cloudinary separados para homologação, deploy no Render,
 revisão e autorização individual das rotas públicas, CSP, rate limit, trusted
 hosts e monitoramento.
+
+### Etapa H2A.3A — Inventário e matriz de acesso das rotas
+
+Em **22/07/2026**, a Etapa H2A.3A ficou **em análise para revisão**. Foi criado o
+documento `MATRIZ_ROTAS_ACESSO.md`, com o inventário das 177 rotas registradas,
+suas proteções atuais, dados envolvidos, riscos e níveis de acesso recomendados.
+
+O levantamento encontrou 22 bloqueadores para homologação: 11 rotas públicas
+mutáveis e 11 rotas GET públicas que consultam dados internos. Também foram
+marcadas 15 rotas por ID para revisão de autorização por objeto. O módulo de
+Fiscalização de Contratos mantém 105 rotas funcionais com `admin_required`.
+
+Nenhuma permissão foi alterada, nenhuma rota foi removida e nenhuma publicação
+foi realizada. Não houve acesso a PostgreSQL ou Cloudinary reais, execução de
+migration, upload, download ou deploy. As correções permanecem reservadas para a
+futura Etapa H2A.3B, depois da revisão desta matriz.

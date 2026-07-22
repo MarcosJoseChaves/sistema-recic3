@@ -543,6 +543,30 @@ credenciais históricas, Neon e Cloudinary exclusivos de homologação, deploy n
 Render, revisão e autorização individual das rotas públicas, CSP, rate limit,
 trusted hosts e monitoramento.
 
+## 18. Etapa H2A.3A — inventário e matriz de acesso
+
+Em **22/07/2026**, foi executado o inventário completo das rotas registradas na
+aplicação. O resultado detalhado está em [`MATRIZ_ROTAS_ACESSO.md`](MATRIZ_ROTAS_ACESSO.md),
+com uma linha para cada rota, sua proteção atual, dados envolvidos, risco e nível
+de acesso recomendado.
+
+Foram encontradas **177 regras de rota**: 34 públicas, 38 protegidas por
+`login_required` e 105 protegidas por `admin_required`. A proposta reduz a
+superfície pública ao estritamente necessário e classifica as rotas em 4 públicas
+essenciais, 16 autenticadas, 111 administrativas, 44 dependentes de regra
+específica de UVR, associação ou objeto e 2 desativadas nos ambientes online.
+
+O diagnóstico registrou **22 bloqueadores para homologação** ainda não
+implementados: 11 rotas públicas mutáveis e 11 consultas públicas ao banco. Foram
+também identificadas 15 rotas por ID que precisam de confirmação funcional e
+correção de autorização por objeto antes da produção. Não existe cadastro público
+de contas em `usuarios` nem rota web de migration ou criação de administrador.
+
+Esta etapa foi exclusivamente documental. Nenhuma permissão foi alterada,
+nenhuma rota foi removida e nenhum deploy, migration, banco ou Cloudinary real foi
+executado. As correções pertencem à futura Etapa H2A.3B e devem ser aplicadas com
+testes de caracterização para preservar os fluxos atuais por UVR e associação.
+
 ## Referências técnicas consultadas
 
 - [Render — Web Services](https://render.com/docs/web-services)
