@@ -884,3 +884,28 @@ downloads fora deste bloco, os 15 possíveis IDORs, a revisão completa de
 JSON/AJAX, o segundo endpoint proposto para desativação online, migration-base,
 controle de migrations, rotação de credenciais históricas, Neon e Cloudinary
 separados, deploy, CSP, rate limit, trusted hosts e monitoramento.
+
+### Etapa H2A.3B.2 — consultas e downloads protegidos
+
+Em **22/07/2026**, a H2A.3B.2 foi implementada, **revisada tecnicamente e
+concluída**. As 11 consultas GET antes públicas agora exigem login; as consultas de
+entidades, contas e valores também limitam a UVR no servidor. Basic Auth e CSRF
+continuam sem conceder autorização interna.
+
+As quatro exportações CSV/PDF financeiras preservam a autorização feita na
+H2A.3B.1. CSV passou a neutralizar fórmulas em campos textuais, inclusive após
+espaços e controles invisíveis, sem converter números. PDF passou a escapar texto
+variável sem duplicar o escape. As fichas de associado e cadastro agora consultam o ID
+dentro da UVR autorizada, corrigindo dois IDORs. O documento privado da
+Fiscalização exige administrador, vínculo válido e estado ativo antes de gerar
+URL temporária HTTPS de cinco minutos. O redirecionamento impede cache público.
+
+Foram preservados os **435 testes anteriores** e adicionados **27 testes**,
+totalizando **462 aprovados, zero falhas e zero erros**. Não houve acesso real a
+PostgreSQL, Cloudinary ou API, criação de arquivo real, migration ou deploy.
+
+Permanecem pendentes 13 possíveis IDORs fora deste bloco, revisão geral dos 44
+endpoints JSON/AJAX, o segundo endpoint proposto para desativação online,
+migration-base, controle formal de migrations, rotação das credenciais,
+ambientes Neon e Cloudinary separados, versões gerais das dependências, deploy,
+CSP, rate limit, trusted hosts e monitoramento.

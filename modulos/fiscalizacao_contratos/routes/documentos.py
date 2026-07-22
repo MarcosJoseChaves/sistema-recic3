@@ -1,5 +1,7 @@
 """Rotas administrativas de documentos e anexos."""
 
+from urllib.parse import urlsplit
+
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
@@ -142,20 +144,32 @@ def registrar_rotas_documentos(blueprint, conectar_banco):
     def documentos_arquivo(documento_id):
         try:
             documento = servico().obter(documento_id)
+            if not documento.get("ativo"):
+                raise DocumentoNaoEncontradoError("Documento não encontrado.")
             armazenamento = CloudinaryStorage()
             url = armazenamento.gerar_url_temporaria(
                 documento["armazenamento_chave"],
                 documento["extensao"],
                 download=request.args.get("download") == "1",
             )
+            if urlsplit(url).scheme.lower() != "https":
+                raise CloudinaryStorageError(
+                    "Não foi possível abrir o documento agora."
+                )
         except DocumentoNaoEncontradoError:
             flash("Documento não encontrado.", "warning")
             return redirect(url_for("fiscalizacao_contratos.documentos_lista"))
-        except (DocumentoServiceError, CloudinaryStorageError):
-            current_app.logger.exception("Falha ao gerar acesso temporário")
+        except (DocumentoServiceError, CloudinaryStorageError) as erro:
+            current_app.logger.error(
+                "Falha ao gerar acesso temporário. erro_tipo=%s",
+                type(erro).__name__,
+            )
             flash("Não foi possível abrir o documento agora.", "danger")
             return redirect(url_for("fiscalizacao_contratos.documentos_lista"))
-        return redirect(url)
+        resposta = redirect(url)
+        resposta.headers["Cache-Control"] = "no-store, private, max-age=0"
+        resposta.headers["Pragma"] = "no-cache"
+        return resposta
 
     @blueprint.route("/documentos/<int:documento_id>/inativar", methods=["POST"])
     @admin_required

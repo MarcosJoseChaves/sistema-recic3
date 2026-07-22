@@ -602,6 +602,37 @@ migrations, rotação de credenciais históricas, Neon e Cloudinary separados,
 deploy, CSP, rate limit, trusted hosts e monitoramento. Esta etapa não executou
 deploy, migration, PostgreSQL ou Cloudinary real.
 
+## 20. Etapa H2A.3B.2 — segundo bloco de restrição
+
+Em **22/07/2026**, as 11 consultas GET públicas ao banco foram protegidas. Três
+catálogos gerais exigem login; as oito consultas de dados financeiros, entidades
+ou UVRs aplicam a UVR derivada de `current_user`, com política global explícita
+para administrador. Visitante e Basic Auth sem login não chegam ao banco.
+
+Os filtros de relatórios foram incluídos nessa proteção. As exportações CSV de
+relatório e extrato neutralizam fórmulas em texto controlável pelo usuário, e os
+PDFs escapam conteúdo variável de modo idempotente antes do ReportLab. A
+neutralização considera espaços e controles invisíveis, sem converter números.
+As quatro exportações
+financeiras continuam autorizando UVR/objeto antes de gerar qualquer conteúdo.
+
+Das sete rotas de download ou abertura, as quatro exportações permanecem
+protegidas, o documento privado do módulo exige administrador e estado ativo
+antes de criar a URL temporária HTTPS de cinco minutos, cujo redirecionamento não
+pode ser armazenado em cache público, e as duas fichas PDF passaram a consultar
+por ID e UVR no próprio SQL. Com isso, 2 dos 15 possíveis IDORs foram corrigidos; 13
+continuam pendentes fora deste bloco.
+
+Foram aprovados **462 testes**, sendo 435 anteriores e 27 novos, sem banco,
+Cloudinary, API, arquivo ou gerador externo real. Nenhuma migration ou deploy foi
+executado.
+
+Continuam pendentes os 13 possíveis IDORs fora deste bloco, a revisão geral dos
+44 endpoints JSON/AJAX, o segundo endpoint classificado para desativação online,
+migration-base, controle formal de migrations, rotação das credenciais
+históricas, Neon e Cloudinary separados, versões gerais das dependências, deploy,
+CSP, rate limit, trusted hosts e monitoramento.
+
 ## Referências técnicas consultadas
 
 - [Render — Web Services](https://render.com/docs/web-services)

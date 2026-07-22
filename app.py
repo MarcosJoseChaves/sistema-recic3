@@ -8,9 +8,11 @@ import os
 import secrets
 import psycopg2
 from functools import wraps
+from html import unescape
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
+from xml.sax.saxutils import escape
 
 from flask import Flask, abort, render_template, request, redirect, url_for, jsonify, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -220,6 +222,46 @@ def _autorizar_extrato_financeiro(filtros):
 def _nome_arquivo_seguro(valor, padrao):
     nome = re.sub(r"[^A-Za-z0-9._-]+", "_", str(valor or "").strip())
     return nome.strip("._-")[:80] or padrao
+
+
+def _escopo_uvr_consulta(valor_recebido=None):
+    """Obtém a UVR autorizada sem confiar no filtro enviado pelo navegador."""
+    valor = str(valor_recebido or "").strip()
+    if getattr(current_user, "role", None) == "admin":
+        if _uvr_normalizada(valor) in {"todos", "todas"}:
+            valor = ""
+        return valor or None, None
+
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    if not uvr_usuario:
+        return None, _resposta_acesso_negado_json()
+    if valor and _uvr_normalizada(valor) not in {
+        "todos",
+        "todas",
+        _uvr_normalizada(uvr_usuario),
+    }:
+        return None, _resposta_acesso_negado_json()
+    return uvr_usuario, None
+
+
+def _texto_csv_seguro(valor):
+    """Neutraliza fórmulas em campos textuais exportados para CSV."""
+    if isinstance(valor, (int, float, Decimal)) and not isinstance(valor, bool):
+        return valor
+    texto = str(valor or "")
+    inicio = texto.lstrip(" \t\r\n\v\f\u200b\ufeff")
+    if inicio.startswith("'"):
+        restante = inicio[1:].lstrip(" \t\r\n\v\f\u200b\ufeff")
+        if restante.startswith(("=", "+", "-", "@")):
+            return texto if texto.startswith("'") else "'" + texto
+    if inicio.startswith(("=", "+", "-", "@")):
+        return "'" + texto
+    return texto
+
+
+def _texto_pdf_seguro(valor):
+    """Escapa texto externo antes de entregá-lo ao parser XML do ReportLab."""
+    return escape(unescape(str(valor or "")))
 
 app.register_blueprint(
     criar_blueprint_fiscalizacao(conectar_banco),
@@ -1132,6 +1174,8 @@ def cadastrar_conta_corrente():
         if conn: conn.close()
 
 @app.route("/get_produtos_servicos", methods=["GET"])
+@login_json_required
+@login_required
 def get_produtos_servicos():
     conn = None
     try:
@@ -1144,17 +1188,23 @@ def get_produtos_servicos():
         ]
         return jsonify(produtos_servicos)
     except Exception as e:
-        app.logger.error(f"Erro em /get_produtos_servicos: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar produtos e serviços. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed:
             conn.close()
 
 @app.route("/get_cadastros_ativos", methods=["GET"])
+@login_json_required
+@login_required
 def get_cadastros_ativos():
     conn = None
     try:
-        uvr_filter = request.args.get("uvr")
+        uvr_filter, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+        if negado:
+            return negado
         tipo_cadastro_filter = request.args.get("tipo_cadastro_filtro") 
 
         conn = conectar_banco()
@@ -1181,14 +1231,20 @@ def get_cadastros_ativos():
         cadastros = [{"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2]} for row in cur.fetchall()]
         return jsonify(cadastros)
     except Exception as e:
-        app.logger.error(f"Erro em /get_cadastros_ativos: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar cadastros ativos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_resumo_fluxo_caixa")
+@login_json_required
+@login_required
 def get_resumo_fluxo_caixa():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     data_inicial = request.args.get("data_inicial")
     data_final = request.args.get("data_final")
 
@@ -1232,13 +1288,19 @@ def get_resumo_fluxo_caixa():
         })
 
     except Exception as e:
-        app.logger.error(f"Erro em /get_resumo_fluxo_caixa: {e}")
+        app.logger.error(
+            "Falha ao consultar resumo do fluxo. erro_tipo=%s", type(e).__name__
+        )
         if conn: conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
 
 @app.route("/get_contas_correntes") 
+@login_json_required
+@login_required
 def get_contas_correntes_fluxo_caixa():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     conn = None
     try:
         conn = conectar_banco()
@@ -1264,16 +1326,22 @@ def get_contas_correntes_fluxo_caixa():
                   } for row in cur.fetchall()]
         return jsonify(contas)
     except Exception as e:
-        app.logger.error(f"Erro em /get_contas_correntes (fluxo de caixa/extrato): {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar contas correntes. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_associados_ativos", methods=["GET"])
+@login_json_required
+@login_required
 def get_associados_ativos():
     conn = None
     try:
-        uvr_filter = request.args.get("uvr")
+        uvr_filter, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+        if negado:
+            return negado
         if not uvr_filter:
             return jsonify({"error": "Parâmetro UVR é obrigatório"}), 400
 
@@ -1286,8 +1354,10 @@ def get_associados_ativos():
         associados = [{"id": row[0], "nome": row[1]} for row in cur.fetchall()]
         return jsonify(associados)
     except Exception as e:
-        app.logger.error(f"Erro em /get_associados_ativos: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar associados ativos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -1674,10 +1744,13 @@ def editar_transacao():
         if conn: conn.close()
 
 @app.route("/get_clientes_fornecedores_com_pendencias", methods=["GET"])
+@login_json_required
+@login_required
 def get_clientes_fornecedores_com_pendencias():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     tipo_movimentacao = request.args.get("tipo_movimentacao")
-    app.logger.info(f"FluxoCaixa: Buscando pendências para UVR: {uvr}, Movimentação: {tipo_movimentacao}")
 
     if not uvr or not tipo_movimentacao:
         return jsonify({"error": "Parâmetros UVR e Tipo de Movimentação são obrigatórios"}), 400
@@ -1693,27 +1766,30 @@ def get_clientes_fornecedores_com_pendencias():
                 SELECT DISTINCT c.id::TEXT, c.razao_social, c.tipo_cadastro, FALSE as is_associado_rateio
                 FROM cadastros c
                 JOIN transacoes_financeiras tf ON c.id = tf.id_cadastro_origem
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Receita' AND c.tipo_cadastro = 'Cliente' AND tf.status_pagamento <> 'Liquidado'
+                WHERE tf.uvr = %s AND c.uvr = %s
+                  AND tf.tipo_transacao = 'Receita' AND c.tipo_cadastro = 'Cliente'
+                  AND tf.status_pagamento <> 'Liquidado'
                 ORDER BY c.razao_social
             """
-            cur.execute(query_clientes, (uvr,))
+            cur.execute(query_clientes, (uvr, uvr))
             for row in cur.fetchall():
                 results.append({"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
-            app.logger.info(f"FluxoCaixa: {len(results)} clientes encontrados para recebimento.")
 
         elif tipo_movimentacao == "Pagamento":
             query_fornecedores = """
                 SELECT DISTINCT c.id::TEXT, c.razao_social, c.tipo_cadastro, FALSE as is_associado_rateio
                 FROM cadastros c
                 JOIN transacoes_financeiras tf ON c.id = tf.id_cadastro_origem
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Despesa' AND c.tipo_cadastro = 'Fornecedor/Prestador' AND tf.status_pagamento <> 'Liquidado'
+                WHERE tf.uvr = %s AND c.uvr = %s
+                  AND tf.tipo_transacao = 'Despesa'
+                  AND c.tipo_cadastro = 'Fornecedor/Prestador'
+                  AND tf.status_pagamento <> 'Liquidado'
             """
-            cur.execute(query_fornecedores, (uvr,))
+            cur.execute(query_fornecedores, (uvr, uvr))
             fornecedores_count = 0
             for row in cur.fetchall():
                 results.append({"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
                 fornecedores_count +=1
-            app.logger.info(f"FluxoCaixa: {fornecedores_count} fornecedores encontrados para pagamento.")
 
             query_associados_rateio = """
                 SELECT DISTINCT tf.nome_cadastro_origem AS id, tf.nome_cadastro_origem AS razao_social,
@@ -1732,22 +1808,26 @@ def get_clientes_fornecedores_com_pendencias():
                     nomes_rateio_adicionados.add(nome_rateio)
                     associados_count +=1
             results.sort(key=lambda x: x['razao_social'])
-            app.logger.info(f"FluxoCaixa: {associados_count} associados de rateio encontrados para pagamento.")
         else:
             return jsonify({"error": "Tipo de Movimentação inválido"}), 400
         
-        app.logger.info(f"FluxoCaixa: Total de {len(results)} entidades retornadas para o dropdown.")
         return jsonify(results)
         
     except Exception as e:
-        app.logger.error(f"Erro em /get_clientes_fornecedores_com_pendencias: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar pendências financeiras. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_notas_em_aberto")
+@login_json_required
+@login_required
 def get_notas_em_aberto():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     id_cf_str = request.args.get("id_cadastro_cf") 
     tipo_movimentacao = request.args.get("tipo_movimentacao") 
     is_associado_rateio_str = request.args.get("is_associado_rateio", "false")
@@ -1756,8 +1836,6 @@ def get_notas_em_aberto():
     # Novos parâmetros de data
     data_inicial = request.args.get("data_inicial")
     data_final = request.args.get("data_final")
-
-    app.logger.info(f"FluxoCaixa: Buscando notas UVR: {uvr}, ID: {id_cf_str}, Datas: {data_inicial} a {data_final}")
 
     if not all([uvr, id_cf_str, tipo_movimentacao, data_inicial, data_final]):
         return jsonify({"error": "Parâmetros UVR, ID, Movimentação e Datas são obrigatórios"}), 400
@@ -1814,8 +1892,10 @@ def get_notas_em_aberto():
         return jsonify(documentos)
         
     except Exception as e:
-        app.logger.error(f"Erro em /get_notas_em_aberto: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar notas em aberto. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -2089,9 +2169,16 @@ def registrar_denuncia():
 
 # --- ROTAS PARA OS FILTROS DE RELATÓRIO FINANCEIRO ---
 @app.route("/get_relatorio_uvrs", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_uvrs():
     conn = None
     try:
+        if getattr(current_user, "role", None) != "admin":
+            uvr, negado = _escopo_uvr_consulta()
+            if negado:
+                return negado
+            return jsonify([uvr])
         conn = conectar_banco()
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT uvr FROM transacoes_financeiras")
@@ -2106,12 +2193,16 @@ def get_relatorio_uvrs():
         all_uvrs = sorted(list(uvrs_transacoes.union(uvrs_contas).union(uvrs_fluxo).union(uvrs_denuncias)))
         return jsonify(all_uvrs)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_uvrs: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar UVRs do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed: conn.close()
 
 @app.route("/get_relatorio_tipos_atividade_transacao", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_tipos_atividade_transacao():
     tipo_transacao = request.args.get("tipo_transacao") 
     conn = None
@@ -2128,12 +2219,16 @@ def get_relatorio_tipos_atividade_transacao():
         tipos_atividade = [row[0] for row in cur.fetchall()]
         return jsonify(tipos_atividade)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_tipos_atividade_transacao: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar atividades do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed: conn.close()
 
 @app.route("/get_relatorio_catalog_options", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_catalog_options():
     option_type = request.args.get("option_type") 
     tipo_transacao = request.args.get("tipo_transacao") 
@@ -2186,15 +2281,21 @@ def get_relatorio_catalog_options():
         options = [row[0] for row in cur.fetchall()]
         return jsonify(options)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_catalog_options ({option_type}): {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar catálogo do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed: conn.close()
 
 @app.route("/get_relatorio_entidades_para_filtro", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_entidades_para_filtro():
     tipo_entidade = request.args.get("tipo_entidade")
-    uvr_param = request.args.get("uvr") 
+    uvr_param, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     tipo_transacao_param = request.args.get("tipo_transacao_rel")
 
     conn = None
@@ -2216,8 +2317,8 @@ def get_relatorio_entidades_para_filtro():
                 conditions.append("tf.tipo_transacao = 'Receita'")
             # Se tipo_transacao_param for "" (Todos), não adiciona filtro de tipo de transação específico para cliente.
             if uvr_param:
-                conditions.append("tf.uvr = %s")
-                params.append(uvr_param)
+                conditions.extend(("c.uvr = %s", "tf.uvr = %s"))
+                params.extend((uvr_param, uvr_param))
             
             if conditions:
                  query = f"{base_select} WHERE {' AND '.join(conditions)} ORDER BY nome"
@@ -2234,8 +2335,8 @@ def get_relatorio_entidades_para_filtro():
             if tipo_transacao_param == "Despesa":
                 conditions.append("tf.tipo_transacao = 'Despesa'")
             if uvr_param:
-                conditions.append("tf.uvr = %s")
-                params.append(uvr_param)
+                conditions.extend(("c.uvr = %s", "tf.uvr = %s"))
+                params.extend((uvr_param, uvr_param))
 
             if conditions:
                 query = f"{base_select} WHERE {' AND '.join(conditions)} ORDER BY nome"
@@ -2265,8 +2366,8 @@ def get_relatorio_entidades_para_filtro():
             # Se tipo_transacao_param for "" (Todos), ainda assim só queremos rateios (que são despesas).
             
             if uvr_param:
-                conditions.append("tf.uvr = %s")
-                params.append(uvr_param)
+                conditions.extend(("a.uvr = %s", "tf.uvr = %s"))
+                params.extend((uvr_param, uvr_param))
             
             if conditions:
                 query = f"{base_select} WHERE {' AND '.join(conditions)} ORDER BY a.nome"
@@ -2276,14 +2377,15 @@ def get_relatorio_entidades_para_filtro():
             return jsonify([])
 
         if query:
-            app.logger.debug(f"Query para entidades de relatório: {query} com params {params}")
             cur.execute(query, tuple(params))
             entidades = [{"id": row[0], "nome": row[1]} for row in cur.fetchall()]
         
         return jsonify(entidades)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_entidades_para_filtro: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar entidades do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -2530,18 +2632,24 @@ def baixar_csv_relatorio():
 
 
             csv_row = [
-                row_data_dict.get("uvr", ""), row_data_dict.get("associacao", ""),
-                row_data_dict.get("nome_cadastro_origem", ""), row_data_dict.get("numero_documento", ""),
-                data_doc_str, 
-                data_efetiva_str, 
-                row_data_dict.get("tipo_transacao", ""),
-                row_data_dict.get("tipo_atividade_transacao", ""), row_data_dict.get("item_descricao", ""),
-                row_data_dict.get("item_tipo_catalogo", ""), row_data_dict.get("item_tipo_atividade_catalogo", ""),
-                row_data_dict.get("item_grupo_catalogo", ""), row_data_dict.get("item_subgrupo_catalogo", ""),
-                row_data_dict.get("unidade", ""), str(row_data_dict.get("quantidade", "")).replace('.', ','),
+                _texto_csv_seguro(row_data_dict.get("uvr", "")),
+                _texto_csv_seguro(row_data_dict.get("associacao", "")),
+                _texto_csv_seguro(row_data_dict.get("nome_cadastro_origem", "")),
+                _texto_csv_seguro(row_data_dict.get("numero_documento", "")),
+                _texto_csv_seguro(data_doc_str),
+                _texto_csv_seguro(data_efetiva_str),
+                _texto_csv_seguro(row_data_dict.get("tipo_transacao", "")),
+                _texto_csv_seguro(row_data_dict.get("tipo_atividade_transacao", "")),
+                _texto_csv_seguro(row_data_dict.get("item_descricao", "")),
+                _texto_csv_seguro(row_data_dict.get("item_tipo_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("item_tipo_atividade_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("item_grupo_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("item_subgrupo_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("unidade", "")),
+                str(row_data_dict.get("quantidade", "")).replace('.', ','),
                 str(row_data_dict.get("valor_unitario", "")).replace('.', ','), 
                 str(row_data_dict.get("valor_total_item", "")).replace('.', ','),
-                row_data_dict.get("status_pagamento", ""), 
+                _texto_csv_seguro(row_data_dict.get("status_pagamento", "")),
                 str(row_data_dict.get("valor_pago_neste_item", "")).replace('.', ',') 
             ]
             writer.writerow(csv_row)
@@ -2578,13 +2686,13 @@ def _create_pdf_header_footer(canvas, doc, title, subtitle=""):
     canvas.saveState()
     styles = getSampleStyleSheet()
     
-    header_text = title
+    header_text = _texto_pdf_seguro(title)
     p_header = Paragraph(header_text, styles['h1'])
     w, h = p_header.wrapOn(canvas, doc.width, doc.topMargin)
     p_header.drawOn(canvas, doc.leftMargin, doc.height + doc.topMargin - h + 0.2*inch)
 
     if subtitle:
-        p_subtitle = Paragraph(subtitle, styles['h3'])
+        p_subtitle = Paragraph(_texto_pdf_seguro(subtitle), styles['h3'])
         w_sub, h_sub = p_subtitle.wrapOn(canvas, doc.width, doc.topMargin)
         p_subtitle.drawOn(canvas, doc.leftMargin, doc.height + doc.topMargin - h - h_sub + 0.1*inch)
 
@@ -2696,20 +2804,20 @@ def baixar_pdf_relatorio_financeiro():
             data_efet_fmt = datetime.strptime(data_efet_val, '%Y-%m-%d').strftime('%d/%m/%y') if data_efet_val else ""
 
             table_data.append([
-                Paragraph(data_doc_fmt, style_center),
-                Paragraph(data_efet_fmt, style_center),
-                Paragraph(row.get("uvr", ""), style_center),
-                Paragraph(row.get("nome_cadastro_origem", "")[:20], style_body), 
-                Paragraph(row.get("numero_documento", "")[:10], style_center),
-                Paragraph(row.get("tipo_transacao", "")[:3], style_center), 
-                Paragraph(row.get("tipo_atividade_transacao", "")[:15], style_body), 
-                Paragraph(row.get("item_descricao", "")[:25], style_body), 
-                Paragraph(row.get("item_grupo_catalogo", "")[:12], style_body), 
-                Paragraph(row.get("item_subgrupo_catalogo", "")[:12], style_body), 
+                Paragraph(_texto_pdf_seguro(data_doc_fmt), style_center),
+                Paragraph(_texto_pdf_seguro(data_efet_fmt), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("uvr", "")), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("nome_cadastro_origem", "")[:20]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("numero_documento", "")[:10]), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("tipo_transacao", "")[:3]), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("tipo_atividade_transacao", "")[:15]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("item_descricao", "")[:25]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("item_grupo_catalogo", "")[:12]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("item_subgrupo_catalogo", "")[:12]), style_body),
                 Paragraph(_format_decimal_quantidade(row.get("quantidade","")), style_right),
                 Paragraph(_format_decimal(row.get("valor_unitario","")), style_right),
                 Paragraph(_format_decimal(row.get("valor_total_item","")), style_right),
-                Paragraph(row.get("status_pagamento","")[:10], style_center), 
+                Paragraph(_texto_pdf_seguro(row.get("status_pagamento","")[:10]), style_center),
                 Paragraph(_format_decimal(row.get("valor_pago_neste_item","")), style_right) 
             ])
 
@@ -2804,8 +2912,8 @@ def baixar_pdf_extrato():
         table_data_extrato = [header_mov_pdf]
         for mov in data["movimentacoes"]:
             table_data_extrato.append([
-                Paragraph(mov.get("data", ""), style_body),
-                Paragraph(mov.get("historico", ""), style_body),
+                Paragraph(_texto_pdf_seguro(mov.get("data", "")), style_body),
+                Paragraph(_texto_pdf_seguro(mov.get("historico", "")), style_body),
                 Paragraph(_format_decimal(mov.get("entrada", "")), style_right),
                 Paragraph(_format_decimal(mov.get("saida", "")), style_right),
                 Paragraph(_format_decimal(mov.get("saldo_parcial", "")), style_right)
@@ -3029,8 +3137,12 @@ def baixar_csv_extrato():
         output = io.StringIO()
         writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         
-        writer.writerow([f"Extrato Bancário - {data.get('conta_info',{}).get('display_name','N/A')}"])
-        writer.writerow([f"Período: {data.get('conta_info',{}).get('periodo','N/A')}"])
+        writer.writerow([_texto_csv_seguro(
+            f"Extrato Bancário - {data.get('conta_info',{}).get('display_name','N/A')}"
+        )])
+        writer.writerow([_texto_csv_seguro(
+            f"Período: {data.get('conta_info',{}).get('periodo','N/A')}"
+        )])
         writer.writerow([]) 
         writer.writerow(["Saldo Inicial:", str(data.get("saldo_inicial","0.00")).replace('.',',')])
         writer.writerow([]) 
@@ -3040,8 +3152,8 @@ def baixar_csv_extrato():
         
         for mov in data["movimentacoes"]:
             csv_row = [
-                mov.get("data", ""),
-                mov.get("historico", ""),
+                _texto_csv_seguro(mov.get("data", "")),
+                _texto_csv_seguro(mov.get("historico", "")),
                 str(mov.get("entrada", "")).replace('.', ','),
                 str(mov.get("saida", "")).replace('.', ','),
                 str(mov.get("saldo_parcial", "")).replace('.', ',')
@@ -3374,17 +3486,27 @@ def imprimir_ficha_associado(id):
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        
-        sql = """
+        if getattr(current_user, "role", None) == "admin":
+            escopo_sql = "WHERE id = %s"
+            parametros = (id,)
+        else:
+            uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+            if not uvr_usuario:
+                return "", 404
+            escopo_sql = "WHERE id = %s AND uvr = %s"
+            parametros = (id, uvr_usuario)
+
+        sql = f"""
             SELECT nome, cpf, rg, data_nascimento, data_admissao, status, 
                    uvr, associacao, logradouro, endereco_numero, bairro, cidade, 
                    uf, cep, telefone, foto_base64, numero
-            FROM associados WHERE id = %s
+            FROM associados {escopo_sql}
         """
-        cur.execute(sql, (id,))
+        cur.execute(sql, parametros)
         row = cur.fetchone()
         
-        if not row: return "Associado não encontrado", 404
+        if not row:
+            return "", 404
 
         dados = {
             "nome": row[0], "cpf": row[1], "rg": row[2],
@@ -3413,7 +3535,10 @@ def imprimir_ficha_associado(id):
         style_valor = ParagraphStyle('FichaValor', parent=styles['Normal'], fontSize=10, leading=12) # removed spaceAfter to compact rows
         
         # Cabeçalho
-        story.append(Paragraph(f"Ficha Cadastral do Associado - {dados['assoc']}", style_titulo))
+        story.append(Paragraph(
+            f"Ficha Cadastral do Associado - {_texto_pdf_seguro(dados['assoc'])}",
+            style_titulo,
+        ))
         story.append(Spacer(1, 0.5*cm))
 
         # --- PROCESSAMENTO DA FOTO (CORRIGIDO PROPORÇÃO) ---
@@ -3449,8 +3574,10 @@ def imprimir_ficha_associado(id):
                 
                 # Cria a imagem com as dimensões calculadas
                 img_obj = ReportLabImage(imagem_io, width=display_w, height=display_h)
-            except Exception as e: 
-                app.logger.error(f"Erro imagem PDF: {e}")
+            except Exception as e:
+                app.logger.warning(
+                    "Falha ao processar imagem da ficha. erro_tipo=%s", type(e).__name__
+                )
 
         # --- ORGANIZAÇÃO DOS DADOS EM LISTAS ---
         # Formato: (Label, Valor)
@@ -3481,12 +3608,18 @@ def imprimir_ficha_associado(id):
             # Itera de 2 em 2 para fazer pares
             for i in range(0, len(lista_campos), 2):
                 campo1 = lista_campos[i]
-                cell1 = [Paragraph(f"<b>{campo1[0]}</b>", style_label), Paragraph(campo1[1], style_valor)]
+                cell1 = [
+                    Paragraph(f"<b>{_texto_pdf_seguro(campo1[0])}</b>", style_label),
+                    Paragraph(_texto_pdf_seguro(campo1[1]), style_valor),
+                ]
                 
                 cell2 = []
                 if i + 1 < len(lista_campos):
                     campo2 = lista_campos[i+1]
-                    cell2 = [Paragraph(f"<b>{campo2[0]}</b>", style_label), Paragraph(campo2[1], style_valor)]
+                    cell2 = [
+                        Paragraph(f"<b>{_texto_pdf_seguro(campo2[0])}</b>", style_label),
+                        Paragraph(_texto_pdf_seguro(campo2[1]), style_valor),
+                    ]
                 
                 rows.append([cell1, cell2])
             
@@ -3546,8 +3679,10 @@ def imprimir_ficha_associado(id):
         return Response(buffer, mimetype='application/pdf', headers={'Content-Disposition': f'inline;filename=ficha_{id}.pdf'})
 
     except Exception as e:
-        app.logger.error(f"Erro PDF: {e}", exc_info=True)
-        return f"Erro: {e}", 500
+        app.logger.error(
+            "Falha ao gerar ficha de associado. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível gerar a ficha.", 500
     finally:
         if conn: conn.close()
 
@@ -3639,10 +3774,20 @@ def imprimir_ficha_cadastro(id):
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
+        if getattr(current_user, "role", None) == "admin":
+            cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
+        else:
+            uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+            if not uvr_usuario:
+                return "", 404
+            cur.execute(
+                "SELECT * FROM cadastros WHERE id = %s AND uvr = %s",
+                (id, uvr_usuario),
+            )
         row = cur.fetchone()
         
-        if not row: return "Não encontrado", 404
+        if not row:
+            return "", 404
         
         # Dados organizados
         d = {
@@ -3658,7 +3803,10 @@ def imprimir_ficha_cadastro(id):
         story = []
         styles = getSampleStyleSheet()
         
-        story.append(Paragraph(f"Ficha Cadastral - {d['tipo']}", ParagraphStyle('T', parent=styles['Heading1'], alignment=TA_CENTER)))
+        story.append(Paragraph(
+            f"Ficha Cadastral - {_texto_pdf_seguro(d['tipo'])}",
+            ParagraphStyle('T', parent=styles['Heading1'], alignment=TA_CENTER),
+        ))
         story.append(Spacer(1, 0.5*cm))
 
         # Função auxiliar para tabela de 2 colunas
@@ -3666,12 +3814,12 @@ def imprimir_ficha_cadastro(id):
             rows = []
             col_w = 8*cm # Largura fixa pois não tem foto
             for i in range(0, len(lista_campos), 2):
-                c1 = [[Paragraph(f"<b>{lista_campos[i][0]}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
-                      [Paragraph(str(lista_campos[i][1]), ParagraphStyle('val', fontSize=10))]]
+                c1 = [[Paragraph(f"<b>{_texto_pdf_seguro(lista_campos[i][0])}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
+                      [Paragraph(_texto_pdf_seguro(lista_campos[i][1]), ParagraphStyle('val', fontSize=10))]]
                 c2 = []
                 if i + 1 < len(lista_campos):
-                    c2 = [[Paragraph(f"<b>{lista_campos[i+1][0]}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
-                          [Paragraph(str(lista_campos[i+1][1]), ParagraphStyle('val', fontSize=10))]]
+                    c2 = [[Paragraph(f"<b>{_texto_pdf_seguro(lista_campos[i+1][0])}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
+                          [Paragraph(_texto_pdf_seguro(lista_campos[i+1][1]), ParagraphStyle('val', fontSize=10))]]
                 rows.append([c1, c2])
             
             t = Table(rows, colWidths=[col_w, col_w])
@@ -3695,8 +3843,13 @@ def imprimir_ficha_cadastro(id):
         
         doc.build(story)
         buffer.seek(0)
-        filename = f"ficha_{d['razao'][:10].replace(' ','_')}.pdf"
+        filename = f"ficha_{_nome_arquivo_seguro(d['razao'], 'cadastro')}.pdf"
         return Response(buffer, mimetype='application/pdf', headers={'Content-Disposition': f'inline;filename={filename}'})
+    except Exception as e:
+        app.logger.error(
+            "Falha ao gerar ficha de cadastro. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível gerar a ficha.", 500
     finally:
         if conn: conn.close()
 # --- AÇÕES DE ESCRITA (EDITAR / EXCLUIR) ---

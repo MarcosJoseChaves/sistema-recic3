@@ -450,3 +450,58 @@ extratos, relatórios, transações e fluxo de caixa. Os testes adicionais cobre
 objeto inexistente, falha fechada do banco, administrador global conforme a
 política, usuário inativado e lista mista com dois IDs autorizados e um alheio.
 Resultado: **28 testes específicos e 435 testes totais aprovados**.
+
+## 19. H2A.3B.2 — consultas, relatórios, exportações e downloads
+
+Em **22/07/2026**, o segundo bloco eliminou as 11 consultas GET públicas ao
+banco registradas na seção 4. A seção original permanece como fotografia do
+diagnóstico; a proteção efetiva é esta:
+
+| Rota | Proteção anterior | Proteção final |
+|---|---|---|
+| `GET /get_associados_ativos` | Pública | Login e UVR de `current_user` no SQL — D |
+| `GET /get_cadastros_ativos` | Pública | Login e UVR de `current_user` no SQL — D |
+| `GET /get_clientes_fornecedores_com_pendencias` | Pública | Login e UVR de `current_user` no SQL — D |
+| `GET /get_contas_correntes` | Pública | Login e UVR de `current_user` no SQL — D |
+| `GET /get_notas_em_aberto` | Pública | Login e UVR de `current_user` no SQL — D |
+| `GET /get_produtos_servicos` | Pública | Login interno — B |
+| `GET /get_relatorio_catalog_options` | Pública | Login interno — B |
+| `GET /get_relatorio_entidades_para_filtro` | Pública | Login e UVR de `current_user` no SQL — D |
+| `GET /get_relatorio_tipos_atividade_transacao` | Pública | Login interno — B |
+| `GET /get_relatorio_uvrs` | Pública | Login; usuário comum recebe só sua UVR e admin possui política global explícita — D |
+| `GET /get_resumo_fluxo_caixa` | Pública | Login e UVR de `current_user` no SQL — D |
+
+Os endpoints JSON devolvem 401 JSON ao visitante. Basic Auth isolada não concede
+sessão. Para usuário comum, filtro vazio ou `todos` é substituído pela UVR da
+sessão; UVR divergente recebe 403 antes do banco. O administrador conserva
+acesso global por ramo explícito da política. Essas consultas não possuem
+paginação ou ordenação escolhida pelo navegador; filtros textuais continuam
+parametrizados e não removem o escopo.
+
+Os filtros de relatório agora exigem login e, quando tratam entidades ou UVRs,
+aplicam a regra de escopo. As seis operações de relatório/extrato protegidas na
+H2A.3B.1 continuam autorizando antes de consultar ou gerar conteúdo. Nesta etapa,
+as exportações CSV passaram a neutralizar campos textuais iniciados por `=`, `+`,
+`-` ou `@`, inclusive após espaços ou controles invisíveis, sem modificar números
+legítimos nem duplicar proteção. Conteúdo variável enviado ao parser de PDF é
+escapado de forma idempotente, e os nomes de arquivo continuam higienizados.
+
+As sete rotas de download/abertura foram verificadas. As quatro exportações
+financeiras mantêm login e regra de UVR/objeto; as fichas de associado e cadastro
+agora carregam o registro no SQL final por `id + uvr`, retornando o mesmo 404
+para ID inexistente ou alheio; e o documento do módulo permanece administrativo,
+vinculado a contrato, com arquivo ativo obrigatório antes da URL privada HTTPS de
+cinco minutos. O redirecionamento usa `no-store`/`no-cache`. Uma recusa não chama
+o gerador de PDF nem o Cloudinary.
+
+Foram corrigidos **2 dos 15 possíveis IDORs** do diagnóstico, os das duas fichas
+PDF. Permanecem **13 possíveis IDORs**, todos fora deste bloco. O inventário
+continua com **177 rotas**: 12 públicas, 59 com login interno e 106
+administrativas; as 105 rotas funcionais da Fiscalização permanecem
+administrativas. As rotas públicas restantes não são consultas locais ao banco;
+incluem as quatro essenciais e rotas não pertencentes ao escopo deste bloco, que
+continuam registradas para revisão posterior, sem afirmação de correção.
+
+Os testes específicos adicionaram 27 casos e preservaram os 435 anteriores:
+**462 testes aprovados, zero falhas e zero erros**. PostgreSQL, Cloudinary, APIs,
+arquivos reais, migrations e deploy permaneceram bloqueados.

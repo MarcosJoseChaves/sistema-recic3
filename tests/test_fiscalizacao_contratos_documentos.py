@@ -358,6 +358,54 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
         admin = self.client.get("/fiscalizacao-contratos/documentos/1/arquivo?download=1")
         self.assertEqual(admin.status_code, 302)
         self.assertEqual(admin.headers["Location"], "https://temporaria.exemplo/documento")
+        self.assertIn("no-store", admin.headers["Cache-Control"])
+        self.assertEqual(admin.headers["Pragma"], "no-cache")
+
+    def test_download_rejeita_url_sem_https(self):
+        self.cadastrar_documento()
+        self.armazenamento.gerar_url_temporaria = MagicMock(
+            return_value="http://inseguro.exemplo/documento"
+        )
+        resposta = self.client.get("/fiscalizacao-contratos/documentos/1/arquivo")
+        self.assertEqual(resposta.status_code, 302)
+        self.assertNotIn("inseguro.exemplo", resposta.headers["Location"])
+
+    def test_erro_ao_gerar_url_nao_expoe_chave(self):
+        self.cadastrar_documento()
+        chave = self.servico.documentos[1]["armazenamento_chave"]
+        self.armazenamento.gerar_url_temporaria = MagicMock(
+            side_effect=CloudinaryStorageError("falha simulada")
+        )
+        resposta = self.client.get("/fiscalizacao-contratos/documentos/1/arquivo")
+        self.assertEqual(resposta.status_code, 302)
+        self.assertNotIn(chave.encode(), resposta.data)
+
+    def test_documento_inexistente_nao_chama_cloudinary(self):
+        self.autenticar_como(1)
+        self.mock_storage.reset_mock()
+        resposta = self.client.get("/fiscalizacao-contratos/documentos/999/arquivo")
+        self.assertEqual(resposta.status_code, 302)
+        self.mock_storage.assert_not_called()
+
+    def test_query_string_nao_substitui_vinculo_do_documento(self):
+        self.cadastrar_documento()
+        documento = self.servico.documentos[1]
+        self.armazenamento.urls.clear()
+        resposta = self.client.get(
+            "/fiscalizacao-contratos/documentos/1/arquivo?contrato_id=2"
+        )
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(
+            self.armazenamento.urls[0][0], documento["armazenamento_chave"]
+        )
+
+    def test_documento_inativo_nao_gera_url_temporaria(self):
+        self.cadastrar_documento()
+        self.servico.documentos[1]["ativo"] = False
+        self.armazenamento.urls.clear()
+        resposta = self.client.get("/fiscalizacao-contratos/documentos/1/arquivo")
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(self.armazenamento.urls)
 
     def test_documento_inexistente_tem_mensagem_amigavel(self):
         self.autenticar_como(1)
