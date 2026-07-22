@@ -1,10 +1,12 @@
 """Persistência transacional dos atestes da execução contratual."""
 
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from .cloudinary_storage import CloudinaryStorageError
 from ..validacoes_atestes import CATEGORIAS_DOCUMENTO_ATESTE, CENTAVOS
 
 
@@ -17,6 +19,7 @@ class ReferenciaAtesteInvalidaError(AtesteServiceError): pass
 
 EDITAVEIS = ("Em elaboração", "Devolvido para correção")
 ALTERAVEIS_COMPLEMENTOS = (*EDITAVEIS, "Atestado")
+LOGGER = logging.getLogger(__name__)
 
 
 class AtesteService:
@@ -242,24 +245,8 @@ class AtesteService:
         try:
             with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
                 ateste=self._obter_bloqueado(cursor,ateste_id);self._exigir_complementos_alteraveis(ateste)
-                if dados.get("documento_id"):
-                    cursor.execute("""SELECT d.id FROM fc_documentos d JOIN fc_medicoes m ON m.id=%s
-                        WHERE d.id=%s AND d.contrato_id=m.contrato_id AND d.ativo""",(ateste["medicao_id"],dados["documento_id"]))
-                    if not cursor.fetchone(): raise ReferenciaAtesteInvalidaError("O documento da nota deve estar ativo e pertencer ao mesmo contrato.")
-                if nota_id:
-                    cursor.execute("""UPDATE fc_ateste_notas_fiscais SET numero_nota=%s,serie=%s,data_emissao=%s,
-                        valor_nota=%s,chave_acesso=%s,documento_id=%s,observacoes=%s,
-                        atualizado_em=CURRENT_TIMESTAMP,atualizado_por_usuario_id=%s
-                        WHERE id=%s AND ateste_id=%s AND ativo""",(
-                        dados["numero_nota"],dados.get("serie"),dados["data_emissao"],dados["valor_nota"],dados.get("chave_acesso"),
-                        dados.get("documento_id"),dados.get("observacoes"),usuario_id,nota_id,ateste_id))
-                    if cursor.rowcount!=1: raise AtesteNaoEncontradoError("Nota fiscal não encontrada.")
-                else:
-                    cursor.execute("""INSERT INTO fc_ateste_notas_fiscais
-                        (ateste_id,numero_nota,serie,data_emissao,valor_nota,chave_acesso,documento_id,observacoes,
-                         criado_por_usuario_id,atualizado_por_usuario_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",(
-                        ateste_id,dados["numero_nota"],dados.get("serie"),dados["data_emissao"],dados["valor_nota"],
-                        dados.get("chave_acesso"),dados.get("documento_id"),dados.get("observacoes"),usuario_id,usuario_id))
+                self._validar_documento_nota(cursor,ateste,dados.get("documento_id"))
+                self._gravar_nota(cursor,ateste_id,dados,usuario_id,nota_id)
             conexao.commit()
         except Exception as erro:
             conexao.rollback()
@@ -267,6 +254,81 @@ class AtesteService:
             if isinstance(erro,psycopg2.IntegrityError): raise AtesteDuplicadoError("Esta nota fiscal já está ativa neste ateste.") from erro
             raise AtesteServiceError("Falha ao salvar nota fiscal.") from erro
         finally: conexao.close()
+
+    @staticmethod
+    def _validar_documento_nota(cursor,ateste,documento_id):
+        if not documento_id: return
+        cursor.execute("""SELECT d.id FROM fc_documentos d JOIN fc_medicoes m ON m.id=%s
+            WHERE d.id=%s AND d.contrato_id=m.contrato_id AND d.ativo""",(ateste["medicao_id"],documento_id))
+        if not cursor.fetchone():
+            raise ReferenciaAtesteInvalidaError("O documento da nota deve estar ativo e pertencer ao mesmo contrato.")
+
+    @staticmethod
+    def _gravar_nota(cursor,ateste_id,dados,usuario_id,nota_id=None):
+        if nota_id:
+            cursor.execute("""UPDATE fc_ateste_notas_fiscais SET numero_nota=%s,serie=%s,data_emissao=%s,
+                valor_nota=%s,chave_acesso=%s,documento_id=%s,observacoes=%s,
+                atualizado_em=CURRENT_TIMESTAMP,atualizado_por_usuario_id=%s
+                WHERE id=%s AND ateste_id=%s AND ativo""",(
+                dados["numero_nota"],dados.get("serie"),dados["data_emissao"],dados["valor_nota"],dados.get("chave_acesso"),
+                dados.get("documento_id"),dados.get("observacoes"),usuario_id,nota_id,ateste_id))
+            if cursor.rowcount!=1: raise AtesteNaoEncontradoError("Nota fiscal não encontrada.")
+        else:
+            cursor.execute("""INSERT INTO fc_ateste_notas_fiscais
+                (ateste_id,numero_nota,serie,data_emissao,valor_nota,chave_acesso,documento_id,observacoes,
+                 criado_por_usuario_id,atualizado_por_usuario_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",(
+                ateste_id,dados["numero_nota"],dados.get("serie"),dados["data_emissao"],dados["valor_nota"],
+                dados.get("chave_acesso"),dados.get("documento_id"),dados.get("observacoes"),usuario_id,usuario_id))
+
+    def salvar_nota_com_upload(self,ateste_id,dados,arquivo,usuario_id,armazenamento,nota_id=None):
+        """Cria o documento privado e o vincula à nota na mesma transação."""
+        if dados.get("documento_id"):
+            raise ReferenciaAtesteInvalidaError(
+                "Escolha entre um documento existente e um novo arquivo."
+            )
+        conexao=None;enviado=None
+        try:
+            conexao=self._conectar_banco()
+            with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
+                ateste=self._obter_bloqueado(cursor,ateste_id);self._exigir_complementos_alteraveis(ateste)
+                cursor.execute("SELECT contrato_id FROM fc_medicoes WHERE id=%s",(ateste["medicao_id"],))
+                medicao=cursor.fetchone()
+                if not medicao: raise ReferenciaAtesteInvalidaError("A medição do ateste não foi encontrada.")
+                enviado=armazenamento.enviar(arquivo,medicao["contrato_id"],None)
+                cursor.execute("""INSERT INTO fc_documentos (
+                    contrato_id,aditivo_id,categoria,titulo,descricao,nome_original,
+                    armazenamento_provedor,armazenamento_chave,armazenamento_versao,
+                    mime_type,extensao,tamanho_bytes,sha256,
+                    criado_por_usuario_id,atualizado_por_usuario_id
+                ) VALUES (%s,NULL,'Comprovante',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id""",(
+                    medicao["contrato_id"],f"Nota fiscal {dados['numero_nota']}",
+                    f"Arquivo enviado durante o lançamento do ateste {ateste['numero_ateste']}.",
+                    arquivo["nome_original"],enviado["armazenamento_provedor"],enviado["armazenamento_chave"],
+                    enviado.get("armazenamento_versao"),arquivo["mime_type"],arquivo["extensao"],
+                    arquivo["tamanho_bytes"],arquivo["sha256"],usuario_id,usuario_id,
+                ))
+                documento_id=cursor.fetchone()["id"]
+                self._gravar_nota(cursor,ateste_id,{**dados,"documento_id":documento_id},usuario_id,nota_id)
+            conexao.commit();return documento_id
+        except (AtesteNaoEncontradoError,AtesteBloqueadoError,ReferenciaAtesteInvalidaError,CloudinaryStorageError):
+            if conexao: conexao.rollback()
+            if enviado: self._remover_upload_nota(armazenamento,enviado)
+            raise
+        except Exception as erro:
+            if conexao: conexao.rollback()
+            if enviado: self._remover_upload_nota(armazenamento,enviado)
+            if isinstance(erro,psycopg2.IntegrityError):
+                raise AtesteDuplicadoError("Esta nota fiscal já está ativa neste ateste.") from erro
+            raise AtesteServiceError("Falha ao enviar o arquivo da nota fiscal.") from erro
+        finally:
+            if conexao: conexao.close()
+
+    @staticmethod
+    def _remover_upload_nota(armazenamento,enviado):
+        try: armazenamento.remover(enviado["armazenamento_chave"])
+        except CloudinaryStorageError as erro:
+            LOGGER.warning("Falha na limpeza compensatória do arquivo da nota: tipo_erro=%s",type(erro).__name__)
 
     def inativar_nota(self,ateste_id,nota_id,usuario_id):
         self._inativar_vinculo("nota",ateste_id,nota_id,usuario_id)

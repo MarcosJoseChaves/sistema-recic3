@@ -6,6 +6,7 @@ from flask import current_app, flash, redirect, render_template, request, url_fo
 from flask_login import current_user
 
 from ..permissions import admin_required
+from ..services.cloudinary_storage import CloudinaryStorage, CloudinaryStorageError
 from ..services.atestes_service import (
     AtesteBloqueadoError, AtesteDuplicadoError, AtesteNaoEncontradoError,
     AtesteService, AtesteServiceError, ReferenciaAtesteInvalidaError,
@@ -16,6 +17,9 @@ from ..validacoes_atestes import (
     normalizar_ateste, normalizar_nota,
 )
 from ..validacoes_medicoes import competencia_mes
+from ..validacoes_documentos import (
+    ValidacaoDocumentoError, limite_upload_bytes, validar_arquivo_documento,
+)
 
 
 ERROS_NEGOCIO = (
@@ -114,7 +118,7 @@ def registrar_rotas_atestes(blueprint, conectar_banco):
             documentos=DocumentoService(conectar_banco).listar_do_contrato(ateste["contrato_id"])
         except (AtesteServiceError,DocumentoServiceError): flash("Não foi possível carregar o formulário da nota.","danger");return voltar(ateste_id)
         return render_template("fiscalizacao_contratos/atestes/nota_form.html",ateste=ateste,nota=nota,modo=modo,
-            documentos=[d for d in documentos if d["ativo"]]),status_http
+            documentos=[d for d in documentos if d["ativo"]],limite_mb=limite_upload_bytes()//(1024*1024)),status_http
 
     def salvar_nota(ateste_id,nota_id=None):
         atual={}
@@ -123,11 +127,21 @@ def registrar_rotas_atestes(blueprint, conectar_banco):
             except (AtesteServiceError,StopIteration): flash("Nota fiscal não encontrada.","warning");return voltar(ateste_id)
         if request.method=="GET": return formulario_nota(ateste_id,dict(atual),"editar" if nota_id else "nova")
         dados,erros=normalizar_nota(request.form)
+        arquivo_enviado=request.files.get("arquivo")
+        arquivo=None
+        if arquivo_enviado and arquivo_enviado.filename:
+            if dados.get("documento_id"): erros.append("Escolha entre um documento existente e um novo arquivo.")
+            try: arquivo=validar_arquivo_documento(arquivo_enviado)
+            except ValidacaoDocumentoError as erro: erros.append(str(erro))
         if erros:
             for erro in erros: flash(erro,"danger")
             return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",400)
-        try: servico().salvar_nota(ateste_id,dados,current_user.id,nota_id)
+        try:
+            if arquivo:
+                servico().salvar_nota_com_upload(ateste_id,dados,arquivo,current_user.id,CloudinaryStorage(),nota_id)
+            else: servico().salvar_nota(ateste_id,dados,current_user.id,nota_id)
         except ERROS_NEGOCIO as erro: flash(str(erro),"danger");return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",400)
+        except CloudinaryStorageError: current_app.logger.exception("Falha no armazenamento da nota fiscal");flash("Não foi possível enviar o arquivo agora. Tente novamente.","danger");return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",500)
         except AtesteServiceError: current_app.logger.exception("Falha ao salvar nota");flash("Não foi possível salvar a nota fiscal.","danger");return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",500)
         flash("Nota fiscal salva.","success");return voltar(ateste_id)
 

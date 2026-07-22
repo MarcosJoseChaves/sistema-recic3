@@ -1,6 +1,7 @@
 """Testes seguros da Etapa 2J, sem PostgreSQL ou Cloudinary reais."""
 
 import importlib
+import io
 import os
 import sys
 import unittest
@@ -13,8 +14,9 @@ from unittest.mock import MagicMock, patch
 
 from modulos.fiscalizacao_contratos.services.atestes_service import (
     AtesteBloqueadoError, AtesteDuplicadoError, AtesteService,
-    ReferenciaAtesteInvalidaError,
+    AtesteServiceError, ReferenciaAtesteInvalidaError,
 )
+from modulos.fiscalizacao_contratos.services.cloudinary_storage import CloudinaryStorageError
 from modulos.fiscalizacao_contratos.validacoes_atestes import (
     decimal_monetario, diferenca_notas, normalizar_ateste, normalizar_nota,
 )
@@ -44,6 +46,7 @@ class AtesteServiceFake:
     ]
 
     def __init__(self):
+        self.documentos_catalogo=deepcopy(type(self).documentos_catalogo)
         self.medicoes={
             1:{"id":1,"contrato_id":1,"numero_medicao":1,"competencia":date(2026,7,1),"versao":1,"valor_bruto":Decimal("7500.00"),"total_acrescimos":Decimal("5.00"),"total_descontos":Decimal("0.00"),"total_glosas":Decimal("10.00"),"valor_liquido":Decimal("7495.00"),"status":"Aprovada","ativo":True,"atual":True,"numero_contrato":"CT-1","empresa_nome":"Empresa Um"},
             2:{"id":2,"contrato_id":1,"numero_medicao":2,"competencia":date(2026,8,1),"versao":1,"valor_liquido":Decimal("100"),"status":"Em análise","ativo":True,"atual":True,"numero_contrato":"CT-1","empresa_nome":"Empresa Um"},
@@ -52,7 +55,7 @@ class AtesteServiceFake:
         }
         self.servidores={1:{"id":1,"nome":"Atestador","matricula":"A1","ativo":True},2:{"id":2,"nome":"Inativo","matricula":"I1","ativo":False},3:{"id":3,"nome":"Encaminhador","matricula":"E1","ativo":True}}
         self.atestes={};self.notas={};self.documentos={};self.eventos={};self.proximo=1;self.proximo_registro=1
-        self.ultimo_filtro=None;self.rollback_simulado=False
+        self.ultimo_filtro=None;self.rollback_simulado=False;self.ultimo_upload=None
 
     def opcoes(self):
         return [m for m in self.medicoes.values() if m["ativo"] and m["atual"] and m["status"]=="Aprovada"],[s for s in self.servidores.values() if s["ativo"]],[{"id":1,"razao_social":"Empresa Um"}]
@@ -99,6 +102,10 @@ class AtesteServiceFake:
         if any(n["ativo"] and n["numero_nota"].lower()==dados["numero_nota"].lower() and (n.get("serie") or "").lower()==(dados.get("serie") or "").lower() and n["id"]!=nota_id for n in self.notas[i]): raise AtesteDuplicadoError("Nota duplicada")
         if nota_id: next(n for n in self.notas[i] if n["id"]==nota_id).update(dados)
         else: self.notas[i].append({"id":self.proximo_registro,"ativo":True,"documento_titulo":"Nota" if dados.get("documento_id") else None,"nome_original":"nota.pdf" if dados.get("documento_id") else None,**dados});self.proximo_registro+=1
+    def salvar_nota_com_upload(self,i,dados,arquivo,usuario_id,armazenamento,nota_id=None):
+        self.ultimo_upload=armazenamento.enviar(arquivo,self.atestes[i]["contrato_id"],None);documento_id=1000
+        self.documentos_catalogo.append({"id":documento_id,"contrato_id":self.atestes[i]["contrato_id"],"titulo":f"Nota fiscal {dados['numero_nota']}","nome_original":arquivo["nome_original"],"ativo":True})
+        self.salvar_nota(i,{**dados,"documento_id":documento_id},usuario_id,nota_id);return documento_id
     def inativar_nota(self,i,nota_id,usuario_id): self._alteravel(i);next(n for n in self.notas[i] if n["id"]==nota_id)["ativo"]=False
     def vincular_documento(self,i,documento_id,categoria,observacoes,usuario_id):
         self._alteravel(i)
@@ -142,9 +149,10 @@ class TestFiscalizacaoContratosAtestes(unittest.TestCase):
     def tearDownClass(cls): APP_MODULE.login_manager._user_callback=cls.loader
     def setUp(self):
         self.client=self.app.test_client();APP_MODULE.login_manager._user_callback=self._usuario;self.servico=AtesteServiceFake();self.conexoes=MOCK_CONNECT.call_count
+        self.armazenamento=MagicMock();self.armazenamento.enviar.return_value={"armazenamento_provedor":"cloudinary","armazenamento_chave":"privado/uuid.pdf","armazenamento_versao":"1"}
         painel_f=MagicMock();painel_f.indicadores.return_value={"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
         painel_m=MagicMock();painel_m.indicadores.return_value={"elaboracao":0,"analise":0,"devolvidas":0,"aprovadas_mes":0,"liquido_aprovado_mes":0,"glosas_mes":0}
-        self.patchers=[patch("modulos.fiscalizacao_contratos.routes.atestes.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.atestes.DocumentoService",DocumentoServiceFake),patch("modulos.fiscalizacao_contratos.routes.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.medicoes.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.contratos.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService",return_value=painel_f),patch("modulos.fiscalizacao_contratos.routes.MedicaoService",return_value=painel_m)]
+        self.patchers=[patch("modulos.fiscalizacao_contratos.routes.atestes.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.atestes.DocumentoService",DocumentoServiceFake),patch("modulos.fiscalizacao_contratos.routes.atestes.CloudinaryStorage",return_value=self.armazenamento),patch("modulos.fiscalizacao_contratos.routes.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.medicoes.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.contratos.AtesteService",return_value=self.servico),patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService",return_value=painel_f),patch("modulos.fiscalizacao_contratos.routes.MedicaoService",return_value=painel_m)]
         [p.start() for p in self.patchers]
     def tearDown(self):
         [p.stop() for p in reversed(self.patchers)];self.assertEqual(MOCK_CONNECT.call_count,self.conexoes)
@@ -190,6 +198,17 @@ class TestFiscalizacaoContratosAtestes(unittest.TestCase):
         i=self.criar();d=normalizar_nota(self.nota())[0];self.servico.salvar_nota(i,d,1);nota=self.servico.notas[i][0];self.servico.salvar_nota(i,{**d,"valor_nota":Decimal("7000")},1,nota["id"]);self.assertEqual(nota["valor_nota"],Decimal("7000"))
         with self.assertRaises(AtesteDuplicadoError): self.servico.salvar_nota(i,d,1)
         self.servico.inativar_nota(i,nota["id"],1);self.assertFalse(nota["ativo"]);self.assertEqual(len(self.servico.notas[i]),1)
+    def test_formulario_da_nota_permite_upload_imediato_e_vincula_documento(self):
+        self.autenticar(1);i=self.criar();pagina=self.client.get(f"/fiscalizacao-contratos/atestes/{i}/notas/nova").data.decode();self.assertIn('enctype="multipart/form-data"',pagina);self.assertIn('name="arquivo"',pagina)
+        dados={**self.nota(documento_id=""),"arquivo":(io.BytesIO(b"%PDF-1.4\nconteudo\n%%EOF"),"nota-fiscal.pdf")};resposta=self.client.post(f"/fiscalizacao-contratos/atestes/{i}/notas/nova",data=dados,content_type="multipart/form-data")
+        self.assertEqual(resposta.status_code,302);self.assertEqual(self.servico.notas[i][0]["documento_id"],1000);self.armazenamento.enviar.assert_called_once()
+    def test_formulario_rejeita_documento_existente_e_upload_ao_mesmo_tempo(self):
+        self.autenticar(1);i=self.criar();dados={**self.nota(documento_id="1"),"arquivo":(io.BytesIO(b"%PDF-1.4\n%%EOF"),"nota.pdf")};resposta=self.client.post(f"/fiscalizacao-contratos/atestes/{i}/notas/nova",data=dados,content_type="multipart/form-data");self.assertEqual(resposta.status_code,400);self.armazenamento.enviar.assert_not_called()
+    def test_documento_existente_ou_nenhum_documento_nao_faz_upload(self):
+        self.autenticar(1);i=self.criar()
+        for numero,documento in (("NF-1","1"),("NF-2","")):
+            resposta=self.client.post(f"/fiscalizacao-contratos/atestes/{i}/notas/nova",data=self.nota(numero_nota=numero,documento_id=documento));self.assertEqual(resposta.status_code,302)
+        self.armazenamento.enviar.assert_not_called()
     def test_documento_de_outro_contrato_ou_inativo_rejeitado(self):
         i=self.criar();d=normalizar_nota(self.nota())[0]
         for doc in (2,3):
@@ -257,7 +276,7 @@ class TestFiscalizacaoContratosAtestes(unittest.TestCase):
         self.assertIn("WHERE ativo = TRUE AND status <> 'Cancelado'",sql);self.assertIn("uq_fc_ateste_nota_ativa",sql);self.assertIn("uq_fc_ateste_documento_ativo",sql)
         self.assertNotIn("atualizado_por_usuario_id INTEGER NOT NULL",sql)
     def test_codigo_sem_delete_float_credenciais_e_cloudinary(self):
-        textos="\n".join((RAIZ/p).read_text(encoding="utf-8") for p in ("modulos/fiscalizacao_contratos/services/atestes_service.py","modulos/fiscalizacao_contratos/routes/atestes.py","modulos/fiscalizacao_contratos/validacoes_atestes.py"));self.assertNotIn("DELETE ",textos.upper());self.assertNotIn("float(",textos);self.assertNotIn("DATABASE_URL",textos);self.assertNotIn("CloudinaryStorage",textos);self.assertNotIn("destroy(",textos)
+        textos="\n".join((RAIZ/p).read_text(encoding="utf-8") for p in ("modulos/fiscalizacao_contratos/services/atestes_service.py","modulos/fiscalizacao_contratos/routes/atestes.py","modulos/fiscalizacao_contratos/validacoes_atestes.py"));self.assertNotIn("DELETE ",textos.upper());self.assertNotIn("float(",textos);self.assertNotIn("DATABASE_URL",textos);self.assertNotIn("destroy(",textos);self.assertIn("CloudinaryStorage",textos)
     def test_todas_rotas_atestes_tem_admin_required(self):
         import ast
         arvore=ast.parse((RAIZ/"modulos/fiscalizacao_contratos/routes/atestes.py").read_text(encoding="utf-8"));rotas=[]
@@ -290,11 +309,37 @@ class CursorAtesteTransacaoFake:
 
 
 class ConexaoAtesteFake:
-    def __init__(self,cursor):self.cursor_obj=cursor;self.commits=0;self.rollbacks=0
+    def __init__(self,cursor,falhar_commit=False):self.cursor_obj=cursor;self.commits=0;self.rollbacks=0;self.falhar_commit=falhar_commit
     def cursor(self,**kwargs):return self.cursor_obj
-    def commit(self):self.commits+=1
+    def commit(self):
+        if self.falhar_commit:raise Exception("falha simulada no commit")
+        self.commits+=1
     def rollback(self):self.rollbacks+=1
     def close(self):pass
+
+
+class CursorUploadNotaFake:
+    def __init__(self,falha_em=None):self.ultima="";self.rowcount=1;self.falha_em=falha_em
+    def __enter__(self):return self
+    def __exit__(self,*args):return False
+    def execute(self,sql,parametros=None):
+        self.ultima=" ".join(str(sql).split())
+        if self.falha_em=="documento" and "INSERT INTO fc_documentos" in self.ultima:raise Exception("falha simulada no documento")
+        if self.falha_em=="nota" and "INSERT INTO fc_ateste_notas_fiscais" in self.ultima:raise Exception("falha simulada na nota")
+        if self.falha_em=="atualizacao" and "UPDATE fc_ateste_notas_fiscais" in self.ultima:raise Exception("falha simulada na atualização")
+    def fetchone(self):
+        if "SELECT * FROM fc_atestes" in self.ultima:return {"id":1,"medicao_id":1,"numero_ateste":1,"ativo":True,"status":"Em elaboração"}
+        if "SELECT contrato_id FROM fc_medicoes" in self.ultima:return {"contrato_id":7}
+        if "RETURNING id" in self.ultima:return {"id":99}
+        return None
+
+
+class ArmazenamentoNotaFake:
+    def __init__(self,falhar_limpeza=False):self.removidos=[];self.envios=0;self.falhar_limpeza=falhar_limpeza
+    def enviar(self,arquivo,contrato_id,aditivo_id=None):self.envios+=1;return {"armazenamento_provedor":"cloudinary","armazenamento_chave":"contratos/7/uuid.pdf","armazenamento_versao":"1"}
+    def remover(self,chave):
+        self.removidos.append(chave)
+        if self.falhar_limpeza:raise CloudinaryStorageError("falha simulada na limpeza")
 
 
 class TestTransacoesAtestes(unittest.TestCase):
@@ -311,6 +356,25 @@ class TestTransacoesAtestes(unittest.TestCase):
         c=ConexaoAtesteFake(CursorAtesteTransacaoFake(falhar_integridade=True));s=AtesteService(lambda:c);dados={"medicao_id":1,"numero_ateste":1,"servidor_atestador_id":1,"parecer":None,"observacoes":None}
         with self.assertRaisesRegex(AtesteDuplicadoError,"Já existe ateste"):s.criar(dados,7)
         self.assertEqual((c.commits,c.rollbacks),(0,1))
+    def test_upload_da_nota_faz_commit_ou_remove_arquivo_se_banco_falhar(self):
+        dados=normalizar_nota({"numero_nota":"NF-1","serie":"A","data_emissao":"2026-07-22","valor_nota":"10,00","documento_id":""})[0];arquivo={"nome_original":"nota.pdf","mime_type":"application/pdf","extensao":"pdf","tamanho_bytes":10,"sha256":"a"*64,"conteudo":b"%PDF-"}
+        cenarios=((None,None,False),("documento",None,False),("nota",None,False),("atualizacao",10,False),(None,None,True))
+        for falha_em,nota_id,falhar_commit in cenarios:
+            conexao=ConexaoAtesteFake(CursorUploadNotaFake(falha_em),falhar_commit);armazenamento=ArmazenamentoNotaFake();servico=AtesteService(lambda:conexao)
+            if falha_em or falhar_commit:
+                with self.assertRaises(AtesteServiceError):servico.salvar_nota_com_upload(1,dados,arquivo,7,armazenamento,nota_id)
+                self.assertEqual((conexao.commits,conexao.rollbacks,armazenamento.removidos),(0,1,["contratos/7/uuid.pdf"]))
+            else:
+                self.assertEqual(servico.salvar_nota_com_upload(1,dados,arquivo,7,armazenamento,nota_id),99)
+                self.assertEqual((conexao.commits,conexao.rollbacks,armazenamento.removidos),(1,0,[]))
+    def test_opcoes_mutuamente_exclusivas_tambem_no_servico(self):
+        dados=normalizar_nota({"numero_nota":"NF-1","serie":"A","data_emissao":"2026-07-22","valor_nota":"10,00","documento_id":"1"})[0];armazenamento=ArmazenamentoNotaFake();servico=AtesteService(lambda:(_ for _ in ()).throw(AssertionError("banco não deveria ser aberto")))
+        with self.assertRaisesRegex(ReferenciaAtesteInvalidaError,"Escolha entre"):servico.salvar_nota_com_upload(1,dados,{"nome_original":"nota.pdf"},7,armazenamento)
+        self.assertEqual(armazenamento.envios,0)
+    def test_falha_na_limpeza_nao_encobre_erro_principal(self):
+        dados=normalizar_nota({"numero_nota":"NF-1","serie":"A","data_emissao":"2026-07-22","valor_nota":"10,00","documento_id":""})[0];arquivo={"nome_original":"nota.pdf","mime_type":"application/pdf","extensao":"pdf","tamanho_bytes":10,"sha256":"a"*64,"conteudo":b"%PDF-"};conexao=ConexaoAtesteFake(CursorUploadNotaFake("nota"));armazenamento=ArmazenamentoNotaFake(True);servico=AtesteService(lambda:conexao)
+        with self.assertLogs("modulos.fiscalizacao_contratos.services.atestes_service",level="WARNING"),self.assertRaisesRegex(AtesteServiceError,"Falha ao enviar"):servico.salvar_nota_com_upload(1,dados,arquivo,7,armazenamento)
+        self.assertEqual(conexao.rollbacks,1)
 
 
 if __name__=="__main__": unittest.main()

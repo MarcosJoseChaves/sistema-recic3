@@ -695,3 +695,49 @@ após devolução.
 A Etapa 2J está pronta para revisão técnica e funcional. O próximo passo seguro,
 somente mediante nova autorização, é revisar e depois aplicar exclusivamente a
 migração 011 no ambiente configurado.
+
+### Aplicação da migração 011
+
+Em **22/07/2026**, a migração `011_criar_fc_atestes.sql` foi aplicada no
+ambiente configurado e verificada. Foram criadas as quatro tabelas previstas:
+`fc_atestes`, `fc_ateste_notas_fiscais`, `fc_ateste_documentos` e
+`fc_ateste_eventos`.
+
+Foram conferidos colunas, tipos, obrigatoriedade, valores padrão, chaves
+primárias, chaves estrangeiras, restrições e índices. As quatro tabelas
+iniciaram com **0 registros**. Nenhum ateste, nota fiscal, vínculo de documento
+ou evento foi criado automaticamente.
+
+As quantidades de registros em `usuarios`, `fc_medicoes`, `fc_servidores` e
+`fc_documentos` foram comparadas antes e depois da execução e permaneceram
+inalteradas. Nenhum dado anterior foi atualizado ou apagado. Nenhuma credencial
+foi registrada neste arquivo.
+
+### Melhoria no lançamento da nota fiscal
+
+Em **22/07/2026**, o formulário da nota fiscal passou a permitir o envio de um
+arquivo novo no próprio lançamento, além da seleção de um documento já
+cadastrado. O arquivo é validado pelo conteúdo, armazenado de forma privada no
+Cloudinary existente, registrado em `fc_documentos` e vinculado automaticamente
+à nota fiscal.
+
+Cadastro do documento e gravação da nota utilizam a mesma transação. Se o banco
+falhar depois do upload, ocorre rollback e a cópia recém-enviada é removida do
+Cloudinary. A suíte passou a ter **310 testes aprovados, 0 falhas e 0 erros**,
+sem acesso real ao PostgreSQL ou ao Cloudinary durante os testes.
+
+### Encerramento da Etapa 2J
+
+A Etapa 2J foi concluída em **22/07/2026**. A migração 011 está aplicada e
+verificada, com as quatro tabelas de atestes em funcionamento. Os testes manuais
+foram aprovados, incluindo o lançamento de nota fiscal com envio direto de
+arquivo e a alternativa de selecionar um documento já cadastrado.
+
+Os arquivos enviados permanecem privados e autenticados no Cloudinary. Se o
+envio funcionar, mas a gravação no banco falhar, o sistema desfaz a transação e
+remove o novo arquivo enviado, evitando arquivo órfão. Documentos antigos já
+vinculados são preservados.
+
+A validação final aprovou **310 testes automatizados**, sem acesso ao PostgreSQL
+ou Cloudinary reais. O encaminhamento registra o envio para o fluxo de pagamento,
+mas não representa a confirmação de que o pagamento foi realizado.
