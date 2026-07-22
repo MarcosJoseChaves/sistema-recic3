@@ -38,7 +38,7 @@ MOCK_CONNECT = PATCH_CONEXAO.start()
 
 sys.modules.pop("app", None)
 with (
-    patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False),
+    patch.dict(os.environ, {"APP_ENV": "testing", "SECRET_KEY": "teste-ficticio", "DATABASE_URL": ""}, clear=True),
     patch("dotenv.load_dotenv", return_value=False),
 ):
     APP_MODULE = importlib.import_module("app")

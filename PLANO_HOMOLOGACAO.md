@@ -190,14 +190,17 @@ está fixo em 64 MB no código, enquanto o módulo aplica `FC_MAX_UPLOAD_MB` ant
 Cloudinary. BrasilAPI, OpenCNPJA, Bootstrap e Font Awesome usam endereços definidos
 no código/templates e não possuem variável de ambiente atualmente.
 
-Variáveis propostas, mas **ainda não implementadas**:
+Variáveis implementadas na Etapa H2A.1:
 
 | Variável proposta | Finalidade |
 |---|---|
-| `APP_ENV=homologacao` | Identificar o ambiente e ativar configurações seguras |
-| `HOMOLOGACAO_GATE_USER` | Usuário da barreira global temporária |
-| `HOMOLOGACAO_GATE_PASSWORD` | Senha exclusiva da barreira global |
-| `FC_CLOUDINARY_PREFIX` | Separar arquivos caso não haja product environment exclusivo |
+| `APP_ENV` | Identificar `development`, `testing`, `homologation` ou `production` |
+| `APP_DEBUG` | Ativar depuração somente no desenvolvimento local |
+| `TRUST_PROXY` | Autorizar explicitamente a confiança em um proxy |
+| `HOMOLOGATION_GATE_ENABLED` | Ativar a barreira global somente em homologação |
+| `HOMOLOGATION_GATE_USER` | Usuário da barreira global temporária |
+| `HOMOLOGATION_GATE_PASSWORD` | Senha exclusiva da barreira global |
+| `CLOUDINARY_FOLDER_PREFIX` | Separar novos arquivos por ambiente |
 
 Credenciais do administrador interno não devem permanecer como variáveis fixas.
 O usuário deve ser criado por comando único, com senha aleatória transmitida fora
@@ -227,11 +230,12 @@ Solução temporária recomendada antes da homologação:
 5. enviar `X-Robots-Tag: noindex, nofollow, noarchive` em todas as respostas;
 6. disponibilizar somente contas autorizadas, sem cadastro público.
 
-Para uma solução simples no próprio projeto, pode ser implementada autenticação
-HTTP Basic em um `before_request`, habilitada somente quando
-`APP_ENV=homologacao`. Uma opção mais robusta é usar Cloudflare Access ou outro
-gateway de identidade na frente do Render. A solução não foi implementada nesta
-tarefa.
+Foi implementada autenticação HTTP Basic temporária em um `before_request`,
+habilitada somente quando `APP_ENV=homologation` e
+`HOMOLOGATION_GATE_ENABLED=true`. A rota `/health` é a única exceção. O login
+interno e as permissões continuam sendo a segunda camada. Uma opção mais
+robusta, ainda futura, é usar Cloudflare Access ou outro gateway de identidade
+na frente do Render.
 
 Configurações necessárias antes de expor o serviço:
 
@@ -248,7 +252,7 @@ Configurações necessárias antes de expor o serviço:
 
 ## 8. Health check
 
-Não existe rota de health check. Antes do deploy, propor e testar:
+A Etapa H2A.1 criou e testou:
 
 ```http
 GET /health
@@ -260,8 +264,8 @@ Resposta mínima:
 {"status":"ok"}
 ```
 
-Essa rota deve responder 200 sem banco, não revelar versão, caminhos, hostname,
-variáveis ou credenciais e ser a única exceção à barreira global. Uma verificação
+Essa rota responde 200 sem banco, não revela versão, caminhos, hostname,
+variáveis ou credenciais e é a única exceção à barreira global. Uma verificação
 de banco, se desejada futuramente, deve ficar em outro endpoint de prontidão com
 acesso controlado.
 
@@ -430,6 +434,62 @@ fase posterior, desde que documentados:
 - CDN ou domínio próprio;
 - automação completa de preview environments;
 - política formal de retenção de documentos.
+
+## 16. Implementação da Etapa H2A.1
+
+Em **22/07/2026**, foi preparada a inicialização protegida e o isolamento da
+futura homologação, sem deploy e sem acesso a PostgreSQL ou Cloudinary reais.
+
+Foram implementados:
+
+- identificação explícita por `APP_ENV`, com os valores `development`,
+  `testing`, `homologation` e `production`; quando ausente, assume
+  `development` apenas para compatibilidade local, enquanto valores desconhecidos
+  interrompem a inicialização;
+- falha clara quando `SECRET_KEY` estiver ausente em qualquer ambiente e quando
+  `DATABASE_URL` estiver ausente em homologação ou produção;
+- remoção do banco local e da chave previsível usados anteriormente como
+  alternativas silenciosas;
+- retirada da chamada automática de `migrar_dados_antigos_produtos()` durante a
+  importação de `app.py`;
+- script administrativo separado, com confirmação textual obrigatória, que não
+  deve ser executado automaticamente pelo Render;
+- `GET /health`, com resposta JSON mínima e sem consulta a banco ou Cloudinary;
+- `ProxyFix` para exatamente um proxy, aplicado somente com
+  `TRUST_PROXY=true`, confiando apenas no endereço de origem e protocolo;
+- cookies de sessão e de "lembrar-me" com `HttpOnly` e `SameSite=Lax` em todos
+  os ambientes e `Secure` em homologação e produção;
+- esquema HTTPS preferencial nos ambientes online e `DEBUG` sempre desligado
+  neles;
+- cabeçalhos `X-Content-Type-Options`, `X-Frame-Options` e `Referrer-Policy`,
+  além de HSTS conservador em requisições HTTPS online, sem `preload` e sem
+  `includeSubDomains`;
+- barreira HTTP Basic temporária somente para homologação, com comparação
+  segura, resposta genérica e exceção exclusiva para `/health`;
+- prefixo configurável para novos uploads por `CLOUDINARY_FOLDER_PREFIX`, com
+  normalização de barras, rejeição de `.`, `..` e barras invertidas, validação
+  de configuração parcial e composição centralizada;
+- preservação das chaves de documentos antigos e do mesmo `public_id` na
+  limpeza compensatória de uploads novos;
+- atualização do `.env.example` somente com valores fictícios.
+
+Os testes usam `APP_ENV=testing`, chave fictícia e bloqueios globais para
+PostgreSQL e Cloudinary. Foram aprovados os **311 testes anteriores** e **59
+testes novos**, totalizando **370 testes, 0 falhas e 0 erros**. Nenhuma migration
+foi executada e nenhum dado ou arquivo real foi alterado.
+
+### Riscos que permanecem pendentes
+
+- proteção CSRF nos formulários;
+- fixação da versão do Python;
+- fixação das versões das dependências;
+- migration-base reproduzível do sistema principal;
+- controle formal das migrations com versão e checksum;
+- rotação das credenciais presentes no histórico;
+- criação do banco Neon e do ambiente Cloudinary exclusivos de homologação;
+- configuração e deploy no Render;
+- revisão individual das rotas públicas do sistema principal;
+- CSP, hosts confiáveis, rate limit, monitoramento e resposta a incidentes.
 
 ## Referências técnicas consultadas
 

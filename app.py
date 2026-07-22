@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from configuracao_ambiente import configurar_aplicacao
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
 
 # ReportLab Imports (Para PDF)
@@ -45,33 +46,31 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite aumentado para 64MB
-app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
+configurar_aplicacao(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # --- CONFIGURAÇÃO DO BANCO DE DADOS ---
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = app.config.get('DATABASE_URL')
 
 def conectar_banco():
     """Estabelece conexão com o banco de dados."""
-    if DATABASE_URL:
-        # Removido o sslmode='require' para funcionar localmente
-        return psycopg2.connect(DATABASE_URL)
-    else:
-        return psycopg2.connect(
-            host="localhost",
-            database="recic3",
-            user="postgres",
-            password="postgres", 
-            port="5432"
-        )
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL não está configurada.")
+    return psycopg2.connect(DATABASE_URL)
 
 app.register_blueprint(
     criar_blueprint_fiscalizacao(conectar_banco),
     url_prefix="/fiscalizacao-contratos"
 )
+
+
+@app.get('/health')
+def health():
+    """Health check mínimo, sem dependência de banco ou serviço externo."""
+    return jsonify({"status": "ok"})
 
 # --- VALIDAÇÕES ---
 def validar_cnpj(cnpj):
@@ -312,9 +311,6 @@ def migrar_dados_antigos_produtos():
         app.logger.error(f"Erro na migração de produtos: {e}")
     finally:
         if conn: conn.close()
-
-# CHAMADA DA MIGRAÇÃO (Cole isso logo após a definição da função acima)
-migrar_dados_antigos_produtos()
 
 class User(UserMixin):
     def __init__(self, id, username, role, uvr_acesso):
@@ -4500,4 +4496,4 @@ if __name__ == "__main__":
         app.logger.addHandler(stream_handler)
     
     app.logger.info("Iniciando o aplicativo Flask...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=app.config['DEBUG'])

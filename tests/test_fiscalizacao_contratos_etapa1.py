@@ -17,7 +17,7 @@ def importar_app_sem_banco():
     sys.modules.pop("app", None)
 
     with (
-        patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False),
+        patch.dict(os.environ, {"APP_ENV": "testing", "SECRET_KEY": "teste-ficticio", "DATABASE_URL": ""}, clear=True),
         patch("dotenv.load_dotenv", return_value=False),
         patch("psycopg2.connect", return_value=conexao_falsa) as conectar_mock,
     ):
@@ -130,11 +130,10 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
 
         self.assertIn("/fiscalizacao-contratos", rotas)
 
-    def test_sistema_importa_e_cria_cliente_de_teste(self):
+    def test_sistema_importa_sem_acessar_banco(self):
         self.assertEqual(self.flask_app.name, "app")
         self.assertIsNotNone(self.client)
-        self.assertTrue(CONECTAR_MOCK.called)
-        self.assertIs(CONECTAR_MOCK.return_value, CONECTAR_MOCK.return_value)
+        CONECTAR_MOCK.assert_not_called()
 
 
 if __name__ == "__main__":

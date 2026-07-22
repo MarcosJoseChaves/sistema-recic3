@@ -23,7 +23,7 @@ CONEXAO_FALSA = MagicMock(name="conexao_falsa_ativos")
 PATCH_CONEXAO = patch("psycopg2.connect", return_value=CONEXAO_FALSA)
 MOCK_CONNECT = PATCH_CONEXAO.start()
 sys.modules.pop("app", None)
-with patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False), patch("dotenv.load_dotenv", return_value=False):
+with patch.dict(os.environ, {"APP_ENV": "testing", "SECRET_KEY": "teste-ficticio", "DATABASE_URL": ""}, clear=True), patch("dotenv.load_dotenv", return_value=False):
     APP_MODULE = importlib.import_module("app")
 MOCK_CONNECT.side_effect = AssertionError("Nenhuma conexão real é permitida")
 

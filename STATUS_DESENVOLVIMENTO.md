@@ -760,3 +760,45 @@ A validação final aprovou **6 testes específicos do painel** e **311 testes n
 suíte completa**, com zero falhas e zero erros. PostgreSQL e Cloudinary reais
 permaneceram bloqueados, nenhuma migração foi executada e nenhuma regra de negócio
 foi alterada.
+
+### Etapa H2A.1 — Inicialização protegida e isolamento da homologação
+
+Em **22/07/2026**, a Etapa H2A.1 foi implementada e permanece **pendente de
+revisão e commit**. A importação de `app.py` deixou de executar automaticamente
+a migração legada de produtos. Essa rotina continua disponível por um script
+administrativo separado que exige confirmação explícita.
+
+A inicialização agora diferencia `development`, `testing`, `homologation` e
+`production`. Não existem mais chave secreta previsível nem conexão local de
+banco como alternativas silenciosas. Homologação e produção exigem
+`SECRET_KEY` e `DATABASE_URL`; testes usam configuração fictícia explícita.
+
+Foram adicionados `/health` sem dependência externa, `ProxyFix` opcional,
+política segura de cookies, cabeçalhos mínimos e uma barreira HTTP Basic
+exclusiva da homologação. Novos uploads podem usar prefixo Cloudinary separado
+por ambiente, sem modificar as chaves dos documentos antigos.
+
+Foram preservados os **311 testes anteriores** e acrescentados **59 testes** da
+Etapa H2A.1. Resultado atual: **370 testes aprovados, 0 falhas e 0 erros**, com
+PostgreSQL e Cloudinary reais bloqueados e nenhuma migration executada.
+
+Continuam pendentes: CSRF, fixação das versões do Python e das dependências,
+migration-base reproduzível, controle formal das migrations, rotação de
+credenciais históricas, criação dos serviços separados de homologação e deploy
+no Render.
+
+#### Revisão técnica final da H2A.1
+
+Em **22/07/2026**, a revisão final tornou o `ProxyFix` mais conservador, retirando
+a confiança desnecessária em `X-Forwarded-Host` e `X-Forwarded-Port`. Foram
+incluídas configurações seguras para os cookies de "lembrar-me" do Flask-Login.
+
+O prefixo Cloudinary passou a rejeitar barras invertidas, além de `.` e `..`.
+Configurações parciais do Cloudinary em homologação ou produção agora
+interrompem a inicialização com mensagem genérica, sem revelar valores.
+
+Os testes históricos passaram a limpar temporariamente o ambiente durante a
+importação do app, evitando dependência do `.env` pessoal. A revisão final
+aprovou **370 testes, 0 falhas e 0 erros**. Nenhum banco, Cloudinary ou migration
+foi acessado ou executado. O deploy ainda não ocorreu e esta etapa não torna o
+sistema pronto para produção.

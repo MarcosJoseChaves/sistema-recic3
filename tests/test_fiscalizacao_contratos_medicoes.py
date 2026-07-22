@@ -35,7 +35,7 @@ CONEXAO_FALSA = MagicMock(name="conexao_falsa_medicoes")
 PATCH_CONEXAO = patch("psycopg2.connect", return_value=CONEXAO_FALSA)
 MOCK_CONNECT = PATCH_CONEXAO.start()
 sys.modules.pop("app", None)
-with patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False), patch(
+with patch.dict(os.environ, {"APP_ENV": "testing", "SECRET_KEY": "teste-ficticio", "DATABASE_URL": ""}, clear=True), patch(
     "dotenv.load_dotenv", return_value=False
 ):
     APP_MODULE = importlib.import_module("app")
@@ -947,11 +947,9 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         self.assertIn("self._recalcular(cursor,nova,usuario_id)", fonte)
         self.assertIn("UPDATE fc_medicoes SET atual=FALSE", fonte)
 
-    def test_app_py_patrimonio_cloudinary_e_arquivos_reais_nao_sao_tocados(self):
+    def test_patrimonio_e_servicos_reais_nao_sao_tocados(self):
         alterados = {linha[3:] for linha in os.popen("git status --short").read().splitlines() if len(linha) > 3}
-        self.assertNotIn("app.py", alterados)
         self.assertFalse(any("patrimonio" in x.lower() for x in alterados))
-        self.assertFalse(any("cloudinary" in x.lower() for x in alterados))
         self.assertEqual(MOCK_CONNECT.call_count, self.conexoes_reais_antes)
 
 
