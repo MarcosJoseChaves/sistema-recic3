@@ -66,8 +66,7 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
     def test_usuario_comum_recebe_acesso_negado(self):
         self.autenticar_como(2)
 
-        with patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService") as fiscalizacao_cls, patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
-            fiscalizacao_cls.return_value.indicadores.return_value = {"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
+        with patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
             resposta = self.client.get("/fiscalizacao-contratos")
 
         self.assertEqual(resposta.status_code, 403)
@@ -75,13 +74,53 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
     def test_administrador_acessa_o_modulo(self):
         self.autenticar_como(1)
 
-        with patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService") as fiscalizacao_cls, patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
-            fiscalizacao_cls.return_value.indicadores.return_value = {"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
+        with (
+            patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService") as fiscalizacao_cls,
+            patch("modulos.fiscalizacao_contratos.routes.MedicaoService") as medicao_cls,
+            patch("modulos.fiscalizacao_contratos.routes.AtesteService") as ateste_cls,
+            patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")),
+        ):
             resposta = self.client.get("/fiscalizacao-contratos")
 
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("Fiscalização de Contratos".encode("utf-8"), resposta.data)
-        self.assertIn("Módulo em construção".encode("utf-8"), resposta.data)
+        self.assertIn("Gestão integrada de contratos, fiscalizações, medições e documentos.".encode("utf-8"), resposta.data)
+        self.assertIn("Painel principal".encode("utf-8"), resposta.data)
+        self.assertNotIn("Painel do módulo".encode("utf-8"), resposta.data)
+        fiscalizacao_cls.assert_not_called()
+        medicao_cls.assert_not_called()
+        ateste_cls.assert_not_called()
+
+    def test_painel_exibe_os_onze_modulos_sem_indicadores(self):
+        self.autenticar_como(1)
+
+        with patch.object(APP_MODULE, "conectar_banco", side_effect=AssertionError("Banco não deve ser acessado")):
+            resposta = self.client.get("/fiscalizacao-contratos")
+
+        texto = resposta.data.decode("utf-8")
+        destinos = {
+            "Empresas": "/fiscalizacao-contratos/empresas",
+            "Servidores e Responsáveis": "/fiscalizacao-contratos/servidores",
+            "Contratos": "/fiscalizacao-contratos/contratos",
+            "Aditivos": "/fiscalizacao-contratos/aditivos",
+            "Documentos": "/fiscalizacao-contratos/documentos",
+            "Planilhas Orçamentárias": "/fiscalizacao-contratos/planilhas",
+            "Ativos Contratuais": "/fiscalizacao-contratos/ativos",
+            "Fiscalizações": "/fiscalizacao-contratos/fiscalizacoes",
+            "Ocorrências": "/fiscalizacao-contratos/ocorrencias",
+            "Medições": "/fiscalizacao-contratos/medicoes",
+            "Atestes": "/fiscalizacao-contratos/atestes",
+        }
+        self.assertEqual(resposta.status_code, 200)
+        for titulo, destino in destinos.items():
+            self.assertIn(titulo, texto)
+            self.assertIn(f'href="{destino}"', texto)
+        for indicador in (
+            "Ocorrências abertas", "Ocorrências vencidas", "Fiscalizações em 30 dias",
+            "Atestes em elaboração", "Valor encaminhado no mês", "Medições em elaboração",
+            "Líquido aprovado no mês", "Glosas no mês",
+        ):
+            self.assertNotIn(indicador, texto)
 
     def test_rotas_antigas_continuam_registradas(self):
         rotas = {regra.rule for regra in self.flask_app.url_map.iter_rules()}

@@ -741,3 +741,22 @@ vinculados são preservados.
 A validação final aprovou **310 testes automatizados**, sem acesso ao PostgreSQL
 ou Cloudinary reais. O encaminhamento registra o envio para o fluxo de pagamento,
 mas não representa a confirmação de que o pagamento foi realizado.
+
+### Simplificação visual do painel inicial
+
+Em **22/07/2026**, o painel inicial do módulo foi simplificado para funcionar
+como uma entrada direta para suas funcionalidades. Os indicadores operacionais e
+financeiros foram removidos dessa página, evitando também a execução das consultas
+que os alimentavam. Os serviços continuam preservados para possível utilização em
+um painel gerencial separado.
+
+Foram mantidos os **11 cards de acesso**, em ordem lógica, com os mesmos destinos.
+O cabeçalho ficou mais compacto e o layout passou a usar cards uniformes,
+responsivos e acessíveis, com foco visível para navegação por teclado. Os ícones
+de Aditivos e Atestes foram corrigidos para opções compatíveis com a biblioteca
+visual já utilizada pelo sistema.
+
+A validação final aprovou **6 testes específicos do painel** e **311 testes na
+suíte completa**, com zero falhas e zero erros. PostgreSQL e Cloudinary reais
+permaneceram bloqueados, nenhuma migração foi executada e nenhuma regra de negócio
+foi alterada.

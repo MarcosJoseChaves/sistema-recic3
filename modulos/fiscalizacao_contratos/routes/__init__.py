@@ -1,6 +1,6 @@
 """Rotas iniciais do módulo de Fiscalização de Contratos."""
 
-from flask import current_app, render_template
+from flask import render_template
 
 from ..permissions import admin_required
 from .aditivos import registrar_rotas_aditivos
@@ -25,36 +25,7 @@ def registrar_rotas(blueprint, conectar_banco):
     @blueprint.route("", methods=["GET"], strict_slashes=False)
     @admin_required
     def painel():
-        try:
-            indicadores = FiscalizacaoService(conectar_banco).indicadores()
-        except FiscalizacaoServiceError:
-            current_app.logger.exception("Falha ao carregar indicadores de fiscalização")
-            indicadores = {
-                "ocorrencias_abertas": 0, "ocorrencias_vencidas": 0,
-                "graves_criticas": 0, "fiscalizacoes_30_dias": 0,
-            }
-        try:
-            indicadores_medicoes = MedicaoService(conectar_banco).indicadores()
-        except Exception:
-            current_app.logger.exception("Falha ao carregar indicadores de medições")
-            indicadores_medicoes = {
-                "elaboracao": 0, "analise": 0, "devolvidas": 0,
-                "aprovadas_mes": 0, "liquido_aprovado_mes": 0, "glosas_mes": 0,
-            }
-        try:
-            indicadores_atestes = AtesteService(conectar_banco).indicadores()
-        except Exception:
-            current_app.logger.exception("Falha ao carregar indicadores de atestes")
-            indicadores_atestes = {
-                "elaboracao": 0, "devolvidos": 0, "aguardando": 0,
-                "encaminhados_mes": 0, "valor_encaminhado_mes": 0,
-            }
-        return render_template(
-            "fiscalizacao_contratos/painel.html",
-            indicadores=indicadores,
-            indicadores_medicoes=indicadores_medicoes,
-            indicadores_atestes=indicadores_atestes,
-        )
+        return render_template("fiscalizacao_contratos/painel.html")
 
     registrar_rotas_empresas(blueprint, conectar_banco)
     registrar_rotas_servidores(blueprint, conectar_banco)

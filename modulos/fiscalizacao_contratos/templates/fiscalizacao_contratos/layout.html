@@ -15,12 +15,15 @@
             <div>
                 <p class="text-uppercase text-muted small fw-semibold mb-1">Sistema de Gestão</p>
                 <h1 class="h2 mb-0">{% block page_title %}Fiscalização de Contratos{% endblock %}</h1>
+                {% block page_description %}{% endblock %}
             </div>
             <div class="d-flex flex-wrap gap-2">
                 {% block header_actions %}{% endblock %}
+                {% block module_panel_action %}
                 <a href="{{ url_for('fiscalizacao_contratos.painel') }}" class="btn btn-outline-primary">
                     <i class="fas fa-table-columns me-2"></i>Painel do módulo
                 </a>
+                {% endblock %}
                 <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-2"></i>Painel principal
                 </a>

@@ -286,7 +286,7 @@ class TestFiscalizacaoContratosAtestes(unittest.TestCase):
     def test_sql_parametrizado_e_sem_dados_concatenados(self):
         texto=(RAIZ/"modulos/fiscalizacao_contratos/services/atestes_service.py").read_text(encoding="utf-8");self.assertNotIn("execute(f",texto);self.assertNotIn(".format(",texto);self.assertIn("cursor.execute(consulta,",texto);self.assertIn("d.ativo AND d.contrato_id=m.contrato_id",texto);self.assertGreaterEqual(texto.count("criado_por_usuario_id,atualizado_por_usuario_id"),3)
     def test_integracao_presente_em_medicao_contrato_e_painel(self):
-        for arquivo,trecho in (("templates/fiscalizacao_contratos/medicoes/detalhe.html","Criar ateste"),("templates/fiscalizacao_contratos/contratos/detalhe.html","Atestes da execução"),("templates/fiscalizacao_contratos/painel.html","Atestados aguardando encaminhamento")):
+        for arquivo,trecho in (("templates/fiscalizacao_contratos/medicoes/detalhe.html","Criar ateste"),("templates/fiscalizacao_contratos/contratos/detalhe.html","Atestes da execução"),("templates/fiscalizacao_contratos/painel.html","fiscalizacao_contratos.atestes_lista")):
             self.assertIn(trecho,(RAIZ/"modulos/fiscalizacao_contratos"/arquivo).read_text(encoding="utf-8"))
 
 

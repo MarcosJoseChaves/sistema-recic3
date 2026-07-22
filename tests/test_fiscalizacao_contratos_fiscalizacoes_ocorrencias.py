@@ -142,7 +142,9 @@ class TestFiscalizacoesOcorrencias(unittest.TestCase):
         self.autenticar(1)
         for caminho in ("/fiscalizacao-contratos/fiscalizacoes","/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1","/fiscalizacao-contratos/ocorrencias","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"):
             self.assertEqual(self.client.get(caminho).status_code,200,caminho)
-        self.assertIn("Ocorrências vencidas".encode(),self.client.get("/fiscalizacao-contratos").data)
+        painel=self.client.get("/fiscalizacao-contratos").data
+        self.assertIn("Ocorrências".encode(),painel)
+        self.assertNotIn("Ocorrências vencidas".encode(),painel)
     def test_visitante_e_comum_bloqueados_em_todas_as_rotas(self):
         caminhos_get=["/fiscalizacao-contratos/fiscalizacoes","/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1","/fiscalizacao-contratos/fiscalizacoes/1/editar","/fiscalizacao-contratos/fiscalizacoes/1/cancelar","/fiscalizacao-contratos/fiscalizacoes/1/reabrir","/fiscalizacao-contratos/ocorrencias","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1","/fiscalizacao-contratos/ocorrencias/1/editar","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"]
         caminhos_post=["/fiscalizacao-contratos/fiscalizacoes/nova","/fiscalizacao-contratos/fiscalizacoes/1/editar","/fiscalizacao-contratos/fiscalizacoes/1/finalizar","/fiscalizacao-contratos/fiscalizacoes/1/cancelar","/fiscalizacao-contratos/fiscalizacoes/1/reabrir","/fiscalizacao-contratos/ocorrencias/nova","/fiscalizacao-contratos/ocorrencias/1/editar","/fiscalizacao-contratos/ocorrencias/1/inativar","/fiscalizacao-contratos/ocorrencias/1/reativar","/fiscalizacao-contratos/ocorrencias/1/acompanhamentos/novo"]

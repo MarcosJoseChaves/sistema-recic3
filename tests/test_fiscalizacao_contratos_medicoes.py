@@ -880,7 +880,8 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         self.assertEqual(self.client.get("/fiscalizacao-contratos/medicoes/1/eventos").status_code, 302)
         self.assertEqual(self.client.get("/fiscalizacao-contratos/medicoes/1/versoes").status_code, 302)
         painel = self.client.get("/fiscalizacao-contratos").data
-        self.assertIn("Líquido aprovado no mês".encode(), painel)
+        self.assertIn("Medições".encode(), painel)
+        self.assertNotIn("Líquido aprovado no mês".encode(), painel)
 
     def test_calculos_decimal_arredondamento_e_sem_float(self):
         self.assertEqual(calcular_valor_item(Decimal("2.555"), Decimal("3.333")), Decimal("8.52"))
@@ -922,8 +923,8 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         self.assertIn("medicoes_contrato", contrato)
         self.assertIn("valor_aprovado", contrato)
         self.assertIn("medicoes_nova", contrato)
-        for indicador in ("elaboracao", "analise", "devolvidas", "aprovadas_mes", "liquido_aprovado_mes", "glosas_mes"):
-            self.assertIn(f"indicadores_medicoes.{indicador}", painel)
+        self.assertIn("fiscalizacao_contratos.medicoes_lista", painel)
+        self.assertNotIn("indicadores_medicoes", painel)
 
     def test_eventos_sao_somente_leitura_e_todas_as_rotas_sao_administrativas(self):
         fonte = (RAIZ / "modulos/fiscalizacao_contratos/routes/medicoes.py").read_text(encoding="utf-8")
