@@ -145,7 +145,9 @@ class TestProtecaoCsrfAplicacao(unittest.TestCase):
                 data={"username": "incorreto", "password": "x", "csrf_token": token},
             )
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn("encontrado".encode(), resposta.data)
+        self.assertIn("ou senha".encode(), resposta.data)
+        self.assertNotIn("encontrado".encode(), resposta.data)
+        self.assertNotIn("Senha incorreta".encode(), resposta.data)
 
     def test_06_login_com_token_valido_e_credenciais_corretas_autentica(self):
         token, _ = obter_token(self.client)

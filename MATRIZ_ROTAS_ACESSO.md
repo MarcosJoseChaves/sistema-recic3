@@ -71,6 +71,9 @@ D significa preservar as regras existentes de UVR/associação e validar o objet
 
 ## 5. Mutáveis sem proteção adequada — 11
 
+> Esta seção preserva a fotografia do diagnóstico anterior à H2A.3B.1. O
+> estado implementado está registrado na seção 18, sem apagar o histórico.
+
 | Rota | Operação | Atual | Proposta | Prioridade |
 |---|---|---|---|---|
 | `POST /baixar_csv_extrato` | gera/abre arquivo; contas/extrato/valores | Pública + CSRF | D — regra específica | Bloqueador |
@@ -397,3 +400,53 @@ rollbacks, uploads, destruição no Cloudinary, arquivos, redirects, `next` e
 Não houve acesso a banco, Cloudinary ou API externa; também não houve upload,
 download, migration ou deploy. A matriz apenas propõe níveis de acesso: nenhuma
 permissão foi concedida, removida ou alterada.
+
+## 18. H2A.3B.1 — proteção implementada nas 11 rotas mutáveis
+
+Em **22/07/2026**, o primeiro bloco de correção eliminou o acesso público às 11
+rotas mutáveis apontadas no diagnóstico. A tabela abaixo registra a transição;
+a seção 5 continua sendo a fotografia histórica anterior à correção. As
+referências de teste desta tabela pertencem a
+`tests/test_rotas_mutaveis_h2a3b1.py`.
+
+| Rota | Proteção anterior | Proteção implementada e nível final | Teste | Pendência específica |
+|---|---|---|---|---|
+| `POST /baixar_csv_extrato` | Pública + CSRF | Login interno, resposta JSON segura e validação da conta pela UVR do `current_user` — D | `test_03`, `test_07`, `test_10` | Nenhuma no modelo atual de UVR |
+| `POST /baixar_csv_relatorio` | Pública + CSRF | Login interno, UVR derivada da sessão e validação da entidade — D | `test_03`, `test_08`, `test_09` | Nenhuma no modelo atual de UVR |
+| `POST /baixar_pdf_extrato` | Pública + CSRF | Login interno, resposta JSON segura e validação da conta pela UVR do `current_user` — D | `test_03`, `test_07`, `test_10` | Nenhuma no modelo atual de UVR |
+| `POST /baixar_pdf_relatorio_financeiro` | Pública + CSRF | Login interno, UVR derivada da sessão e validação da entidade — D | `test_03`, `test_08`, `test_09` | Nenhuma no modelo atual de UVR |
+| `POST /cadastrar_conta_corrente` | Pública + CSRF | Login interno; UVR recebida é conferida e substituída pela UVR do `current_user` — D | `test_03`, `test_06`, `test_11` | Associação continua atributo funcional; o modelo de usuário autoriza por UVR |
+| `POST /cadastrar_produto_servico` | Pública + CSRF | `admin_required` — C | `test_03`, `test_06`, `test_13` | Nenhuma |
+| `POST /gerar_extrato_bancario` | Pública + CSRF | Login interno, resposta JSON segura e validação da conta pela UVR do `current_user` — D | `test_03`, `test_07`, `test_10` | Nenhuma no modelo atual de UVR |
+| `POST /gerar_relatorio` | Pública + CSRF | Login interno, UVR derivada da sessão e validação da entidade — D | `test_03`, `test_08`, `test_09` | Nenhuma no modelo atual de UVR |
+| `POST /registrar_denuncia` | Pública + CSRF | HTTP 404 em homologação/produção; em desenvolvimento/teste exige login e UVR da sessão — E | `test_03`, `test_06`, `test_11`, `test_14` | A outra rota proposta para desativação online permanece fora deste bloco |
+| `POST /registrar_fluxo_caixa` | Pública + CSRF | Login interno; UVR, conta, transações e cadastro são conferidos no servidor — D | `test_03`, `test_06`, `test_12` | Associação continua atributo funcional; o modelo de usuário autoriza por UVR |
+| `POST /registrar_transacao_financeira` | Pública + CSRF | Login interno; UVR e entidade de origem são conferidas no servidor — D | `test_03`, `test_06`, `test_11` | Associação continua atributo funcional; o modelo de usuário autoriza por UVR |
+
+Resultado deste bloco: **10 rotas receberam `login_required`**, sendo nove com
+regra específica D e uma desativada online; **uma recebeu `admin_required`**;
+**uma foi desativada em homologação e produção**. As sete APIs JSON deste grupo
+retornam erro JSON seguro quando não há sessão, em vez de HTML inesperado. CSRF
+e a barreira Basic continuam camadas independentes e não concedem login ou
+autorização.
+
+O login passou a usar uma mensagem única para usuário inexistente, inativo ou
+senha errada. Quando a consulta não encontra uma conta ativa, ainda é executada
+uma verificação contra um hash fictício criado uma única vez por processo. Isso
+reduz a diferença temporal sem prometer tempo constante e sem registrar senha,
+hash, formulário, token CSRF ou cabeçalho de autorização.
+
+O inventário continua com **177 rotas** e as **105 rotas funcionais do Blueprint
+de Fiscalização de Contratos permanecem administrativas**. Após este bloco, a
+fotografia de proteção passa a ser 23 públicas, 48 com login interno e 106
+administrativas. Permanecem os 11 GETs públicos que consultam banco, os 15
+possíveis IDORs, a revisão geral de JSON/AJAX e downloads fora deste conjunto,
+além dos
+demais riscos de homologação já documentados.
+
+A revisão técnica final confirmou **105 rotas mutáveis** e nenhuma rota mutável
+pública inadequada. O escopo de UVR passou a constar também no SQL final de
+extratos, relatórios, transações e fluxo de caixa. Os testes adicionais cobrem
+objeto inexistente, falha fechada do banco, administrador global conforme a
+política, usuário inativado e lista mista com dois IDs autorizados e um alheio.
+Resultado: **28 testes específicos e 435 testes totais aprovados**.

@@ -567,6 +567,41 @@ nenhuma rota foi removida e nenhum deploy, migration, banco ou Cloudinary real f
 executado. As correções pertencem à futura Etapa H2A.3B e devem ser aplicadas com
 testes de caracterização para preservar os fluxos atuais por UVR e associação.
 
+## 19. Etapa H2A.3B.1 — primeiro bloco de restrição
+
+Em **22/07/2026**, foram protegidas as **11 rotas mutáveis públicas** indicadas
+pela matriz. Uma operação global de catálogo passou a exigir administrador;
+nove operações financeiras passaram a exigir login e validação da UVR ou do
+objeto no servidor; e o registro de denúncia passou a retornar 404 em
+homologação e produção, permanecendo disponível somente com login e UVR válida
+nos ambientes de desenvolvimento e teste.
+
+Campos de UVR enviados pelo navegador não determinam mais o escopo de acesso,
+que vem do `current_user`. Contas, transações e entidades recebidas por ID são
+consultadas antes da regra de negócio com SQL parametrizado. As APIs deste bloco
+respondem em JSON quando falta sessão interna. Basic Auth e token CSRF continuam
+independentes: nenhum dos dois concede login ou autorização.
+
+O login passou a apresentar a mesma mensagem para usuário inexistente, inativo
+ou senha errada. A validação continua usando `check_password_hash`; quando não há
+conta ativa, usa um hash fictício gerado uma única vez por processo para reduzir
+a diferença temporal. Não há promessa de tempo constante.
+
+A revisão final incluiu o escopo de UVR também nas consultas e alterações que
+efetivamente produzem extratos, transações e fluxo de caixa. Uma lista com apenas
+um ID alheio é recusada integralmente e sofre rollback. Erros de autorização ou
+banco geram mensagens genéricas, e nomes de arquivos de exportação são
+higienizados. O carregamento da sessão agora exige que o usuário permaneça ativo.
+Foram aprovados **435 testes**, sendo 407 anteriores e 28 específicos desta
+etapa, sem serviços externos reais.
+
+Permanecem bloqueadores: 11 consultas GET públicas ao banco, relatórios e
+downloads fora deste bloco, 15 casos possíveis de IDOR, revisão dos endpoints
+JSON/AJAX e o segundo endpoint classificado como E, migration-base, controle de
+migrations, rotação de credenciais históricas, Neon e Cloudinary separados,
+deploy, CSP, rate limit, trusted hosts e monitoramento. Esta etapa não executou
+deploy, migration, PostgreSQL ou Cloudinary real.
+
 ## Referências técnicas consultadas
 
 - [Render — Web Services](https://render.com/docs/web-services)

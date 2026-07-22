@@ -842,3 +842,45 @@ Nenhuma permissão foi alterada, nenhuma rota foi removida e nenhuma publicaçã
 foi realizada. Não houve acesso a PostgreSQL ou Cloudinary reais, execução de
 migration, upload, download ou deploy. As correções permanecem reservadas para a
 futura Etapa H2A.3B, depois da revisão desta matriz.
+
+### Etapa H2A.3B.1 — proteção das rotas mutáveis públicas
+
+Em **22/07/2026**, a H2A.3B.1 foi implementada e **revisada tecnicamente**. As
+11 rotas mutáveis que estavam públicas passaram a exigir a
+proteção definida na matriz: uma operação global exige administrador, nove
+operações financeiras exigem login e validação de UVR/objeto no servidor, e o
+registro de denúncia fica oculto em homologação e produção.
+
+O token CSRF e a barreira Basic continuam independentes do login interno. Um
+visitante não alcança banco, geração de relatório ou gravação mesmo quando possui
+token CSRF válido ou envia Basic Auth. As APIs JSON devolvem erro JSON seguro sem
+sessão. Usuários comuns ficam limitados à UVR de `current_user`; IDs de conta,
+transação e entidade são verificados antes da regra de negócio.
+
+As falhas de login agora mostram uma mensagem única para usuário inexistente,
+inativo ou senha incorreta. O mecanismo continua usando `check_password_hash` e
+faz uma verificação contra um hash fictício criado uma única vez por processo
+quando não encontra uma conta ativa, sem guardar ou registrar senha real.
+
+Na revisão final, as consultas e alterações de extrato, transação e fluxo de
+caixa passaram a repetir o escopo de UVR no próprio SQL. Listas parcialmente
+autorizadas são recusadas por inteiro, com rollback e sem commit. O cursor do
+helper de autorização é fechado explicitamente, nomes de arquivos exportados
+são higienizados e respostas de erro não exibem SQL ou exceções. Sessões de
+usuários posteriormente inativados deixam de ser recarregadas.
+
+As tabelas legadas de contas, transações e fluxo não possuem coluna de autoria
+nem estado `ativo` para conta; por isso, não foi inventada migration nesta etapa.
+As operações aprovadas registram de forma segura o `usuario_id` no log técnico,
+sem dados bancários, formulário ou credenciais.
+
+Os **407 testes anteriores** foram preservados e foram acrescentados **28 testes
+específicos**, totalizando **435 testes aprovados, 0 falhas e 0 erros**. Os testes
+bloquearam PostgreSQL e Cloudinary reais; nenhuma migration, API externa, upload,
+exportação real ou deploy foi executado.
+
+Permanecem pendentes as 11 consultas GET públicas ao banco, relatórios e
+downloads fora deste bloco, os 15 possíveis IDORs, a revisão completa de
+JSON/AJAX, o segundo endpoint proposto para desativação online, migration-base,
+controle de migrations, rotação de credenciais históricas, Neon e Cloudinary
+separados, deploy, CSP, rate limit, trusted hosts e monitoramento.
