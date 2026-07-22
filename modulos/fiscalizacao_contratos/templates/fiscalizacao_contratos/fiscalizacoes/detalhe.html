@@ -40,7 +40,8 @@
 {% if fiscalizacao.status=='Em elaboração' and fiscalizacao.ativo %}
 <div class="d-flex flex-wrap justify-content-end gap-2">
   <a class="btn btn-primary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_editar',fiscalizacao_id=fiscalizacao.id) }}">Editar</a>
-  <form method="post" action="{{ url_for('fiscalizacao_contratos.fiscalizacoes_finalizar',fiscalizacao_id=fiscalizacao.id) }}" onsubmit="return confirm('Finalizar esta fiscalização?');"><button class="btn btn-success">Finalizar</button></form>
+  <form method="post" action="{{ url_for('fiscalizacao_contratos.fiscalizacoes_finalizar',fiscalizacao_id=fiscalizacao.id) }}" onsubmit="return confirm('Finalizar esta fiscalização?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-success">Finalizar</button></form>
   <a class="btn btn-outline-danger" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_cancelar',fiscalizacao_id=fiscalizacao.id) }}">Cancelar</a>
 </div>
 {% elif fiscalizacao.status=='Finalizada' and fiscalizacao.ativo %}

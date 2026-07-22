@@ -9,6 +9,7 @@
 
 {% block content %}
 <form method="POST" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="card-body">
         <p class="text-muted"><span class="text-danger">*</span> Campos obrigatórios.</p>
         <div class="row g-3">

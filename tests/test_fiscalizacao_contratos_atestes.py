@@ -5,6 +5,7 @@ import io
 import os
 import sys
 import unittest
+from tests.csrf_helpers import ClienteComCSRF
 import psycopg2
 from copy import deepcopy
 from datetime import date, datetime
@@ -148,7 +149,7 @@ class TestFiscalizacaoContratosAtestes(unittest.TestCase):
     @classmethod
     def tearDownClass(cls): APP_MODULE.login_manager._user_callback=cls.loader
     def setUp(self):
-        self.client=self.app.test_client();APP_MODULE.login_manager._user_callback=self._usuario;self.servico=AtesteServiceFake();self.conexoes=MOCK_CONNECT.call_count
+        self.client=ClienteComCSRF(self.app.test_client());APP_MODULE.login_manager._user_callback=self._usuario;self.servico=AtesteServiceFake();self.conexoes=MOCK_CONNECT.call_count
         self.armazenamento=MagicMock();self.armazenamento.enviar.return_value={"armazenamento_provedor":"cloudinary","armazenamento_chave":"privado/uuid.pdf","armazenamento_versao":"1"}
         painel_f=MagicMock();painel_f.indicadores.return_value={"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}
         painel_m=MagicMock();painel_m.indicadores.return_value={"elaboracao":0,"analise":0,"devolvidas":0,"aprovadas_mes":0,"liquido_aprovado_mes":0,"glosas_mes":0}

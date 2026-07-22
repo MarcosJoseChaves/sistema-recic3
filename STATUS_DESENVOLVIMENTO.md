@@ -802,3 +802,27 @@ importação do app, evitando dependência do `.env` pessoal. A revisão final
 aprovou **370 testes, 0 falhas e 0 erros**. Nenhum banco, Cloudinary ou migration
 foi acessado ou executado. O deploy ainda não ocorreu e esta etapa não torna o
 sistema pronto para produção.
+
+### Etapa H2A.2 — Proteção CSRF
+
+Em **22/07/2026**, a Etapa H2A.2 foi implementada e revisada tecnicamente. A
+aplicação passou a usar a proteção oficial do Flask-WTF em
+todos os ambientes, sem exceções e sem criar nova chave secreta.
+
+Foram protegidos 61 formulários POST, inclusive login, logout, uploads e ações
+administrativas. O logout passou de GET para POST. Requisições AJAX/JSON internas
+enviam `X-CSRFToken`, enquanto filtros GET e serviços externos não recebem o
+token. Erros de validação retornam uma página amigável com HTTP 400, sem detalhes
+internos.
+
+Os 370 testes anteriores foram preservados por um cliente auxiliar que usa token
+real na mesma sessão, sem desligar CSRF. Foram acrescentados 37 testes específicos
+para formulários, login, logout, JSON, uploads, permissões, `/health` e a barreira
+Basic. A revisão final aprovou **407 testes, 0 falhas e 0 erros**. Nenhum teste
+acessou PostgreSQL ou Cloudinary reais; nenhuma migration ou deploy foi executado.
+
+Permanecem pendentes: versões gerais fixadas, migration-base, controle formal de
+migrations, rotação de credenciais
+históricas, Neon e Cloudinary separados para homologação, deploy no Render,
+revisão e autorização individual das rotas públicas, CSP, rate limit, trusted
+hosts e monitoramento.

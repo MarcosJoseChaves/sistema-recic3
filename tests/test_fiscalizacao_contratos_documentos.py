@@ -6,6 +6,7 @@ import io
 import os
 import sys
 import unittest
+from tests.csrf_helpers import ClienteComCSRF
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -167,7 +168,7 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
         APP_MODULE.login_manager._user_callback = cls.user_loader_original
 
     def setUp(self):
-        self.client = self.flask_app.test_client()
+        self.client = ClienteComCSRF(self.flask_app.test_client())
         self.armazenamento = ArmazenamentoFake()
         self.servico = DocumentoServiceFake(self.armazenamento)
         APP_MODULE.login_manager._user_callback = self._carregar_usuario_falso
@@ -344,7 +345,7 @@ class TestFiscalizacaoContratosDocumentos(unittest.TestCase):
     def test_download_exige_administrador_e_url_so_surje_depois(self):
         self.cadastrar_documento()
         self.mock_storage.reset_mock()
-        self.client.get("/logout")
+        self.client.post("/logout")
         visitante = self.client.get("/fiscalizacao-contratos/documentos/1/arquivo")
         self.assertEqual(visitante.status_code, 302)
         self.assertIn("/login", visitante.headers["Location"])

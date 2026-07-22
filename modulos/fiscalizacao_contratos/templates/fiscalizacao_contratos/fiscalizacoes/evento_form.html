@@ -13,6 +13,7 @@
       <p><strong>Contrato:</strong> {{ fiscalizacao.numero_contrato }}</p>
       <p><strong>Objeto verificado:</strong> {{ fiscalizacao.objeto_verificado }}</p>
       <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
           <label class="form-label" for="justificativa">Justificativa <span class="text-danger">*</span></label>
           <textarea class="form-control" id="justificativa" name="justificativa" rows="5" required>{{ justificativa }}</textarea>

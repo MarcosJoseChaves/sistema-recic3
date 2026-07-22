@@ -4,6 +4,7 @@ import importlib
 import os
 import sys
 import unittest
+from tests.csrf_helpers import ClienteComCSRF
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -170,7 +171,7 @@ class TestFiscalizacaoContratosPlanilhas(unittest.TestCase):
         APP_MODULE.login_manager._user_callback = cls.loader_original
 
     def setUp(self):
-        self.client = self.app.test_client(); self.servico = PlanilhaServiceFake()
+        self.client = ClienteComCSRF(self.app.test_client()); self.servico = PlanilhaServiceFake()
         APP_MODULE.login_manager._user_callback = self._usuario
         self.patcher = patch("modulos.fiscalizacao_contratos.routes.planilhas.PlanilhaService", return_value=self.servico); self.patcher.start()
         self.patcher_indicadores=patch("modulos.fiscalizacao_contratos.routes.FiscalizacaoService"); self.patcher_indicadores.start().return_value.indicadores.return_value={"ocorrencias_abertas":0,"ocorrencias_vencidas":0,"graves_criticas":0,"fiscalizacoes_30_dias":0}

@@ -7,6 +7,7 @@
 {% block content %}
 <form method="POST"
       action="{{ url_for('fiscalizacao_contratos.servidores_editar', servidor_id=servidor.get('id')) if editando else url_for('fiscalizacao_contratos.servidores_novo') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="card content-card mb-4">
         <div class="card-header bg-primary text-white">
             <i class="fas fa-id-card me-2"></i>Identificação

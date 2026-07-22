@@ -6,6 +6,7 @@ import io
 import os
 import sys
 import unittest
+from tests.csrf_helpers import ClienteComCSRF
 from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
@@ -408,7 +409,7 @@ class TestFiscalizacaoContratosMedicoes(unittest.TestCase):
         APP_MODULE.login_manager._user_callback = cls.loader_original
 
     def setUp(self):
-        self.client = self.app.test_client()
+        self.client = ClienteComCSRF(self.app.test_client())
         APP_MODULE.login_manager._user_callback = self._usuario
         self.servico = MedicaoServiceFake()
         self.armazenamento = ArmazenamentoMedicaoFake()

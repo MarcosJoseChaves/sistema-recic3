@@ -1,5 +1,6 @@
 {% extends "fiscalizacao_contratos/layout.html" %}{% block title %}{{ 'Editar' if modo=='editar' else 'Novo' }} ativo{% endblock %}{% block page_title %}{{ 'Editar ativo contratual' if modo=='editar' else 'Novo ativo contratual' }}{% endblock %}
 {% block content %}<div class="card content-card"><div class="card-body"><form method="post" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="col-md-4"><label class="form-label" for="codigo_interno">Código interno *</label><input class="form-control" id="codigo_interno" name="codigo_interno" required maxlength="100" value="{{ ativo.codigo_interno or '' }}"></div>
 <div class="col-md-4"><label class="form-label" for="tipo_ativo">Tipo *</label><select class="form-select" id="tipo_ativo" name="tipo_ativo" required><option value="">Selecione</option>{% for x in tipos_ativo %}<option {{ 'selected' if ativo.tipo_ativo==x }}>{{ x }}</option>{% endfor %}</select></div>
 <div class="col-md-4"><label class="form-label" for="situacao">Situação *</label><select class="form-select" id="situacao" name="situacao" required>{% for x in situacoes_ativo %}<option {{ 'selected' if ativo.situacao==x }}>{{ x }}</option>{% endfor %}</select></div>

@@ -9,6 +9,7 @@
       action="{{ url_for('fiscalizacao_contratos.empresas_editar', empresa_id=empresa.get('id')) if editando else url_for('fiscalizacao_contratos.empresas_nova') }}"
       data-consulta-cnpj="{{ url_for('fiscalizacao_contratos.empresas_consultar_cnpj', cnpj='CNPJ_VALOR') }}"
       data-consulta-cep="{{ url_for('fiscalizacao_contratos.empresas_consultar_cep', cep='CEP_VALOR') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="card content-card mb-4">
         <div class="card-header bg-primary text-white">
             <i class="fas fa-building me-2"></i>Identificação

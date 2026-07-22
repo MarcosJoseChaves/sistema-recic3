@@ -27,6 +27,7 @@
         {% endif %}
 
         <form method="POST" action="/alterar_senha">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
                 <label for="senha_atual" class="form-label">Senha Atual</label>
                 <div class="input-group">

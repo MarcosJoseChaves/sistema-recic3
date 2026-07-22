@@ -7,6 +7,7 @@
 
 {% block content %}
 <form method="POST" enctype="multipart/form-data" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="card-body">
         <div class="alert alert-info"><i class="fas fa-shield-halved me-2"></i>O documento será armazenado de forma privada. Limite: {{ limite_mb }} MB.</div>
         <div class="row g-3">

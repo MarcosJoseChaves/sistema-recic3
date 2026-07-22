@@ -14,6 +14,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, R
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from configuracao_ambiente import configurar_aplicacao
+from seguranca_csrf import configurar_csrf
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
 
 # ReportLab Imports (Para PDF)
@@ -47,6 +48,7 @@ load_dotenv()
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite aumentado para 64MB
 configurar_aplicacao(app)
+configurar_csrf(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -361,7 +363,7 @@ def login():
             
     return render_template('login.html')
 
-@app.route('/logout')
+@app.post('/logout')
 @login_required
 def logout():
     logout_user()

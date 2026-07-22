@@ -480,7 +480,6 @@ foi executada e nenhum dado ou arquivo real foi alterado.
 
 ### Riscos que permanecem pendentes
 
-- proteção CSRF nos formulários;
 - fixação da versão do Python;
 - fixação das versões das dependências;
 - migration-base reproduzível do sistema principal;
@@ -490,6 +489,59 @@ foi executada e nenhum dado ou arquivo real foi alterado.
 - configuração e deploy no Render;
 - revisão individual das rotas públicas do sistema principal;
 - CSP, hosts confiáveis, rate limit, monitoramento e resposta a incidentes.
+
+## 17. Implementação da Etapa H2A.2 — proteção CSRF
+
+Em **22/07/2026**, foi implementada proteção CSRF global com
+`Flask-WTF==1.2.1`, `CSRFProtect` e `CSRFError`. A proteção permanece ativa em
+desenvolvimento, testes, homologação e produção, usando a `SECRET_KEY` já
+obrigatória. Não foi criada uma segunda chave.
+
+Foram protegidos os **61 formulários POST** encontrados, incluindo login,
+logout, cadastros, alterações de estado e os **cinco formulários multipart**.
+Quatro desses formulários atualmente possuem campo de arquivo; o quinto conserva
+um `enctype` legado, mas também está protegido. As planilhas orçamentárias atuais
+são preenchidas por campos do formulário e não possuem rota de importação de
+arquivo. Formulários GET de
+pesquisa e filtros não receberam token. As **105 rotas mutáveis** do projeto
+foram inventariadas; autenticação, `admin_required`, validações de estado e
+transações existentes continuam independentes da validação CSRF.
+
+O logout, que antes alterava a sessão por GET, passou a aceitar somente POST e
+o link foi substituído por um pequeno formulário protegido. As demais rotas com
+GET e POST auditadas usam o GET apenas para mostrar o formulário de confirmação
+e executam a mudança somente no POST.
+
+O layout fornece o token em uma meta tag. Requisições AJAX/JSON do mesmo domínio
+enviam `X-CSRFToken` somente nos métodos POST, PUT, PATCH e DELETE. O token não é
+enviado a serviços externos, colocado em URLs ou registrado em logs. Uploads
+continuam usando o formulário multipart e são recusados antes de banco ou
+Cloudinary quando o token não é válido.
+
+Falhas de CSRF retornam HTTP 400 em uma página simples e genérica, sem informar
+se o token estava ausente, vencido ou incorreto. O log registra somente que a
+validação foi recusada. Não existem rotas isentas de CSRF; `GET /health` não
+precisa de token porque não altera dados. Foi mantida a validade padrão
+conservadora do Flask-WTF, de uma hora.
+
+Nos testes, CSRF não é desabilitado globalmente. Um cliente auxiliar abre o
+login, obtém um token real na mesma sessão e o envia nos POSTs históricos; testes
+negativos usam o cliente original para omitir ou adulterar o token. A barreira
+Basic da homologação, o login interno e a permissão administrativa continuam
+camadas independentes.
+
+A revisão técnica final preservou os **370 testes anteriores** e aprovou **37
+testes específicos de CSRF**, totalizando **407 testes, 0 falhas e 0 erros**.
+Foram verificados tokens ausentes, inválidos, vazios, expirados, duplicados,
+malformados e de outra sessão, além das onze áreas administrativas. PostgreSQL e
+Cloudinary reais permaneceram bloqueados. Nenhuma migration ou deploy foi
+executado.
+
+Continuam pendentes a fixação geral das versões do Python e dependências, uma
+migration-base reproduzível, controle formal das migrations, rotação de
+credenciais históricas, Neon e Cloudinary exclusivos de homologação, deploy no
+Render, revisão e autorização individual das rotas públicas, CSP, rate limit,
+trusted hosts e monitoramento.
 
 ## Referências técnicas consultadas
 

@@ -2,7 +2,8 @@
 {% block title %}Item da medição{% endblock %}
 {% block content %}<h2>{{ 'Novo' if modo == 'novo' else 'Editar' }} item — medição {{ medicao.numero_medicao }}</h2>
 <div class="alert alert-info">Selecione um item da planilha para copiar seus dados ou deixe em branco para cadastrar um item manual.</div>
-<form method="post" class="card content-card"><div class="card-body"><div class="row g-3">
+<form method="post" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body"><div class="row g-3">
 <div class="col-md-8"><label class="form-label" for="planilha_item_id">Item da planilha</label><select class="form-select" id="planilha_item_id" name="planilha_item_id"><option value="">Item manual</option>{% for p in itens_planilha %}<option value="{{ p.id }}" {% if item.planilha_item_id == p.id %}selected{% endif %}>{{ p.planilha_nome }} v{{ p.versao }} — {{ p.codigo_item or '' }} {{ p.descricao }}</option>{% endfor %}</select></div>
 <div class="col-md-4"><label class="form-label" for="ordem">Ordem *</label><input class="form-control" type="number" min="1" id="ordem" name="ordem" value="{{ item.ordem|default(1) }}" required></div>
 <div class="col-md-3"><label class="form-label" for="codigo_item">Código</label><input class="form-control" id="codigo_item" name="codigo_item" value="{{ item.codigo_item|default('', true) }}"></div>

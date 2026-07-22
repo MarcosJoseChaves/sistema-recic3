@@ -4,6 +4,7 @@
 {% block content %}
 <div class="alert alert-light border"><strong>{{ planilha.nome }}</strong> — versão {{ planilha.versao }} do contrato {{ planilha.numero_contrato }}</div>
 <div class="card content-card"><div class="card-body"><form method="post" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="col-md-2"><label class="form-label" for="ordem">Ordem *</label><input class="form-control" type="number" min="1" id="ordem" name="ordem" required value="{{ item.ordem or 1 }}"></div>
 <div class="col-md-5"><label class="form-label" for="grupo">Grupo</label><input class="form-control" id="grupo" name="grupo" maxlength="150" value="{{ item.grupo or '' }}" placeholder="Ex.: Mão de obra"></div>
 <div class="col-md-5"><label class="form-label" for="codigo_item">Código</label><input class="form-control" id="codigo_item" name="codigo_item" maxlength="100" value="{{ item.codigo_item or '' }}"></div>

@@ -4,6 +4,7 @@ import importlib
 import os
 import sys
 import unittest
+from tests.csrf_helpers import ClienteComCSRF
 from copy import deepcopy
 from datetime import date, datetime, time
 from pathlib import Path
@@ -117,7 +118,7 @@ class TestFiscalizacoesOcorrencias(unittest.TestCase):
     @classmethod
     def tearDownClass(cls): APP_MODULE.login_manager._user_callback=cls.loader
     def setUp(self):
-        self.client=self.app.test_client();APP_MODULE.login_manager._user_callback=self._usuario
+        self.client=ClienteComCSRF(self.app.test_client());APP_MODULE.login_manager._user_callback=self._usuario
         self.fiscal=FiscalizacaoServiceFake();self.ocorr=OcorrenciaServiceFake(self.fiscal)
         self.patchers=[
             patch("modulos.fiscalizacao_contratos.routes.fiscalizacoes.FiscalizacaoService",return_value=self.fiscal),

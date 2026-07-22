@@ -4,6 +4,7 @@ import importlib
 import os
 import sys
 import unittest
+from tests.csrf_helpers import ClienteComCSRF
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -145,7 +146,7 @@ class TestFiscalizacaoContratosServidores(unittest.TestCase):
         APP_MODULE.login_manager._user_callback = cls.user_loader_original
 
     def setUp(self):
-        self.client = self.flask_app.test_client()
+        self.client = ClienteComCSRF(self.flask_app.test_client())
         self.servico = ServidorServiceFake()
         APP_MODULE.login_manager._user_callback = self._carregar_usuario_falso
         self.patcher_servico = patch(

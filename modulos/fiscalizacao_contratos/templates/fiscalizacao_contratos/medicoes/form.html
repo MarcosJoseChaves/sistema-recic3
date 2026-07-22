@@ -2,7 +2,8 @@
 {% block title %}{{ 'Nova' if modo == 'nova' else 'Editar' }} medição{% endblock %}
 {% block content %}
 <h2><i class="fas fa-ruler-combined me-2"></i>{{ 'Nova' if modo == 'nova' else 'Editar' }} medição</h2>
-<form method="post" class="card content-card"><div class="card-body"><div class="row g-3">
+<form method="post" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body"><div class="row g-3">
   <div class="col-md-6"><label class="form-label" for="contrato_id">Contrato *</label><select class="form-select" id="contrato_id" name="contrato_id" required><option value="">Selecione</option>{% for c in contratos %}<option value="{{ c.id }}" {% if medicao.contrato_id == c.id %}selected{% endif %}>{{ c.numero_contrato }} — {{ c.empresa_nome }}</option>{% endfor %}</select></div>
   <div class="col-md-3"><label class="form-label" for="numero_medicao">Número *</label><input class="form-control" type="number" min="1" id="numero_medicao" name="numero_medicao" value="{{ medicao.numero_medicao|default('') }}" required></div>
   <div class="col-md-3"><label class="form-label" for="competencia">Competência *</label><input class="form-control" type="month" id="competencia" name="competencia" value="{{ medicao.competencia.strftime('%Y-%m') if medicao.competencia else '' }}" required></div>

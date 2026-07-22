@@ -1,6 +1,7 @@
 {% extends "fiscalizacao_contratos/layout.html" %}{% block title %}Ajuste da medição{% endblock %}{% block content %}
 <h2>{{ 'Novo' if modo == 'novo' else 'Editar' }} ajuste — medição {{ medicao.numero_medicao }}</h2><div class="alert alert-secondary">Glosa aqui reduz o valor da medição; não representa multa ou sanção.</div>
-<form method="post" class="card content-card"><div class="card-body"><div class="row g-3">
+<form method="post" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body"><div class="row g-3">
 <div class="col-md-4"><label class="form-label" for="tipo_ajuste">Tipo *</label><select class="form-select" id="tipo_ajuste" name="tipo_ajuste" required><option value="">Selecione</option>{% for t in tipos_ajuste %}<option {% if ajuste.tipo_ajuste == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
 <div class="col-md-4"><label class="form-label" for="valor">Valor *</label><input class="form-control" inputmode="decimal" id="valor" name="valor" value="{{ ajuste.valor|default('')|fc_decimal }}" required></div>
 <div class="col-md-4"><label class="form-label" for="descricao">Descrição *</label><input class="form-control" id="descricao" name="descricao" value="{{ ajuste.descricao|default('', true) }}" required></div>
