@@ -505,3 +505,71 @@ continuam registradas para revisão posterior, sem afirmação de correção.
 Os testes específicos adicionaram 27 casos e preservaram os 435 anteriores:
 **462 testes aprovados, zero falhas e zero erros**. PostgreSQL, Cloudinary, APIs,
 arquivos reais, migrations e deploy permaneceram bloqueados.
+
+## 20. H2A.3B.3 — autorização por objeto nos 13 casos restantes
+
+Em **23/07/2026**, a revisão técnica final confirmou exatamente 13 casos únicos.
+A seção 10 permanece como fotografia histórica; os dois casos de fichas PDF
+foram corrigidos na H2A.3B.2.
+
+| Rota | Risco anterior | Escopo e SQL final protegido | ID alheio/inexistente | Testes | Situação |
+|---|---|---|---|---|---|
+| `POST /editar_associado` | edição por ID sem escopo comprovado | usuário comum: autorização por `id + uvr`; solicitação final usa `INSERT ... SELECT` do associado com `alvo.id = %s AND alvo.uvr = %s`; admin: `UPDATE WHERE id` global explícito, com `rowcount` | mesmo 404, sem commit | `test_03`, `test_04`, `test_17`, `test_20` | Corrigido |
+| `POST /editar_cadastro` | edição por ID e UVR forjável | usuário comum: UVR substituída pela sessão e solicitação final escopada; admin: `UPDATE WHERE id`, com `rowcount` | mesmo 404, sem dados | `test_03`, `test_07`, `test_17`, `test_20` | Corrigido |
+| `POST /editar_conta_corrente` | edição de dados bancários por ID | solicitação comum usa ID + UVR no SQL final; admin global explícito verifica `rowcount` | mesmo 404, sem dados bancários | `test_03`, `test_04`, `test_20` | Corrigido |
+| `POST /editar_patrimonio` | edição por ID sem escopo final | solicitação comum usa ID + UVR e lista fixa de campos; admin global explícito verifica `rowcount` | mesmo 404 | `test_03`, `test_04`, `test_20` | Corrigido |
+| `POST /editar_transacao` | edição e vínculo cruzado por IDs | alvo e cadastro são validados; o `INSERT ... SELECT` final repete ID + UVR e `EXISTS` do cadastro na mesma UVR; admin global explícito verifica `rowcount` | mesmo 404; nenhum item é alterado | `test_12`, `test_18`, `test_20` | Corrigido |
+| `POST /excluir_associado/<int:id>` | solicitação/exclusão por ID | leitura e solicitação comum usam ID + UVR; admin mantém `DELETE WHERE id` legado com `rowcount` | JSON 404 equivalente | `test_03`, `test_04`, `test_17`, `test_21` | IDOR corrigido; exclusão física pendente |
+| `POST /excluir_cadastro/<int:id>` | solicitação/exclusão por ID | leitura e solicitação comum usam ID + UVR; admin mantém `DELETE WHERE id` legado com `rowcount` | JSON 404 equivalente | `test_03`, `test_04`, `test_17`, `test_21` | IDOR corrigido; exclusão física pendente |
+| `POST /excluir_patrimonio/<int:id>` | solicitação/exclusão por ID | leitura e solicitação comum usam ID + UVR; admin mantém `DELETE WHERE id` legado com `rowcount` | JSON 404 equivalente | `test_03`, `test_04`, `test_17`, `test_21` | IDOR corrigido; exclusão física pendente |
+| `POST /excluir_transacao/<int:id>` | solicitação/exclusão financeira por ID | leitura única e solicitação comum usam ID + UVR; admin mantém `DELETE WHERE id` legado com `rowcount` | JSON 404 equivalente | `test_03`, `test_04`, `test_17`, `test_21` | IDOR corrigido; exclusão física pendente |
+| `GET /get_conta_corrente_detalhe/<int:id>` | consulta bancária por ID | `SELECT ... WHERE id = %s AND uvr = %s`; admin global explícito | JSON 404 equivalente | `test_03`, `test_05`, `test_06`, `test_22` | Corrigido |
+| `GET /get_movimentacao_detalhes/<int:id>` | consulta financeira por ID | consulta única do fluxo com ID + UVR; vínculos são lidos pelo mesmo pai autorizado | JSON 404 equivalente | `test_03`, `test_04`, `test_22` | Corrigido |
+| `GET /get_patrimonio_detalhes/<int:id>` | consulta patrimonial por ID | `SELECT ... WHERE id = %s AND uvr = %s`; admin global explícito | JSON 404 equivalente | `test_03`, `test_04`, `test_22` | Corrigido |
+| `GET /get_transacao_detalhes/<int:id>` | transação e itens consultados por ID | cabeçalho usa ID + UVR; itens repetem o escopo por `JOIN` com a transação | JSON 404 equivalente | `test_03`, `test_04`, `test_22` | Corrigido |
+
+O administrador mantém a política global somente por `current_user.role`.
+Usuário comum utiliza a UVR de `current_user`; campos `uvr`, `usuario_id`,
+`associacao_id`, `is_admin` e campos inesperados não concedem acesso nem entram
+por atribuição em massa. Associação textual continua atributo funcional, mas não
+é usada como autorização.
+
+As solicitações comuns repetem a autorização no SQL final. Se a UVR do objeto ou
+do cadastro relacionado mudar entre a validação inicial e a gravação, o
+`INSERT ... SELECT` não retorna linha, ocorre rollback e a resposta é 404.
+Consultas e gravações usam parâmetros; os únicos nomes de tabela interpolados
+vêm de listas internas fechadas.
+
+### Exclusões físicas legadas preservadas
+
+Esta auditoria foi feita somente no código, sem consultar o banco real.
+
+| Rota | Tabela e condição | Autorização | Relações e arquivos | Risco, auditoria e recuperação |
+|---|---|---|---|---|
+| `/excluir_associado/<id>` | `DELETE FROM associados WHERE id = %s` | somente admin; comum cria solicitação escopada | foto Base64 está na própria linha; nenhum Cloudinary | sem trilha permanente na exclusão direta; recuperação depende de backup |
+| `/excluir_cadastro/<id>` | `DELETE FROM cadastros WHERE id = %s` | somente admin; comum cria solicitação escopada | referenciado por transações e fluxo de caixa sem cascata declarada | pode falhar por integridade; sem recuperação própria |
+| `/excluir_patrimonio/<id>` | `DELETE FROM patrimonio WHERE id = %s` | somente admin; comum cria solicitação escopada | foto Base64 está na linha; relações não possuem migration-base documentada | integridade precisa de análise de esquema; recuperação depende de backup |
+| `/excluir_transacao/<id>` | `DELETE FROM transacoes_financeiras WHERE id = %s` | somente admin; comum cria solicitação escopada | itens usam `ON DELETE CASCADE`; vínculo com fluxo não declara cascata; nenhum Cloudinary | pode apagar itens e pode ser bloqueada pelo fluxo; sem recuperação própria |
+
+Nenhuma nova exclusão física, cascata ou remoção de Cloudinary foi introduzida;
+nenhuma rota GET exclui. CSRF permanece ativo e todas as condições administrativas
+usam ID parametrizado e verificam `rowcount`.
+
+Além das quatro rotas de exclusão, a edição administrativa de transação já
+utilizava `DELETE FROM itens_transacao WHERE id_transacao = %s` para substituir
+os itens e recriá-los na mesma transação. Esse comportamento não é uma rota de
+exclusão, não foi introduzido nem ampliado nesta etapa e executa rollback se a
+recriação falhar. Ainda assim, a perda dos IDs e do histórico dos itens deve
+entrar na futura revisão geral das operações físicas legadas.
+
+**Pendência futura:** Conversão das exclusões físicas legadas para inativação ou
+exclusão lógica, após decisão funcional e análise de integridade.
+
+O inventário permanece com **177 rotas**: **12 públicas, 59 com login interno e
+106 administrativas**. As **105 rotas funcionais da Fiscalização** seguem
+administrativas. Os 15 possíveis IDORs do inventário estão corrigidos: dois na
+H2A.3B.2 e 13 neste bloco. Resultado final: **zero IDOR confirmado pendente neste
+inventário**. As exclusões físicas permanecem risco de integridade, não IDOR.
+
+Foram aprovados **25 testes específicos**, com subtestes para todas as rotas, e
+**487 testes totais**, sem serviços reais.

@@ -909,3 +909,43 @@ endpoints JSON/AJAX, o segundo endpoint proposto para desativação online,
 migration-base, controle formal de migrations, rotação das credenciais,
 ambientes Neon e Cloudinary separados, versões gerais das dependências, deploy,
 CSP, rate limit, trusted hosts e monitoramento.
+
+### Etapa H2A.3B.3 — autorização por objeto
+
+Em **23/07/2026**, a H2A.3B.3 foi implementada e revisada tecnicamente. Foram
+corrigidos os 13 casos restantes: cinco edições, quatro
+solicitações/exclusões e quatro consultas JSON por ID.
+
+Usuários comuns ficam limitados à UVR de `current_user`; administrador mantém
+acesso global. A autorização combina ID e UVR em SQL parametrizado. UVR forjada
+é ignorada ou substituída, campos inesperados não entram nas solicitações e o
+cadastro relacionado de uma transação é validado novamente no SQL final. Se o
+objeto mudar de UVR entre a validação e a gravação, nenhuma solicitação é criada,
+ocorre rollback e a resposta permanece 404. Objeto inexistente e objeto de outra
+UVR retornam a mesma resposta genérica.
+
+Consultas JSON retornam 401 ao visitante. Falhas de banco não expõem SQL ou
+exceção. Nenhum `DELETE` novo, migration, tabela ou perfil foi criado; as
+quatro exclusões físicas administrativas existentes não foram ampliadas e
+continuam como risco de integridade.
+
+Também foi registrado o `DELETE` preexistente usado exclusivamente para substituir
+os itens durante a edição administrativa de uma transação. Ele permanece dentro
+da mesma transação, com rollback, mas deve ser avaliado junto das operações
+físicas legadas por não preservar os IDs históricos dos itens.
+
+Foram aprovados **25 testes específicos**, com subtestes cobrindo as 13 rotas, e
+**487 testes totais**, com zero falhas e zero erros. Não houve banco, Cloudinary,
+API externa, migration ou deploy. O inventário continua com 177 rotas (12
+públicas, 59 com login e 106 administrativas), e as 105 rotas funcionais da
+Fiscalização seguem administrativas.
+
+Os 15 possíveis IDORs levantados na H2A.3A estão corrigidos: dois na H2A.3B.2 e
+13 nesta etapa. Não permanece IDOR confirmado nesse inventário. Permanecem
+pendentes a revisão geral de JSON/AJAX, o segundo endpoint a desativar online,
+as exclusões físicas legadas, migration-base, controle formal de migrations,
+rotação de credenciais, Neon e Cloudinary separados, versões gerais, CSP, rate
+limit, trusted hosts, monitoramento e deploy.
+
+**Pendência futura:** Conversão das exclusões físicas legadas para inativação ou
+exclusão lógica, após decisão funcional e análise de integridade.

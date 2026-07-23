@@ -633,6 +633,34 @@ migration-base, controle formal de migrations, rotação das credenciais
 históricas, Neon e Cloudinary separados, versões gerais das dependências, deploy,
 CSP, rate limit, trusted hosts e monitoramento.
 
+## 21. Etapa H2A.3B.3 — autorização por objeto
+
+Em **23/07/2026**, foi concluída a revisão técnica da correção dos 13 casos de
+autorização por objeto restantes. Usuários comuns só
+consultam ou solicitam mudanças em objetos pertencentes à UVR carregada de
+`current_user`; administrador preserva o acesso global previsto.
+
+A comprovação usa SQL parametrizado com ID e UVR. IDs e UVRs do navegador não
+concedem acesso, campos sensíveis ou inesperados não entram nas solicitações e o
+cadastro relacionado de uma transação é conferido novamente no SQL final.
+Consultas JSON sem sessão
+retornam 401; objeto inexistente ou alheio retorna 404 genérico.
+
+Não foi criado `DELETE`, perfil, migration ou tabela. As exclusões físicas
+legadas do administrador não foram ampliadas e permanecem como risco de
+integridade. O total continua em 177 rotas: 12
+públicas, 59 com login e 106 administrativas; as 105 rotas funcionais da
+Fiscalização permanecem administrativas. A suíte aprovou **487 testes**, dos
+quais 25 específicos percorrem as 13 rotas por subtestes, sem serviços reais.
+
+Com os dois casos da H2A.3B.2, os 15 possíveis IDORs do inventário possuem
+correção implementada e não existe IDOR confirmado pendente nesse inventário.
+Permanecem pendentes a revisão geral de JSON/AJAX, a
+decisão sobre o segundo endpoint proposto para desativação online, migration-base,
+controle de migrations, rotação de credenciais, ambientes separados, versões
+fixadas, exclusões físicas legadas, deploy, CSP, rate limit, trusted hosts e
+monitoramento.
+
 ## Referências técnicas consultadas
 
 - [Render — Web Services](https://render.com/docs/web-services)
