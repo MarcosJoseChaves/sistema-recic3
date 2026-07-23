@@ -262,7 +262,8 @@ class TestProtecaoCsrfAplicacao(unittest.TestCase):
             resposta = self.client.post(
                 "/api/subgrupos", json={"acao": "novo"}, headers={"X-CSRFToken": token}
             )
-        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(resposta.status_code, 401)
+        self.assertEqual(resposta.get_json(), {"error": "Autenticação necessária."})
 
     def test_16_upload_sem_token_nao_acessa_cloudinary(self):
         self.autenticar(1)

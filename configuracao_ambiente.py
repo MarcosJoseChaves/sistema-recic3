@@ -3,7 +3,7 @@
 import hmac
 import os
 
-from flask import Response, request
+from flask import Response, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 
@@ -132,6 +132,32 @@ def configurar_aplicacao(app):
 
     @app.after_request
     def adicionar_cabecalhos_seguranca(resposta):
+        classificador_json = app.config.get("JSON_ENDPOINT_CLASSIFIER")
+        erros_json = {
+            400: "Solicitação inválida.",
+            401: "Autenticação necessária.",
+            403: "Acesso não autorizado para este recurso.",
+            404: "Recurso não encontrado.",
+            405: "Método não permitido.",
+            413: "Conteúdo muito grande.",
+            500: "Não foi possível processar a solicitação.",
+        }
+        if (
+            not resposta.is_json
+            and resposta.status_code in erros_json
+            and classificador_json
+            and classificador_json()
+        ):
+            cabecalhos_preservados = {
+                nome: resposta.headers[nome]
+                for nome in ("Allow", "WWW-Authenticate")
+                if nome in resposta.headers
+            }
+            codigo = resposta.status_code
+            resposta = jsonify({"error": erros_json[codigo]})
+            resposta.status_code = codigo
+            resposta.headers.update(cabecalhos_preservados)
+
         resposta.headers.setdefault("X-Content-Type-Options", "nosniff")
         resposta.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         resposta.headers.setdefault(
@@ -141,6 +167,9 @@ def configurar_aplicacao(app):
             resposta.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000"
             )
+        if resposta.is_json and request.endpoint != "health":
+            resposta.headers.setdefault("Cache-Control", "no-store, private, max-age=0")
+            resposta.headers.setdefault("Pragma", "no-cache")
         return resposta
 
     return ambiente

@@ -3,7 +3,7 @@
 from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 
-from ..permissions import admin_required
+from ..permissions import admin_json_required, admin_required
 from ..services.consultas_externas import (
     ConsultaExternaError,
     consultar_cep,
@@ -182,21 +182,27 @@ def registrar_rotas_empresas(blueprint, conectar_banco):
         return redirect(url_for("fiscalizacao_contratos.empresas_detalhe", empresa_id=empresa_id))
 
     @blueprint.route("/empresas/consultar-cnpj/<string:cnpj>", methods=["GET"])
-    @admin_required
+    @admin_json_required
     def empresas_consultar_cnpj(cnpj):
         try:
             return jsonify(consultar_cnpj(cnpj))
-        except ValueError as erro:
-            return jsonify({"erro": str(erro)}), 400
-        except ConsultaExternaError as erro:
-            return jsonify({"erro": str(erro), "preenchimento_manual": True}), 503
+        except ValueError:
+            return jsonify({"erro": "CNPJ inválido."}), 400
+        except ConsultaExternaError:
+            return jsonify({
+                "erro": "Não foi possível consultar o CNPJ agora. Preencha os dados manualmente.",
+                "preenchimento_manual": True,
+            }), 503
 
     @blueprint.route("/empresas/consultar-cep/<string:cep>", methods=["GET"])
-    @admin_required
+    @admin_json_required
     def empresas_consultar_cep(cep):
         try:
             return jsonify(consultar_cep(cep))
-        except ValueError as erro:
-            return jsonify({"erro": str(erro)}), 400
-        except ConsultaExternaError as erro:
-            return jsonify({"erro": str(erro), "preenchimento_manual": True}), 503
+        except ValueError:
+            return jsonify({"erro": "CEP inválido."}), 400
+        except ConsultaExternaError:
+            return jsonify({
+                "erro": "Não foi possível consultar o CEP agora. Preencha o endereço manualmente.",
+                "preenchimento_manual": True,
+            }), 503

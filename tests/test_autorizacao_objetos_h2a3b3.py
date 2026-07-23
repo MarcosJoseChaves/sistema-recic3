@@ -123,7 +123,9 @@ class TestAutorizacaoObjetosH2A3B3(unittest.TestCase):
                     self.assertEqual(self.post_com_csrf(rota, dados).status_code, 302)
             for rota in ROTAS_EXCLUSAO:
                 with self.subTest(rota=rota):
-                    self.assertEqual(self.post_com_csrf(rota).status_code, 302)
+                    resposta = self.post_com_csrf(rota)
+                    self.assertEqual(resposta.status_code, 401)
+                    self.assertTrue(resposta.is_json)
             for rota in ROTAS_JSON:
                 with self.subTest(rota=rota):
                     resposta = self.client.get(rota)

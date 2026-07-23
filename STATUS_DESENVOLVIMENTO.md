@@ -949,3 +949,41 @@ limit, trusted hosts, monitoramento e deploy.
 
 **Pendência futura:** Conversão das exclusões físicas legadas para inativação ou
 exclusão lógica, após decisão funcional e análise de integridade.
+
+### Etapa H2A.3B.4 — revisão geral dos endpoints JSON/AJAX
+
+Em **23/07/2026**, a H2A.3B.4 foi implementada e **aprovada na revisão técnica
+final**, ficando pronta para commit.
+
+O inventário confirmou **44 endpoints JSON/AJAX**: 1 público essencial, 8 para
+usuário autenticado, 26 com regra de UVR/objeto e 9 administrativos. São 34
+leituras e 10 escritas. Os 22 endpoints corrigidos nas H2A.3B.1, H2A.3B.2 e
+H2A.3B.3 foram preservados.
+
+As respostas protegidas agora seguem o padrão JSON 401/403/404, sem
+redirecionamento HTML ou detalhe interno. Foram reforçados validação de
+Content-Type e estrutura, limites de 64 KiB, 200 itens, 5.000 caracteres e
+profundidade 2, listas explícitas de campos permitidos, SQL parametrizado,
+rollback e cache privado `no-store`. O limite de bytes é aplicado durante a
+leitura mesmo sem `Content-Length`, e conteúdo comprimido é recusado. Usuário
+comum sem UVR falha de modo fechado.
+
+O JavaScript consumidor passou por revisão de escape de texto, IDs e mensagens.
+A lista dinâmica de notas passou a usar elementos DOM e `.text()`, sem
+interpolação de dados do servidor em HTML, e respostas 401 orientam novo login.
+Não existe CORS permissivo, JSONP, resposta sensível em `localStorage` ou log do
+conteúdo completo. PostgreSQL, Cloudinary e APIs externas permaneceram
+bloqueados nos testes.
+
+O segundo endpoint incompatível com ambiente online,
+`GET /sucesso_denuncia`, foi desativado com 404 em homologação e produção antes
+de qualquer efeito. Em desenvolvimento e testes, exige sessão interna ativa.
+
+Foram aprovados **38 testes específicos** e **525 testes totais**, com zero
+falhas e zero erros. Sintaxe e `git diff --check` foram aprovados. Nenhuma migration,
+banco, Cloudinary, API externa, arquivo real ou deploy foi executado.
+
+Permanecem pendentes as exclusões físicas legadas, migration-base, controle
+formal de migrations, rotação de credenciais, Neon separado, Cloudinary
+separado, versões gerais do Python e dependências, CSP, rate limit, trusted
+hosts, monitoramento e deploy.

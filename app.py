@@ -17,10 +17,11 @@ from xml.sax.saxutils import escape
 from flask import Flask, abort, render_template, request, redirect, url_for, jsonify, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.exceptions import HTTPException
 from configuracao_ambiente import configurar_aplicacao
 from seguranca_csrf import configurar_csrf
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
-from modulos.fiscalizacao_contratos.permissions import admin_required
+from modulos.fiscalizacao_contratos.permissions import admin_json_required, admin_required
 
 # ReportLab Imports (Para PDF)
 from reportlab.lib.pagesizes import letter, A4, landscape
@@ -91,10 +92,202 @@ def login_json_required(view_function):
     @wraps(view_function)
     def protected_view(*args, **kwargs):
         if not current_user.is_authenticated:
-            return jsonify({"error": "Autenticacao necessaria."}), 401
+            return jsonify({"error": "Autenticação necessária."}), 401
         return view_function(*args, **kwargs)
 
     return protected_view
+
+
+JSON_MAX_BYTES = 64 * 1024
+JSON_MAX_LIST_ITEMS = 200
+JSON_MAX_STRING_LENGTH = 5000
+JSON_MAX_DEPTH = 2
+JSON_ENDPOINTS = frozenset({
+    "api_produtos_crud",
+    "api_subgrupos",
+    "buscar_associados",
+    "buscar_cadastros",
+    "buscar_cep",
+    "buscar_cnpj",
+    "buscar_contas_correntes_gestao",
+    "buscar_patrimonio",
+    "buscar_transacoes_gestao",
+    "excluir_associado",
+    "excluir_cadastro",
+    "excluir_conta_corrente",
+    "excluir_movimentacao",
+    "excluir_patrimonio",
+    "excluir_transacao",
+    "fiscalizacao_contratos.empresas_consultar_cep",
+    "fiscalizacao_contratos.empresas_consultar_cnpj",
+    "gerar_extrato_bancario_json",
+    "gerar_relatorio",
+    "get_associado",
+    "get_associados_ativos",
+    "get_cadastro",
+    "get_cadastros_ativos",
+    "get_clientes_fornecedores_com_pendencias",
+    "get_conta_corrente_detalhe",
+    "get_contas_correntes_fluxo_caixa",
+    "get_detalhes_solicitacao",
+    "get_distinct_grupos",
+    "get_distinct_subgrupos",
+    "get_items_for_filters",
+    "get_movimentacao_detalhes",
+    "get_notas_em_aberto",
+    "get_patrimonio_detalhes",
+    "get_produtos_servicos",
+    "get_relatorio_catalog_options",
+    "get_relatorio_entidades_para_filtro",
+    "get_relatorio_tipos_atividade_transacao",
+    "get_relatorio_uvrs",
+    "get_resumo_fluxo_caixa",
+    "get_solicitacoes_pendentes",
+    "get_transacao_detalhes",
+    "health",
+    "registrar_fluxo_caixa",
+    "responder_solicitacao",
+})
+JSON_CAMPOS_RELATORIO = {
+    "data_inicial", "data_final", "uvr", "tipo_transacao_rel",
+    "tipo_entidade", "id_entidade", "nome_entidade_display",
+    "tipo_atividade_transacao_rel", "grupo_rel", "subgrupo_rel",
+    "item_rel", "status_pagamento_rel", "listar_por",
+}
+JSON_CAMPOS_EXTRATO = {
+    "id_conta_corrente_extrato", "data_inicial_extrato", "data_final_extrato",
+}
+
+
+def _requisicao_endpoint_json():
+    """Reconhece somente os endpoints JSON inventariados, sem confiar no cliente."""
+
+    if request.endpoint in JSON_ENDPOINTS:
+        return True
+    adaptador = app.url_map.bind_to_environ(request.environ)
+    for metodo in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+        try:
+            endpoint, _valores = adaptador.match(method=metodo)
+        except HTTPException:
+            continue
+        if endpoint in JSON_ENDPOINTS:
+            return True
+    return False
+
+
+app.config["JSON_ENDPOINT_CLASSIFIER"] = _requisicao_endpoint_json
+
+
+def _resposta_erro_http_json(codigo, mensagem, erro_original):
+    if _requisicao_endpoint_json():
+        return jsonify({"error": mensagem}), codigo
+    return erro_original
+
+
+@app.errorhandler(404)
+def _tratar_nao_encontrado(erro):
+    return _resposta_erro_http_json(404, "Recurso não encontrado.", erro)
+
+
+@app.errorhandler(405)
+def _tratar_metodo_incorreto(erro):
+    return _resposta_erro_http_json(405, "Método não permitido.", erro)
+
+
+@app.errorhandler(413)
+def _tratar_conteudo_excessivo(erro):
+    return _resposta_erro_http_json(413, "Conteúdo muito grande.", erro)
+
+
+@app.errorhandler(500)
+def _tratar_erro_interno(erro):
+    return _resposta_erro_http_json(
+        500,
+        "Não foi possível processar a solicitação.",
+        erro,
+    )
+
+
+def _validar_limites_estrutura_json(dados):
+    """Limita profundidade, textos e a soma de itens das listas aceitas."""
+
+    total_itens = 0
+
+    def validar(valor, profundidade):
+        nonlocal total_itens
+        if profundidade > JSON_MAX_DEPTH:
+            return "O conteúdo JSON possui estrutura inválida."
+        if isinstance(valor, str):
+            if len(valor) > JSON_MAX_STRING_LENGTH:
+                return "Um dos textos enviados é muito longo."
+            return None
+        if isinstance(valor, list):
+            total_itens += len(valor)
+            if total_itens > JSON_MAX_LIST_ITEMS:
+                return "A lista enviada possui itens demais."
+            for item in valor:
+                if isinstance(item, (dict, list)):
+                    return "A lista enviada possui formato inválido."
+                erro = validar(item, profundidade + 1)
+                if erro:
+                    return erro
+            return None
+        if isinstance(valor, dict):
+            return "O conteúdo JSON possui estrutura inválida."
+        return None
+
+    for valor in dados.values():
+        erro = validar(valor, 1)
+        if erro:
+            return erro
+    return None
+
+
+def _obter_json_objeto(campos_permitidos, *, campos_obrigatorios=()):
+    """Valida uma entrada JSON pequena antes de executar a regra de negócio."""
+
+    if not request.is_json:
+        return None, (
+            jsonify({"error": "O conteúdo deve ser enviado no formato JSON."}),
+            415,
+        )
+    if request.content_length and request.content_length > JSON_MAX_BYTES:
+        return None, (jsonify({"error": "Conteúdo JSON muito grande."}), 413)
+
+    codificacao = str(request.headers.get("Content-Encoding") or "identity").casefold()
+    if codificacao not in {"", "identity"}:
+        return None, (
+            jsonify({"error": "Codificação de conteúdo não suportada."}),
+            415,
+        )
+
+    corpo = request.stream.read(JSON_MAX_BYTES + 1)
+    if len(corpo) > JSON_MAX_BYTES:
+        return None, (jsonify({"error": "Conteúdo JSON muito grande."}), 413)
+    try:
+        dados = json.loads(corpo)
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        dados = None
+    if not isinstance(dados, dict):
+        return None, (jsonify({"error": "Conteúdo JSON inválido."}), 400)
+
+    campos_extras = set(dados) - set(campos_permitidos)
+    if campos_extras:
+        return None, (jsonify({"error": "O conteúdo possui campos não permitidos."}), 400)
+
+    erro_estrutura = _validar_limites_estrutura_json(dados)
+    if erro_estrutura:
+        return None, (jsonify({"error": erro_estrutura}), 400)
+
+    ausentes = [
+        campo
+        for campo in campos_obrigatorios
+        if campo not in dados or dados[campo] is None
+    ]
+    if ausentes:
+        return None, (jsonify({"error": "Campos obrigatórios não informados."}), 400)
+
+    return dados, None
 
 
 def _resposta_acesso_negado_json():
@@ -753,6 +946,8 @@ def index():
 
 # Substitua sua função buscar_cep por esta
 @app.route("/buscar_cep/<string:cep_numeros>", methods=["GET"])
+@login_json_required
+@login_required
 def buscar_cep(cep_numeros):
     if not cep_numeros or not cep_numeros.isdigit() or len(cep_numeros) != 8:
         return jsonify({"erro": "CEP inválido. Forneça 8 dígitos numéricos."}), 400
@@ -783,22 +978,28 @@ def buscar_cep(cep_numeros):
         })
 
     except requests.exceptions.Timeout:
-        app.logger.error(f"Timeout ao buscar CEP {cep_numeros} na BrasilAPI.")
+        app.logger.warning("Consulta de CEP excedeu o tempo limite.")
         return jsonify({"erro": "O serviço de CEP demorou muito para responder."}), 504
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
-            app.logger.warning(f"CEP {cep_numeros} não encontrado na BrasilAPI.")
+            app.logger.info("Consulta de CEP não encontrou resultado.")
             return jsonify({"erro": "CEP não encontrado."}), 404
-        app.logger.error(f"Erro HTTP ao buscar CEP {cep_numeros} na BrasilAPI: {e}")
+        app.logger.warning(
+            "Consulta de CEP falhou. erro_tipo=%s", type(e).__name__
+        )
         return jsonify({"erro": "Erro de comunicação ao contatar o serviço de CEP."}), 503
 
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Erro de rede ao buscar CEP {cep_numeros} na BrasilAPI: {e}")
+        app.logger.warning(
+            "Consulta de CEP falhou. erro_tipo=%s", type(e).__name__
+        )
         return jsonify({"erro": "Erro de comunicação ao contatar o serviço de CEP."}), 503
 
     except Exception as e:
-        app.logger.error(f"Erro inesperado ao processar CEP {cep_numeros}: {e}")
+        app.logger.error(
+            "Falha interna na consulta de CEP. erro_tipo=%s", type(e).__name__
+        )
         return jsonify({"erro": "Erro interno ao processar CEP."}), 500
 
 @app.route("/cadastrar", methods=["POST"])
@@ -946,6 +1147,7 @@ def cadastrar_associado():
         if conn: conn.close()
 
 @app.route("/buscar_associados", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_associados():
     # Coleta os parâmetros da URL
@@ -956,6 +1158,10 @@ def buscar_associados():
     
     # Novo: Filtro de UVR vindo da tela (apenas Admin usa isso)
     uvr_filtro_tela = request.args.get("uvr", "")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_filtro_tela)
+    if negado:
+        return negado
+    uvr_filtro_tela = uvr_autorizada or ""
 
     conn = None
     try:
@@ -1024,18 +1230,24 @@ def buscar_associados():
         return jsonify(lista_associados)
 
     except Exception as e:
-        app.logger.error(f"Erro na busca: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar associados. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
         
 @app.route("/get_associado/<int:id>", methods=["GET"])
+@login_json_required
 @login_required
 def get_associado(id):
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
         
         # Busca todos os dados do associado pelo ID
         # Nota: Ajuste os nomes das colunas se seu banco estiver diferente
@@ -1045,17 +1257,10 @@ def get_associado(id):
                    uf, cep, telefone, foto_base64
             FROM associados WHERE id = %s
         """
-        cur.execute(sql, (id,))
-        row = cur.fetchone()
+        row = _consulta_objeto_por_uvr(cur, sql, id, uvr)
         
         if not row:
             return jsonify({"error": "Associado não encontrado"}), 404
-
-        # Segurança: Se não for admin, verifica se a UVR bate
-        if current_user.uvr_acesso and current_user.role != 'admin':
-            # row[7] é a coluna UVR
-            if row[7] != current_user.uvr_acesso:
-                return jsonify({"error": "Acesso não autorizado para esta UVR"}), 403
 
         # Formatar datas para string (JSON não aceita objeto date direto)
         def format_date(d):
@@ -1075,8 +1280,10 @@ def get_associado(id):
         return jsonify(associado)
 
     except Exception as e:
-        app.logger.error(f"Erro ao buscar ficha do associado: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar associado. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         if conn: conn.close()
         
@@ -1505,6 +1712,7 @@ def get_associados_ativos():
         if conn: conn.close()
 
 @app.route("/get_distinct_grupos")
+@login_json_required
 @login_required
 def get_distinct_grupos():
     """Retorna os Grupos (Atividades) baseados no Tipo (Receita/Despesa)."""
@@ -1535,6 +1743,7 @@ def get_distinct_grupos():
     return jsonify(grupos_filtrados)
 
 @app.route("/get_distinct_subgrupos")
+@login_json_required
 @login_required
 def get_distinct_subgrupos():
     """Retorna os Subgrupos vinculados a um Grupo Pai (tabela 'subgrupos')."""
@@ -1550,11 +1759,15 @@ def get_distinct_subgrupos():
         res = [r[0] for r in cur.fetchall()]
         return jsonify(res)
     except Exception as e:
-        return jsonify([])
+        app.logger.error(
+            "Falha ao consultar subgrupos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         conn.close()
 
 @app.route("/get_items_for_filters")
+@login_json_required
 @login_required
 def get_items_for_filters():
     """Retorna itens filtrados por Grupo e Subgrupo."""
@@ -1582,7 +1795,10 @@ def get_items_for_filters():
         res = [r[0] for r in cur.fetchall()]
         return jsonify(res)
     except Exception as e:
-        return jsonify([])
+        app.logger.error(
+            "Falha ao consultar itens. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         conn.close()
 
@@ -2095,7 +2311,30 @@ def get_notas_em_aberto():
 def registrar_fluxo_caixa():
     conn = None
     try:
-        dados = dict(request.get_json(silent=True) or {})
+        dados, erro_json = _obter_json_objeto(
+            {
+                "uvr", "associacao", "tipo_movimentacao",
+                "id_cadastro_cf_str", "is_associado_rateio",
+                "nome_cadastro_cf_display", "id_conta_corrente",
+                "numero_documento_bancario", "data_efetiva", "valor_efetivo",
+                "data_hora_registro_fluxo", "observacoes",
+                "ids_nfs_selecionadas",
+            },
+        )
+        if erro_json:
+            return erro_json
+        if (
+            "ids_nfs_selecionadas" in dados
+            and not isinstance(dados.get("ids_nfs_selecionadas"), list)
+        ):
+            return jsonify({"error": "A lista de notas fiscais é inválida."}), 400
+        if any(
+            not str(identificador).isdigit()
+            for identificador in dados.get("ids_nfs_selecionadas", [])
+        ):
+            return jsonify({"error": "A lista de notas fiscais é inválida."}), 400
+        if not isinstance(dados.get("is_associado_rateio", False), bool):
+            return jsonify({"error": "O indicador de rateio é inválido."}), 400
         negado = _aplicar_escopo_uvr(dados, "uvr", resposta_json=True)
         if negado:
             return negado
@@ -2112,6 +2351,12 @@ def registrar_fluxo_caixa():
         negado = _autorizar_objetos_da_uvr(verificacoes)
         if negado:
             return negado
+        campos_obrigatorios = (
+            "uvr", "tipo_movimentacao", "id_conta_corrente",
+            "data_efetiva", "valor_efetivo", "ids_nfs_selecionadas",
+        )
+        if any(dados.get(campo) in (None, "", []) for campo in campos_obrigatorios):
+            return jsonify({"error": "Campos obrigatórios não informados."}), 400
 
         app.logger.info("Solicitacao autorizada de registro de fluxo de caixa.")
         conn = conectar_banco()
@@ -2768,7 +3013,9 @@ def fetch_report_data(filters):
 @login_required
 def gerar_relatorio():
     try:
-        filters = dict(request.get_json(silent=True) or {})
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_RELATORIO)
+        if erro_json:
+            return erro_json
         negado = _autorizar_relatorio_financeiro(filters)
         if negado:
             return negado
@@ -2786,7 +3033,9 @@ def gerar_relatorio():
 @login_required
 def baixar_csv_relatorio():
     try:
-        filters = dict(request.get_json(silent=True) or {})
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_RELATORIO)
+        if erro_json:
+            return erro_json
         negado = _autorizar_relatorio_financeiro(filters)
         if negado:
             return negado
@@ -2897,7 +3146,9 @@ def _create_pdf_header_footer(canvas, doc, title, subtitle=""):
 @login_required
 def baixar_pdf_relatorio_financeiro():
     try:
-        filters = dict(request.get_json(silent=True) or {})
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_RELATORIO)
+        if erro_json:
+            return erro_json
         negado = _autorizar_relatorio_financeiro(filters)
         if negado:
             return negado
@@ -3062,7 +3313,9 @@ def baixar_pdf_relatorio_financeiro():
 @login_required
 def baixar_pdf_extrato():
     try:
-        filters = dict(request.get_json(silent=True) or {})
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_EXTRATO)
+        if erro_json:
+            return erro_json
         negado = _autorizar_extrato_financeiro(filters)
         if negado:
             return negado
@@ -3294,7 +3547,9 @@ def fetch_extrato_data(filters):
 @login_required
 def gerar_extrato_bancario_json():
     try:
-        filters = dict(request.get_json(silent=True) or {})
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_EXTRATO)
+        if erro_json:
+            return erro_json
         negado = _autorizar_extrato_financeiro(filters)
         if negado:
             return negado
@@ -3314,7 +3569,9 @@ def gerar_extrato_bancario_json():
 @login_required
 def baixar_csv_extrato():
     try:
-        filters = dict(request.get_json(silent=True) or {})
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_EXTRATO)
+        if erro_json:
+            return erro_json
         negado = _autorizar_extrato_financeiro(filters)
         if negado:
             return negado
@@ -3376,6 +3633,8 @@ def baixar_csv_extrato():
 
 
 @app.route("/buscar_cnpj/<string:cnpj>", methods=["GET"])
+@login_json_required
+@login_required
 def buscar_cnpj(cnpj):
     try:
         cnpj_limpo = re.sub(r'[^0-9]', '', cnpj)
@@ -3403,11 +3662,14 @@ def buscar_cnpj(cnpj):
                 "uf": dados_brasilapi.get("uf", ""),
                 "telefone": telefone_principal,
             }
-            app.logger.info(f"CNPJ {cnpj_limpo} encontrado via BrasilAPI.")
+            app.logger.info("Consulta de CNPJ concluída pela primeira opção.")
             return jsonify(resultado)
         
         except requests.exceptions.RequestException as e_brasilapi:
-            app.logger.warning(f"Falha ao buscar CNPJ {cnpj_limpo} na BrasilAPI: {e_brasilapi}. Tentando OpenCNPJA...")
+            app.logger.warning(
+                "Primeira consulta de CNPJ falhou; alternativa acionada. erro_tipo=%s",
+                type(e_brasilapi).__name__,
+            )
             response_opencnpja = requests.get(f"https://open.cnpja.com/office/{cnpj_limpo}", timeout=5)
             response_opencnpja.raise_for_status()
             dados_opencnpja = response_opencnpja.json()
@@ -3422,25 +3684,29 @@ def buscar_cnpj(cnpj):
                 "uf": dados_opencnpja.get("address", {}).get("state", ""),
                 "telefone": f"({dados_opencnpja.get('phones', [{}])[0].get('area','')}) {dados_opencnpja.get('phones', [{}])[0].get('number','')}" if dados_opencnpja.get("phones") else "",
             }
-            app.logger.info(f"CNPJ {cnpj_limpo} encontrado via OpenCNPJA.")
+            app.logger.info("Consulta de CNPJ concluída pela opção alternativa.")
             return jsonify(resultado)
 
     except requests.exceptions.HTTPError as e_http:
         status_code = e_http.response.status_code if e_http.response else 500
         if status_code == 404:
             return jsonify({"erro": "CNPJ não encontrado ou inválido."}), 404
-        return jsonify({"erro": f"Erro HTTP ao consultar CNPJ: {status_code}"}), 502
+        return jsonify({"erro": "Não foi possível consultar o CNPJ agora."}), 502
     except requests.exceptions.RequestException as e_req:
-        app.logger.error(f"Erro de rede ao consultar CNPJ {cnpj_limpo}: {e_req}")
+        app.logger.warning(
+            "Consulta de CNPJ falhou. erro_tipo=%s", type(e_req).__name__
+        )
         return jsonify({"erro": "Erro de rede ao consultar CNPJ. Verifique sua conexão."}), 503
     except Exception as e_geral:
-        app.logger.error(f"Erro inesperado na busca por CNPJ {cnpj_limpo}: {e_geral}")
+        app.logger.error(
+            "Falha interna na consulta de CNPJ. erro_tipo=%s",
+            type(e_geral).__name__,
+        )
         return jsonify({"erro": "Erro interno ao processar CNPJ."}), 500
 
 @app.route("/get_solicitacoes_pendentes", methods=["GET"])
-@login_required
+@admin_json_required
 def get_solicitacoes_pendentes():
-    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     conn = None
     try:
         conn = conectar_banco()
@@ -3466,6 +3732,8 @@ def get_solicitacoes_pendentes():
                 dados = json.loads(raw_data)
             else:
                 dados = raw_data
+            if not isinstance(dados, dict):
+                dados = {}
             # --------------------------------------
 
             # Se for exclusão, o nome novo é irrelevante, usamos o tipo da ação
@@ -3478,6 +3746,11 @@ def get_solicitacoes_pendentes():
                 "nome_novo": nome_novo_ou_acao
             })
         return jsonify(res)
+    except Exception as e:
+        app.logger.error(
+            "Falha ao listar solicitações. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -3557,16 +3830,32 @@ def editar_conta_corrente():
         if conn: conn.close()
 
 @app.route("/responder_solicitacao", methods=["POST"])
-@login_required
+@admin_json_required
 def responder_solicitacao():
-    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
-    data = request.json
-    id_sol = data.get('id'); acao = data.get('acao')
+    data, erro_json = _obter_json_objeto(
+        {"id", "acao"}, campos_obrigatorios={"id", "acao"}
+    )
+    if erro_json:
+        return erro_json
+    id_sol = data.get("id")
+    acao = data.get("acao")
+    if not str(id_sol).isdigit():
+        return jsonify({"error": "Identificador inválido."}), 400
+    if acao not in {"aprovar", "rejeitar"}:
+        return jsonify({"error": "Ação inválida."}), 400
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT id_registro, dados_novos, tabela_alvo, tipo_solicitacao FROM solicitacoes_alteracao WHERE id = %s", (id_sol,))
+        cur.execute(
+            """
+            SELECT id_registro, dados_novos, tabela_alvo, tipo_solicitacao
+            FROM solicitacoes_alteracao
+            WHERE id = %s AND status = 'PENDENTE'
+            FOR UPDATE
+            """,
+            (id_sol,),
+        )
         solic = cur.fetchone()
         
         if not solic: return jsonify({"error": "Não encontrado"}), 404
@@ -3575,8 +3864,21 @@ def responder_solicitacao():
         if acao == 'aprovar':
             if tipo == 'EXCLUSAO':
                 # Executa a exclusão real
-                sql_del = f"DELETE FROM {tabela} WHERE id = %s"
+                exclusoes_permitidas = {
+                    "associados": "DELETE FROM associados WHERE id = %s",
+                    "cadastros": "DELETE FROM cadastros WHERE id = %s",
+                    "contas_correntes": "DELETE FROM contas_correntes WHERE id = %s",
+                    "transacoes_financeiras": "DELETE FROM transacoes_financeiras WHERE id = %s",
+                    "patrimonio": "DELETE FROM patrimonio WHERE id = %s",
+                }
+                sql_del = exclusoes_permitidas.get(tabela)
+                if not sql_del:
+                    conn.rollback()
+                    return jsonify({"error": "Solicitação inválida."}), 400
                 cur.execute(sql_del, (id_reg,))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"error": "Recurso não encontrado."}), 404
                 msg = "Registro excluído com sucesso!"
             else:
                 # Executa a edição (APROVAÇÃO)
@@ -3653,8 +3955,27 @@ def responder_solicitacao():
                     d.pop('nome_visual', None)
                     
                     # Constrói a query de UPDATE dinamicamente baseada nas chaves do JSON
-                    campos = list(d.keys())
-                    valores = list(d.values())
+                    campos_permitidos = {
+                        "uvr", "associacao", "tipo_bem", "categoria",
+                        "descricao", "codigo_patrimonio", "marca", "modelo",
+                        "ano_fabricacao", "numero_serie_chassi",
+                        "situacao_propriedade", "entidade_proprietaria",
+                        "orgao_cedente", "numero_termo_comodato",
+                        "data_inicio_comodato", "data_fim_comodato", "placa",
+                        "renavam", "combustivel", "capacidade_carga",
+                        "controle_por", "medidor_inicial", "medidor_atual",
+                        "local_instalacao", "setor_uso", "nome_responsavel",
+                        "nome_operador_principal", "status_bem",
+                        "estado_conservacao", "permite_abastecimento",
+                        "permite_manutencao", "alerta_preventiva",
+                        "observacoes_gerais", "foto_bem_base64",
+                        "eh_bem_publico", "uso_compartilhado",
+                    }
+                    campos = [campo for campo in d if campo in campos_permitidos]
+                    if not campos:
+                        conn.rollback()
+                        return jsonify({"error": "Solicitação inválida."}), 400
+                    valores = [d[campo] for campo in campos]
                     valores.append(id_reg) # ID para o WHERE no final
                     
                     set_clause = ", ".join([f"{campo}=%s" for campo in campos])
@@ -3665,17 +3986,28 @@ def responder_solicitacao():
 
                 msg = "Edição aprovada e aplicada!"
 
-            cur.execute("UPDATE solicitacoes_alteracao SET status='APROVADO' WHERE id=%s", (id_sol,))
+            cur.execute(
+                "UPDATE solicitacoes_alteracao SET status='APROVADO' WHERE id=%s AND status='PENDENTE'",
+                (id_sol,),
+            )
         else:
-            cur.execute("UPDATE solicitacoes_alteracao SET status='REJEITADO' WHERE id=%s", (id_sol,))
+            cur.execute(
+                "UPDATE solicitacoes_alteracao SET status='REJEITADO' WHERE id=%s AND status='PENDENTE'",
+                (id_sol,),
+            )
             msg = "Solicitação rejeitada."
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
             
         conn.commit()
         return jsonify({"status": "sucesso", "message": msg})
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro ao responder solicitação: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao responder solicitação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
@@ -3889,11 +4221,16 @@ def imprimir_ficha_associado(id):
 # --- GESTÃO DE CLIENTES / FORNECEDORES (LEITURA) ---
 
 @app.route("/buscar_cadastros", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_cadastros():
     termo = request.args.get("q", "").lower()
     tipo = request.args.get("tipo", "") # Cliente ou Fornecedor
     uvr_tela = request.args.get("uvr", "")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_tela)
+    if negado:
+        return negado
+    uvr_tela = uvr_autorizada or ""
     
     conn = None
     try:
@@ -3933,26 +4270,30 @@ def buscar_cadastros():
             })
         return jsonify(res)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar cadastros. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_cadastro/<int:id>", methods=["GET"])
+@login_json_required
 @login_required
 def get_cadastro(id):
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
-        row = cur.fetchone()
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
+        row = _consulta_objeto_por_uvr(
+            cur, "SELECT * FROM cadastros WHERE id = %s", id, uvr
+        )
         
         if not row: return jsonify({"error": "Não encontrado"}), 404
         
-        # Segurança UVR
-        if current_user.uvr_acesso and current_user.role != 'admin' and row[1] != current_user.uvr_acesso: 
-            return jsonify({"error": "Acesso negado"}), 403
-
         # Mapeamento (Ajuste os índices se sua tabela for diferente)
         data = {
             "id": row[0], "uvr": row[1], "associacao": row[2], 
@@ -4120,6 +4461,7 @@ def editar_cadastro():
         if conn: conn.close()
 
 @app.route("/excluir_cadastro/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_cadastro(id):
     conn = None
@@ -4170,6 +4512,7 @@ def excluir_cadastro(id):
         if conn: conn.close()
 
 @app.route("/excluir_associado/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_associado(id):
     conn = None
@@ -4226,10 +4569,15 @@ def excluir_associado(id):
 # --- GESTÃO DE CONTAS CORRENTES (NOVAS ROTAS) ---
 
 @app.route("/buscar_contas_correntes_gestao", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_contas_correntes_gestao():
     termo = request.args.get("q", "").lower()
     uvr_tela = request.args.get("uvr", "")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_tela)
+    if negado:
+        return negado
+    uvr_tela = uvr_autorizada or ""
     
     conn = None
     try:
@@ -4265,7 +4613,10 @@ def buscar_contas_correntes_gestao():
             })
         return jsonify(res)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar contas. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -4305,16 +4656,16 @@ def get_conta_corrente_detalhe(id):
 
 
 @app.route("/excluir_conta_corrente/<int:id>", methods=["POST"])
-@login_required
+@admin_json_required
 def excluir_conta_corrente(id):
-    if current_user.role != 'admin':
-        return jsonify({"error": "Apenas administradores podem excluir contas."}), 403
-        
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
         cur.execute("DELETE FROM contas_correntes WHERE id = %s", (id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
         conn.commit()
         return jsonify({"status": "sucesso", "message": "Conta excluída com sucesso."})
     except psycopg2.IntegrityError:
@@ -4322,14 +4673,16 @@ def excluir_conta_corrente(id):
         return jsonify({"error": "Não é possível excluir esta conta pois ela possui movimentações financeiras registradas."}), 400
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao excluir conta. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_detalhes_solicitacao/<int:id>", methods=["GET"])
-@login_required
+@admin_json_required
 def get_detalhes_solicitacao(id):
-    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     conn = None
     try:
         conn = conectar_banco()
@@ -4412,8 +4765,8 @@ def get_detalhes_solicitacao(id):
             }
         # ------------------------------
 
-        if not sql_atual: 
-            return jsonify({"error": f"Tabela '{tabela}' desconhecida ou não configurada para detalhes."}), 400
+        if not sql_atual:
+            return jsonify({"error": "Solicitação inválida."}), 400
 
         # Busca os dados ATUAIS no banco
         cur.execute(sql_atual, (id_reg,))
@@ -4483,7 +4836,11 @@ def get_detalhes_solicitacao(id):
                     try: tot_fmt = f"{float(tot):.2f}".replace('.', ',')
                     except: tot_fmt = str(tot)
 
-                    html += f'<tr><td>{desc}</td><td>{qtd_fmt} {un}</td><td>{tot_fmt}</td></tr>'
+                    html += (
+                        f"<tr><td>{escape(str(desc or ''))}</td>"
+                        f"<td>{escape(str(qtd_fmt))} {escape(str(un or ''))}</td>"
+                        f"<td>{escape(str(tot_fmt))}</td></tr>"
+                    )
                 
                 html += '</tbody></table>'
                 return html
@@ -4497,7 +4854,8 @@ def get_detalhes_solicitacao(id):
                 "campo": "Detalhamento de Itens",
                 "valor_atual": html_atual,
                 "valor_novo": html_novo,
-                "mudou": mudou_itens
+                "mudou": mudou_itens,
+                "html_seguro": True,
             })
         # ------------------------------------------------------------------
 
@@ -4513,14 +4871,17 @@ def get_detalhes_solicitacao(id):
         })
 
     except Exception as e:
-        app.logger.error(f"Erro em get_detalhes_solicitacao: {e}")
-        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+        app.logger.error(
+            "Falha ao consultar solicitação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         if conn: conn.close()
         
 # --- GESTÃO DE TRANSAÇÕES (CRUD) ---
 
 @app.route("/buscar_transacoes_gestao", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_transacoes_gestao():
     # Pega os filtros que vieram do Javascript
@@ -4528,6 +4889,10 @@ def buscar_transacoes_gestao():
     data_fim = request.args.get("data_final")
     tipo = request.args.get("tipo")
     uvr_tela = request.args.get("uvr")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_tela)
+    if negado:
+        return negado
+    uvr_tela = uvr_autorizada or ""
     termo = request.args.get("q", "").lower()
 
     conn = None
@@ -4597,8 +4962,10 @@ def buscar_transacoes_gestao():
         return jsonify(resultados)
 
     except Exception as e:
-        app.logger.error(f"Erro ao buscar transações: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar transações. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 @app.route("/get_transacao_detalhes/<int:id>", methods=["GET"])
@@ -4687,21 +5054,37 @@ def get_transacao_detalhes(id):
 # --- NOVAS ROTAS PARA GESTÃO DE PRODUTOS E SUBGRUPOS ---
 
 @app.route("/api/subgrupos", methods=["GET", "POST"])
-@login_required
+@admin_json_required
 def api_subgrupos():
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
+    cur = None
     try:
         if request.method == "POST":
             # Cadastrar ou Editar Subgrupo
-            dados = request.json
+            dados, erro_json = _obter_json_objeto(
+                {"acao", "nome", "atividade_pai", "id"},
+                campos_obrigatorios={"acao"},
+            )
+            if erro_json:
+                return erro_json
             acao = dados.get('acao')
             nome = dados.get('nome', '').strip()
             atividade = dados.get('atividade_pai', '')
             id_sub = dados.get('id')
 
-            if not nome or not atividade:
+            if acao not in {"novo", "editar", "excluir"}:
+                return jsonify({"erro": "Ação inválida."}), 400
+            if acao in {"novo", "editar"} and (not nome or not atividade):
                 return jsonify({"erro": "Nome e Atividade (Grupo) são obrigatórios."}), 400
+            if acao in {"editar", "excluir"} and not id_sub:
+                return jsonify({"erro": "Identificador obrigatório."}), 400
+            if acao in {"editar", "excluir"} and not str(id_sub).isdigit():
+                return jsonify({"erro": "Identificador inválido."}), 400
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        if request.method == "POST":
 
             if acao == 'novo':
                 try:
@@ -4714,6 +5097,9 @@ def api_subgrupos():
 
             elif acao == 'editar':
                 cur.execute("UPDATE subgrupos SET nome = %s WHERE id = %s", (nome, id_sub))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"erro": "Recurso não encontrado."}), 404
                 # Também atualiza o texto na tabela antiga para manter consistência por enquanto
                 cur.execute("UPDATE produtos_servicos SET subgrupo = %s WHERE id_subgrupo = %s", (nome, id_sub))
                 conn.commit()
@@ -4726,6 +5112,9 @@ def api_subgrupos():
                     return jsonify({"erro": "Não é possível excluir: existem produtos vinculados a este subgrupo."}), 400
                 
                 cur.execute("DELETE FROM subgrupos WHERE id = %s", (id_sub,))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"erro": "Recurso não encontrado."}), 404
                 conn.commit()
                 return jsonify({"sucesso": True})
 
@@ -4744,25 +5133,44 @@ def api_subgrupos():
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro API Subgrupos: {e}")
-        return jsonify({"erro": str(e)}), 500
+        app.logger.error(
+            "Falha na API de subgrupos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"erro": "Não foi possível processar a solicitação."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 @app.route("/api/produtos_crud", methods=["GET", "POST", "DELETE"])
-@login_required
+@admin_json_required
 def api_produtos_crud():
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
+    cur = None
     try:
         if request.method == "POST":
             # Salvar Produto
-            d = request.json
+            d, erro_json = _obter_json_objeto(
+                {"id", "item", "id_subgrupo", "grupo"},
+                campos_obrigatorios={"item", "grupo"},
+            )
+            if erro_json:
+                return erro_json
             id_prod = d.get('id')
             item = d.get('item', '').strip()
             id_subgrupo = d.get('id_subgrupo')
             grupo = d.get('grupo') # Atividade
             
+            if not item or not grupo:
+                return jsonify({"erro": "Grupo e nome são obrigatórios."}), 400
+            if id_prod and not str(id_prod).isdigit():
+                return jsonify({"erro": "Identificador inválido."}), 400
+            if id_subgrupo and not str(id_subgrupo).isdigit():
+                return jsonify({"erro": "Subgrupo inválido."}), 400
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        if request.method == "POST":
             # Busca nome do subgrupo para manter compatibilidade
             nome_subgrupo = ""
             if id_subgrupo:
@@ -4791,18 +5199,26 @@ def api_produtos_crud():
                     SET tipo_atividade=%s, grupo=%s, subgrupo=%s, id_subgrupo=%s, item=%s
                     WHERE id=%s
                 """, (grupo, grupo, nome_subgrupo, id_subgrupo, item, id_prod))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"erro": "Recurso não encontrado."}), 404
                 conn.commit()
             
             return jsonify({"sucesso": True})
 
         elif request.method == "DELETE":
             id_prod = request.args.get('id')
+            if not id_prod or not str(id_prod).isdigit():
+                return jsonify({"erro": "Identificador inválido."}), 400
             # Verifica uso em transações
             cur.execute("SELECT COUNT(*) FROM itens_transacao WHERE descricao = (SELECT item FROM produtos_servicos WHERE id = %s)", (id_prod,))
             if cur.fetchone()[0] > 0:
                  return jsonify({"erro": "Não pode excluir: Item já usado em transações financeiras."}), 400
             
             cur.execute("DELETE FROM produtos_servicos WHERE id = %s", (id_prod,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"erro": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"sucesso": True})
 
@@ -4848,10 +5264,15 @@ def api_produtos_crud():
 
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"erro": str(e)}), 500
+        app.logger.error(
+            "Falha na API de produtos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"erro": "Não foi possível processar a solicitação."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 @app.route("/excluir_transacao/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_transacao(id):
     conn = None
@@ -4977,14 +5398,16 @@ def get_movimentacao_detalhes(id):
         conn.close()
 
 @app.route("/excluir_movimentacao/<int:id>", methods=["POST"])
-@login_required
+@admin_json_required
 def excluir_movimentacao(id):
-    if current_user.role != 'admin': 
-        return jsonify({"error": "Apenas administradores podem excluir."}), 403
-
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
     try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM fluxo_caixa WHERE id = %s FOR UPDATE", (id,))
+        if not cur.fetchone():
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
         # 1. Busca se há vínculos com Transações (NFs) para estornar
         cur.execute("""
             SELECT id_transacao_financeira, valor_aplicado_nesta_nf 
@@ -5019,16 +5442,23 @@ def excluir_movimentacao(id):
 
         # 3. Exclui do Fluxo de Caixa (o DELETE CASCADE no banco remove os links automaticamente)
         cur.execute("DELETE FROM fluxo_caixa WHERE id = %s", (id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
         conn.commit()
         
         return jsonify({"status": "sucesso", "message": "Movimentação excluída e saldos estornados!"})
 
     except Exception as e:
-        conn.rollback()
-        app.logger.error(f"Erro ao excluir movimentação: {e}")
-        return jsonify({"error": str(e)}), 500
+        if conn:
+            conn.rollback()
+        app.logger.error(
+            "Falha ao excluir movimentação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 # --- GESTÃO DE PATRIMÔNIO / FROTA ---
 
 @app.route("/cadastrar_patrimonio", methods=["POST"])
@@ -5094,6 +5524,7 @@ def cadastrar_patrimonio():
         if conn: conn.close()
 
 @app.route("/buscar_patrimonio", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_patrimonio():
     conn = None
@@ -5101,6 +5532,10 @@ def buscar_patrimonio():
         termo = request.args.get("q", "").lower()
         categoria = request.args.get("categoria", "")
         uvr = request.args.get("uvr", "")
+        uvr_autorizada, negado = _escopo_uvr_consulta(uvr)
+        if negado:
+            return negado
+        uvr = uvr_autorizada or ""
 
         sql = "SELECT id, descricao, tipo_bem, placa, status_bem, nome_responsavel, medidor_atual, controle_por, categoria, codigo_patrimonio FROM patrimonio WHERE 1=1"
         params = []
@@ -5138,7 +5573,10 @@ def buscar_patrimonio():
             })
         return jsonify(res)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar patrimônio. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -5292,6 +5730,7 @@ def editar_patrimonio():
         if conn: conn.close()
 
 @app.route("/excluir_patrimonio/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_patrimonio(id):
     conn = None
@@ -5359,6 +5798,8 @@ def sucesso_produto_servico(): return pagina_sucesso_base("Sucesso", "Produto/Se
 @app.route("/sucesso_conta_corrente") 
 def sucesso_conta_corrente(): return pagina_sucesso_base("Sucesso", "Conta Corrente cadastrada com sucesso!")
 @app.route("/sucesso_denuncia")
+@desativada_online
+@login_required
 def sucesso_denuncia(): return pagina_sucesso_base("Sucesso", "Denúncia registrada com sucesso!")
 
 

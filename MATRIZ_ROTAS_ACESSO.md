@@ -573,3 +573,100 @@ inventário**. As exclusões físicas permanecem risco de integridade, não IDOR
 
 Foram aprovados **25 testes específicos**, com subtestes para todas as rotas, e
 **487 testes totais**, sem serviços reais.
+
+## 21. H2A.3B.4 — revisão geral dos endpoints JSON/AJAX
+
+Em **23/07/2026**, o inventário foi reconstruído a partir de `app.url_map`,
+decorators, usos de `jsonify`/`request.get_json` e consumidores AJAX. Foram
+confirmados **44 endpoints únicos**, sem contar novamente uma rota por aceitar
+mais de um método: **1 público essencial (A), 8 autenticados (B), 26 com regra de
+UVR/objeto (C) e 9 administrativos (D)**. São **34 leituras e 10 escritas**.
+
+| Rota | Classe | Operação | Proteção e dados mínimos | Cobertura / situação |
+|---|---:|---|---|---|
+| `GET /health` | A | leitura | estado técnico mínimo, sem sessão ou dados de negócio | `H2A3B4 test_01, test_18`; mantido público |
+| `GET /buscar_cep/<cep>` | B | leitura | login ativo; endereço necessário ao formulário | `test_04, test_12`; protegido |
+| `GET /buscar_cnpj/<cnpj>` | B | leitura | login ativo; dados cadastrais necessários | `test_04, test_12`; protegido |
+| `GET /get_produtos_servicos` | B | leitura | login ativo; catálogo de nomes/tipos | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_distinct_grupos` | B | leitura | login ativo; nomes de grupos | `test_04`; protegido |
+| `GET /get_distinct_subgrupos` | B | leitura | login ativo; nomes de subgrupos | `test_04`; protegido |
+| `GET /get_items_for_filters` | B | leitura | login ativo; opções de catálogo | `test_04`; protegido |
+| `GET /get_relatorio_catalog_options` | B | leitura | login ativo; opções permitidas por lista fechada | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_relatorio_tipos_atividade_transacao` | B | leitura | login ativo; tipos usados nos filtros | H2A.3B.2 + `test_04`; protegido |
+| `GET /buscar_associados` | C | leitura | UVR de `current_user`; campos necessários à grade | `test_04, test_08`; escopado |
+| `GET /buscar_cadastros` | C | leitura | UVR de `current_user`; campos necessários à grade | `test_04, test_08`; escopado |
+| `GET /buscar_contas_correntes_gestao` | C | leitura | UVR de `current_user`; campos bancários só no escopo | `test_04, test_08`; escopado |
+| `GET /buscar_patrimonio` | C | leitura | UVR de `current_user`; dados da grade patrimonial | `test_04, test_08`; escopado |
+| `GET /buscar_transacoes_gestao` | C | leitura | UVR de `current_user`; dados financeiros do escopo | `test_04, test_08`; escopado |
+| `POST /excluir_associado/<id>` | C | escrita | CSRF; objeto por ID+UVR; admin global explícito | H2A.3B.3 + `test_04, test_13`; protegido |
+| `POST /excluir_cadastro/<id>` | C | escrita | CSRF; objeto por ID+UVR; admin global explícito | H2A.3B.3 + `test_04, test_13`; protegido |
+| `POST /excluir_patrimonio/<id>` | C | escrita | CSRF; objeto por ID+UVR; admin global explícito | H2A.3B.3 + `test_04, test_13`; protegido |
+| `POST /excluir_transacao/<id>` | C | escrita | CSRF; objeto por ID+UVR; admin global explícito | H2A.3B.3 + `test_04, test_13`; protegido |
+| `POST /gerar_extrato_bancario` | C | leitura lógica | CSRF; filtros permitidos e UVR do servidor; totais/linhas escopados | H2A.3B.1 + `test_04, test_10`; protegido |
+| `POST /gerar_relatorio` | C | leitura lógica | CSRF; filtros permitidos e UVR do servidor; resultados escopados | H2A.3B.1 + `test_04, test_10`; protegido |
+| `GET /get_associado/<id>` | C | leitura | consulta final por ID+UVR; mesmo 404 para alheio/inexistente | `test_04, test_08`; corrigido |
+| `GET /get_associados_ativos` | C | leitura | UVR de `current_user`; IDs e nomes do escopo | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_cadastro/<id>` | C | leitura | consulta final por ID+UVR; mesmo 404 para alheio/inexistente | `test_04, test_08`; corrigido |
+| `GET /get_cadastros_ativos` | C | leitura | UVR de `current_user`; opções do escopo | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_clientes_fornecedores_com_pendencias` | C | leitura | UVR e tipo validados; entidades do escopo | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_conta_corrente_detalhe/<id>` | C | leitura | consulta por ID+UVR; mesmo 404 | H2A.3B.3 + `test_04, test_08`; protegido |
+| `GET /get_contas_correntes` | C | leitura | UVR de `current_user`; opções bancárias do escopo | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_movimentacao_detalhes/<id>` | C | leitura | pai por ID+UVR; vínculos derivados do pai autorizado | H2A.3B.3 + `test_04, test_08`; protegido |
+| `GET /get_notas_em_aberto` | C | leitura | UVR, entidade e período validados | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_patrimonio_detalhes/<id>` | C | leitura | consulta por ID+UVR; mesmo 404 | H2A.3B.3 + `test_04, test_08`; protegido |
+| `GET /get_relatorio_entidades_para_filtro` | C | leitura | UVR de `current_user`; opções do escopo | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_relatorio_uvrs` | C | leitura | comum recebe somente sua UVR; admin recebe lista global | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_resumo_fluxo_caixa` | C | leitura | UVR do servidor e período; somente totais do escopo | H2A.3B.2 + `test_04`; protegido |
+| `GET /get_transacao_detalhes/<id>` | C | leitura | cabeçalho e itens por ID+UVR; mesmo 404 | H2A.3B.3 + `test_04, test_08`; protegido |
+| `POST /registrar_fluxo_caixa` | C | escrita | CSRF; lista/UVR/entidade validadas; allowlist e transação | H2A.3B.1 + `test_10, test_13`; protegido |
+| `GET/POST/DELETE /api/produtos_crud` | D | leitura/escrita | admin; CSRF nos métodos mutáveis; campos em lista fechada | `test_05, test_10, test_13`; corrigido |
+| `GET/POST /api/subgrupos` | D | leitura/escrita | admin; CSRF no POST; ação e campos em lista fechada | `test_05, test_09, test_10`; corrigido |
+| `POST /excluir_conta_corrente/<id>` | D | escrita | admin; CSRF; ID parametrizado e `rowcount` | `test_05, test_13`; corrigido |
+| `POST /excluir_movimentacao/<id>` | D | escrita | admin; CSRF; pai bloqueado e rollback integral | `test_05, test_13`; corrigido |
+| `GET /get_detalhes_solicitacao/<id>` | D | leitura | admin; conteúdo variável escapado antes do HTML marcado como seguro | `test_05, test_16`; corrigido |
+| `GET /get_solicitacoes_pendentes` | D | leitura | admin; dados mínimos da fila e JSON armazenado tratado | `test_05, test_19`; corrigido |
+| `POST /responder_solicitacao` | D | escrita | admin; CSRF; estado pendente bloqueado, allowlists e transação | `test_05, test_10, test_13`; corrigido |
+| `GET /fiscalizacao-contratos/empresas/consultar-cep/<cep>` | D | leitura | admin; retorno cadastral necessário, sem detalhes técnicos | `test_05`; protegido |
+| `GET /fiscalizacao-contratos/empresas/consultar-cnpj/<cnpj>` | D | leitura | admin; retorno cadastral necessário, sem detalhes técnicos | `test_05`; protegido |
+
+Os **22 endpoints já cobertos** pelas etapas anteriores continuam comprovados:
+3 na H2A.3B.1, 11 na H2A.3B.2 e 8 na H2A.3B.3. Os testes desta etapa
+percorrem os 44 por conjuntos parametrizados e verificam visitante, Basic Auth,
+usuário inativo, falta de UVR, administrador, ID alheio, método, CSRF, JSON
+malformado, campos forjados, falha interna e não execução de efeitos.
+
+### Respostas, entrada, cache e frontend
+
+Os 43 endpoints protegidos retornam JSON 401 ao visitante. Falta de permissão
+retorna 403; objeto inexistente ou alheio retorna 404 equivalente; validação
+retorna 400, formato não JSON retorna 415, excesso de tamanho retorna 413,
+método incorreto retorna 405 e falha interna retorna mensagem genérica com 500.
+Corpos JSON são limitados a **64 KiB**, mesmo sem `Content-Length`; a soma das
+listas é limitada a **200 itens**, textos a **5.000 caracteres** e a estrutura
+aceita possui profundidade máxima 2 (objeto, lista e valor simples). Conteúdo
+comprimido não é aceito. Endpoints mutáveis usam listas explícitas de campos e
+valores de autoria/UVR continuam derivados do servidor.
+
+Respostas JSON protegidas recebem `Cache-Control: no-store, private, max-age=0`
+e `Pragma: no-cache`; `/health` permanece mínimo e fora dessa regra. Não foi
+introduzido CORS, JSONP ou armazenamento sensível em `localStorage`. O frontend
+usa mesma origem, escapa texto vindo do servidor, valida IDs numéricos e não
+registra respostas completas no console. A lista dinâmica de notas passou a ser
+montada com APIs de DOM e `.text()`, sem interpolar dados do servidor em HTML ou
+atributos. Conteúdo HTML retornado pelo servidor só é inserido quando foi
+produzido por lista interna e escapado no servidor.
+
+### Segundo endpoint desativado online
+
+O segundo endpoint classificado como **E** é `GET /sucesso_denuncia`. Ele é uma
+página HTML legada de confirmação ligada ao fluxo de denúncia já desativado,
+portanto não integra os 44 JSON/AJAX. Em `homologation` e `production`, retorna
+404 antes de banco ou outro efeito, inclusive para administrador. Em
+`development` e `testing`, permanece disponível somente com login interno
+ativo. Não existe variável de ambiente capaz de reativá-lo online.
+
+Resultado da revisão final: **38 testes específicos**, **525 testes totais**,
+zero falhas e zero erros. Permanecem riscos fora deste bloco: exclusões físicas legadas,
+migration-base, controle formal de migrations, rotação de credenciais, Neon e
+Cloudinary separados, fixação geral de versões, CSP, rate limit, trusted hosts,
+monitoramento e deploy.

@@ -661,6 +661,54 @@ controle de migrations, rotação de credenciais, ambientes separados, versões
 fixadas, exclusões físicas legadas, deploy, CSP, rate limit, trusted hosts e
 monitoramento.
 
+## 22. Etapa H2A.3B.4 — endpoints JSON/AJAX
+
+Em **23/07/2026**, foi concluída a revisão dos **44 endpoints JSON/AJAX**:
+1 público essencial, 8 autenticados, 26 sujeitos a UVR/objeto e 9
+administrativos. O conjunto possui 34 leituras e 10 escritas. Os 22 endpoints
+tratados nas três etapas anteriores foram preservados e os demais passaram pela
+mesma auditoria de sessão, permissão, escopo, CSRF, entrada, SQL, resposta,
+cache e consumo no navegador.
+
+Visitante recebe JSON 401, permissão insuficiente recebe 403 e objeto alheio ou
+inexistente recebe 404 equivalente quando necessário evitar enumeração. Erros de
+validação e formato usam 400/415/413; método incorreto usa 405; falha interna não
+expõe exceção, SQL ou infraestrutura. Entradas JSON possuem limites
+conservadores documentados. A leitura é limitada a 64 KiB no próprio fluxo,
+inclusive sem `Content-Length`; a soma das listas é limitada a 200 itens, textos
+a 5.000 caracteres e estruturas a dois níveis. Conteúdo comprimido é recusado.
+Campos mutáveis são selecionados por listas explícitas e autoria/UVR continuam
+vindo da sessão e do servidor.
+
+As respostas JSON protegidas não podem ser armazenadas em cache. Não foi
+habilitado CORS permissivo, JSONP, armazenamento sensível no navegador ou envio
+de CSRF para domínio externo. Os consumidores AJAX passaram a escapar conteúdo
+variável e deixaram de registrar respostas completas no console. A revisão final
+substituiu a montagem HTML da lista de notas por elementos DOM e texto seguro,
+além de orientar novo login após resposta 401.
+
+O segundo endpoint classificado para desativação online é
+`GET /sucesso_denuncia`, página HTML legada ligada ao fluxo de denúncia. Em
+homologação e produção ele retorna 404 antes de qualquer efeito, inclusive para
+administrador. Em desenvolvimento e testes, permanece apenas para usuário com
+sessão interna ativa. O endpoint mutável correspondente,
+`POST /registrar_denuncia`, já estava desativado.
+
+A suíte aprovou **525 testes**, sendo 487 anteriores e 38 específicos da etapa,
+sem PostgreSQL, Cloudinary, API externa, arquivo real, migration ou deploy.
+
+Riscos corrigidos neste bloco: JSON protegido redirecionando para HTML, erros
+CSRF/405 em formato HTML, limite dependente de `Content-Length`, estruturas
+aninhadas não limitadas, falta de proteção uniforme em consultas, entrada
+malformada e campos forjados, mensagens técnicas, cache de resposta sensível,
+inserção insegura de conteúdo retornado no HTML e o segundo endpoint
+incompatível com ambiente online.
+
+Continuam pendentes as exclusões físicas legadas, migration-base, controle
+formal de migrations, rotação das credenciais históricas, Neon e Cloudinary
+separados, fixação geral das versões do Python e dependências, CSP, rate limit,
+trusted hosts, monitoramento e deploy.
+
 ## Referências técnicas consultadas
 
 - [Render — Web Services](https://render.com/docs/web-services)
