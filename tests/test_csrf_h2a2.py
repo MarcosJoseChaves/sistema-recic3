@@ -475,6 +475,9 @@ class TestCsrfComBarreiraHomologacao(unittest.TestCase):
             "HOMOLOGATION_GATE_ENABLED": "true",
             "HOMOLOGATION_GATE_USER": "porteiro",
             "HOMOLOGATION_GATE_PASSWORD": "senha-ficticia",
+            "TRUSTED_HOSTS": "localhost",
+            "TRUST_PROXY": "true",
+            "MAX_REQUEST_MB": "64",
         }
         with patch.dict(os.environ, variaveis, clear=True):
             self.app = Flask(
@@ -540,6 +543,9 @@ class TestCsrfTodosAmbientes(unittest.TestCase):
             variaveis = {"APP_ENV": ambiente, "SECRET_KEY": SEGREDO_TESTE}
             if ambiente in {"homologation", "production"}:
                 variaveis["DATABASE_URL"] = "postgresql://usuario-ficticio@host/banco"
+                variaveis["TRUSTED_HOSTS"] = "homologacao.exemplo.invalid"
+                variaveis["TRUST_PROXY"] = "true"
+                variaveis["MAX_REQUEST_MB"] = "64"
             with self.subTest(ambiente=ambiente), patch.dict(
                 os.environ, variaveis, clear=True
             ):

@@ -987,3 +987,33 @@ Permanecem pendentes as exclusões físicas legadas, migration-base, controle
 formal de migrations, rotação de credenciais, Neon separado, Cloudinary
 separado, versões gerais do Python e dependências, CSP, rate limit, trusted
 hosts, monitoramento e deploy.
+
+## Etapa H2B.1 — concluída
+
+Em **27/07/2026**, foi implementada a base de reprodutibilidade e inicialização
+segura do ambiente online:
+
+- Python `3.12.6` fixado;
+- dependências diretas e transitivas fixadas e verificadas em instalação
+  temporária limpa;
+- Gunicorn configurado com porta obrigatória, concorrência e tempos limitados;
+- logs de acesso sem query string, cookies ou cabeçalhos;
+- hosts confiáveis exatos obrigatórios em homologação e produção;
+- confiança no proxy obrigatória e limitada em ambientes online;
+- limite global padrão de 64 MB, obrigatório e explícito online;
+- resposta 413 segura e distinta para HTML e JSON;
+- execução direta de `app.py` restrita ao servidor local e recusada online;
+- exemplos de variáveis sem segredos reais;
+- instalação limpa com Python 3.12.6, sem `site-packages` globais;
+- distribuições para Linux/Python 3.12 verificadas;
+- 36 testes específicos e 561 testes totais aprovados, sem falhas ou erros.
+
+Não houve acesso ao PostgreSQL ou Cloudinary real, execução de migration ou
+deploy. A revisão final corrigiu a validação de hosts malformados, adicionou
+limite global e tratamento 413 e atualizou o Cloudinary para a primeira linha
+compatível verificada com Linux/Python 3.12.
+
+Os documentos do módulo mantêm limite individual e inspeção de conteúdo. Alguns
+uploads legados de fotos ainda contam apenas com o limite global e ficaram
+registrados para uma revisão específica posterior, sem alteração dos formatos
+aceitos nesta etapa.

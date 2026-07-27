@@ -709,6 +709,62 @@ formal de migrations, rotação das credenciais históricas, Neon e Cloudinary
 separados, fixação geral das versões do Python e dependências, CSP, rate limit,
 trusted hosts, monitoramento e deploy.
 
+## Etapa H2B.1 — ambiente reproduzível e inicialização online
+
+Em **27/07/2026**, foi preparada a Etapa H2B.1, ainda sem deploy:
+
+- Python fixado em `3.12.6` pelo arquivo `.python-version`;
+- dependências diretas documentadas em `requirements.in`;
+- dependências diretas e transitivas fixadas por versão em `requirements.txt`;
+- resolução das versões validada e suíte executada em instalação temporária
+  limpa;
+- Gunicorn iniciado pelo `Procfile` com configuração dedicada;
+- `APP_ENV` online e `PORT` válidos obrigatórios para iniciar o Gunicorn;
+- limites explícitos de workers, threads, timeouts e tamanho de cabeçalhos;
+- reinício periódico de workers e logs sem query string, cookies ou cabeçalhos;
+- `TRUSTED_HOSTS` obrigatório em homologação e produção, aceitando somente nomes
+  exatos ou endereços IP válidos;
+- `TRUST_PROXY=true` obrigatório online, com confiança limitada ao endereço de
+  origem e ao protocolo informados pelo proxy;
+- `MAX_REQUEST_MB` obrigatório online, aceitando somente valores inteiros entre
+  1 e 128 MB; o valor recomendado é 64 MB;
+- respostas 413 separadas para páginas HTML e endpoints JSON, sem executar a
+  operação de negócio;
+- execução direta de `app.py` restrita ao computador local e bloqueada em
+  homologação e produção;
+- inicialização do Gunicorn sem migration, banco, Cloudinary ou script
+  administrativo.
+
+Na revisão final, a normalização de hosts passou a rejeitar quebra de linha,
+CRLF, listas vazias e entradas malformadas, sem transformar silenciosamente um
+valor inválido em válido. Portas presentes na requisição são aceitas para um
+host exato autorizado; portas na configuração são recusadas. IPv6 local foi
+validado no formato esperado pelo Flask. `X-Forwarded-Host` não é confiável e
+não contorna a validação.
+
+A instalação limpa usou Python `3.12.6`, pip `24.2`, `requirements.txt` e uma
+pasta temporária com todos os `site-packages` globais removidos do caminho.
+Importação, `/health` e a suíte completa foram validados com PostgreSQL,
+Cloudinary e APIs externas bloqueados. A pasta temporária foi removida. Também
+foram confirmadas as 24 distribuições para Linux/Python 3.12; essa conferência
+exigiu a correção mínima do Cloudinary para `1.42.2`.
+
+Foram aprovados **36 testes específicos** e **561 testes totais**, sem falhas ou
+erros. Nenhum banco, Cloudinary, API externa, migration ou deploy foi executado.
+O Gunicorn não foi iniciado como processo real porque o computador de revisão é
+Windows; sua configuração foi importada e validada sem iniciar serviço, e a
+distribuição Linux foi confirmada.
+
+Com esta etapa, deixam de ser pendências a fixação do Python, a fixação das
+dependências, a validação de hosts e a configuração básica segura do Gunicorn.
+Continuam pendentes, entre outros pontos, migration-base, controle formal de
+migrations, rotação de credenciais, ambientes Neon e Cloudinary separados, CSP,
+rate limit, monitoramento e o processo controlado de deploy. Os documentos do
+módulo continuam com limite individual e inspeção de conteúdo; alguns uploads
+legados de fotos permanecem protegidos apenas pelo limite global e precisam de
+uma revisão própria antes da homologação, sem mudança apressada dos formatos
+atualmente aceitos.
+
 ## Referências técnicas consultadas
 
 - [Render — Web Services](https://render.com/docs/web-services)

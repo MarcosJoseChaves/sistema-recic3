@@ -1,14 +1,23 @@
 """Configurações de inicialização e segurança por ambiente."""
 
 import hmac
+import ipaddress
 import os
+import re
 
 from flask import Response, jsonify, request
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 AMBIENTES_VALIDOS = {"development", "testing", "homologation", "production"}
 AMBIENTES_HTTPS = {"homologation", "production"}
+HOSTS_LOCAIS_PADRAO = ["localhost", "127.0.0.1", "[::1]"]
+MAX_HOSTS_CONFIAVEIS = 20
+MAX_REQUEST_MB_PADRAO_LOCAL = 64
+MAX_REQUEST_MB_MINIMO = 1
+MAX_REQUEST_MB_MAXIMO = 128
+PADRAO_ROTULO_HOST = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 def ler_booleano(nome, padrao=False):
@@ -48,6 +57,73 @@ def _validar_prefixo_cloudinary(prefixo):
         raise RuntimeError("CLOUDINARY_FOLDER_PREFIX possui formato inválido.")
 
 
+def _normalizar_host_confiavel(valor):
+    original = str(valor or "")
+    if "\r" in original or "\n" in original:
+        raise RuntimeError("TRUSTED_HOSTS contém um host inválido.")
+    host = original.strip().lower()
+    if not host:
+        raise RuntimeError("TRUSTED_HOSTS contém um host vazio.")
+    if host.endswith(".."):
+        raise RuntimeError("TRUSTED_HOSTS contém um host inválido.")
+    host = host[:-1] if host.endswith(".") else host
+    if any(caractere in host for caractere in ("*", "/", "\\", "@", "?", "#")):
+        raise RuntimeError("TRUSTED_HOSTS contém um host inválido.")
+    if "://" in host or host.startswith("."):
+        raise RuntimeError("TRUSTED_HOSTS aceita somente hosts exatos.")
+
+    try:
+        endereco = ipaddress.ip_address(host)
+        return f"[{endereco.compressed}]" if endereco.version == 6 else endereco.compressed
+    except ValueError:
+        pass
+
+    if ":" in host or len(host) > 253:
+        raise RuntimeError("TRUSTED_HOSTS contém um host inválido.")
+    rotulos = host.split(".")
+    if any(not PADRAO_ROTULO_HOST.fullmatch(rotulo) for rotulo in rotulos):
+        raise RuntimeError("TRUSTED_HOSTS contém um host inválido.")
+    return host
+
+
+def ler_hosts_confiaveis(ambiente):
+    """Lê hosts exatos; ambientes online não aceitam lista implícita."""
+
+    valor = os.getenv("TRUSTED_HOSTS")
+    if valor is None or not valor.strip():
+        if ambiente in AMBIENTES_HTTPS:
+            raise RuntimeError("TRUSTED_HOSTS é obrigatória neste ambiente.")
+        return list(HOSTS_LOCAIS_PADRAO)
+
+    partes = valor.split(",")
+    if len(partes) > MAX_HOSTS_CONFIAVEIS:
+        raise RuntimeError("TRUSTED_HOSTS possui hosts demais.")
+
+    resultado = []
+    for parte in partes:
+        host = _normalizar_host_confiavel(parte)
+        if host not in resultado:
+            resultado.append(host)
+    return resultado
+
+
+def ler_limite_requisicao_mb(ambiente):
+    """Lê o limite global em MB sem aceitar valores ambíguos ou excessivos."""
+
+    valor = os.getenv("MAX_REQUEST_MB")
+    if valor is None or not valor.strip():
+        if ambiente in AMBIENTES_HTTPS:
+            raise RuntimeError("MAX_REQUEST_MB é obrigatória neste ambiente.")
+        return MAX_REQUEST_MB_PADRAO_LOCAL
+    try:
+        limite = int(valor.strip())
+    except (TypeError, ValueError) as erro:
+        raise RuntimeError("MAX_REQUEST_MB deve ser um número inteiro.") from erro
+    if not MAX_REQUEST_MB_MINIMO <= limite <= MAX_REQUEST_MB_MAXIMO:
+        raise RuntimeError("MAX_REQUEST_MB está fora do intervalo permitido.")
+    return limite
+
+
 def configurar_aplicacao(app):
     """Aplica configurações seguras sem abrir conexões externas."""
     ambiente = identificar_ambiente()
@@ -76,6 +152,12 @@ def configurar_aplicacao(app):
                 )
             _validar_prefixo_cloudinary(prefixo_cloudinary)
 
+    hosts_confiaveis = ler_hosts_confiaveis(ambiente)
+    confiar_proxy = ler_booleano("TRUST_PROXY", padrao=False)
+    if ambiente in AMBIENTES_HTTPS and not confiar_proxy:
+        raise RuntimeError("TRUST_PROXY deve ser true neste ambiente.")
+    limite_requisicao_mb = ler_limite_requisicao_mb(ambiente)
+
     app.config.update(
         APP_ENV=ambiente,
         SECRET_KEY=secret_key,
@@ -91,9 +173,12 @@ def configurar_aplicacao(app):
         REMEMBER_COOKIE_SECURE=ambiente in AMBIENTES_HTTPS,
         REMEMBER_COOKIE_HTTPONLY=True,
         REMEMBER_COOKIE_SAMESITE="Lax",
+        TRUSTED_HOSTS=hosts_confiaveis,
+        MAX_REQUEST_MB=limite_requisicao_mb,
+        MAX_CONTENT_LENGTH=limite_requisicao_mb * 1024 * 1024,
     )
 
-    if ler_booleano("TRUST_PROXY", padrao=False):
+    if confiar_proxy:
         app.wsgi_app = ProxyFix(
             app.wsgi_app,
             x_for=1,
@@ -129,6 +214,27 @@ def configurar_aplicacao(app):
             headers={"WWW-Authenticate": 'Basic realm="Acesso restrito"'},
             content_type="text/plain; charset=utf-8",
         )
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def tratar_conteudo_excessivo(_erro):
+        classificador_json = app.config.get("JSON_ENDPOINT_CLASSIFIER")
+        if classificador_json and classificador_json():
+            resposta = jsonify({"error": "Conteúdo muito grande."})
+        else:
+            resposta = Response(
+                (
+                    "<!doctype html><html lang=\"pt-BR\"><head>"
+                    "<meta charset=\"utf-8\"><title>Conteúdo muito grande</title>"
+                    "</head><body><main><h1>Conteúdo muito grande</h1>"
+                    "<p>O arquivo ou formulário enviado ultrapassa o tamanho permitido.</p>"
+                    "<p>Revise o conteúdo e tente novamente.</p></main></body></html>"
+                ),
+                content_type="text/html; charset=utf-8",
+            )
+        resposta.status_code = 413
+        resposta.headers["Cache-Control"] = "no-store, private, max-age=0"
+        resposta.headers["Pragma"] = "no-cache"
+        return resposta
 
     @app.after_request
     def adicionar_cabecalhos_seguranca(resposta):

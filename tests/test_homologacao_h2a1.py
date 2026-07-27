@@ -36,6 +36,9 @@ def criar_app(ambiente="testing", **variaveis):
     }
     if ambiente in {"homologation", "production"}:
         ambiente_variaveis["DATABASE_URL"] = BANCO_TESTE
+        ambiente_variaveis["TRUSTED_HOSTS"] = "localhost"
+        ambiente_variaveis["TRUST_PROXY"] = "true"
+        ambiente_variaveis["MAX_REQUEST_MB"] = "64"
     ambiente_variaveis.update(variaveis)
 
     with patch.dict(os.environ, ambiente_variaveis, clear=True):
@@ -74,6 +77,10 @@ def importar_app_isolado(**variaveis):
         "DATABASE_URL": "",
     }
     ambiente.update(variaveis)
+    if ambiente.get("APP_ENV") in {"homologation", "production"}:
+        ambiente.setdefault("TRUSTED_HOSTS", "localhost")
+        ambiente.setdefault("TRUST_PROXY", "true")
+        ambiente.setdefault("MAX_REQUEST_MB", "64")
     app_anterior = sys.modules.pop("app", None)
     try:
         with (
@@ -423,6 +430,9 @@ class TestBarreiraHomologacao(unittest.TestCase):
                 "APP_ENV": "homologation",
                 "SECRET_KEY": SEGREDO_TESTE,
                 "DATABASE_URL": BANCO_TESTE,
+                "TRUSTED_HOSTS": "localhost",
+                "TRUST_PROXY": "true",
+                "MAX_REQUEST_MB": "64",
                 "HOMOLOGATION_GATE_ENABLED": "true",
             },
             clear=True,
@@ -437,6 +447,9 @@ class TestBarreiraHomologacao(unittest.TestCase):
                 "APP_ENV": "homologation",
                 "SECRET_KEY": SEGREDO_TESTE,
                 "DATABASE_URL": BANCO_TESTE,
+                "TRUSTED_HOSTS": "localhost",
+                "TRUST_PROXY": "true",
+                "MAX_REQUEST_MB": "64",
                 "HOMOLOGATION_GATE_ENABLED": "true",
                 "HOMOLOGATION_GATE_USER": "homologador",
                 "HOMOLOGATION_GATE_PASSWORD": "   ",
@@ -661,8 +674,8 @@ class TestIntegracaoInicializacao(unittest.TestCase):
         self.assertIn("nenhuma migração foi executada", saida_segura.getvalue())
 
     def test_procfile_nao_executa_script_administrativo(self):
-        procfile = (RAIZ / "Procfile").read_text(encoding="utf-8")
-        self.assertIn("gunicorn app:app", procfile)
+        procfile = (RAIZ / "Procfile").read_text(encoding="utf-8").strip()
+        self.assertEqual(procfile, "web: gunicorn --config gunicorn.conf.py app:app")
         self.assertNotIn("executar_migracao_produtos", procfile)
 
 

@@ -52,7 +52,6 @@ GRUPOS_FIXOS_SISTEMA = [
 load_dotenv()
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite aumentado para 64MB
 configurar_aplicacao(app)
 configurar_csrf(app)
 
@@ -192,11 +191,6 @@ def _tratar_nao_encontrado(erro):
 @app.errorhandler(405)
 def _tratar_metodo_incorreto(erro):
     return _resposta_erro_http_json(405, "Método não permitido.", erro)
-
-
-@app.errorhandler(413)
-def _tratar_conteudo_excessivo(erro):
-    return _resposta_erro_http_json(413, "Conteúdo muito grande.", erro)
 
 
 @app.errorhandler(500)
@@ -5805,6 +5799,12 @@ def sucesso_denuncia(): return pagina_sucesso_base("Sucesso", "Denúncia registr
 
 if __name__ == "__main__":
     import logging
+
+    if app.config["APP_ENV"] in {"homologation", "production"}:
+        raise RuntimeError(
+            "Ambientes online devem iniciar a aplicação exclusivamente pelo Gunicorn."
+        )
+
     logging.basicConfig(level=logging.INFO, 
                         format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s - %(message)s')
     
@@ -5814,4 +5814,4 @@ if __name__ == "__main__":
         app.logger.addHandler(stream_handler)
     
     app.logger.info("Iniciando o aplicativo Flask...")
-    app.run(host='0.0.0.0', port=5000, debug=app.config['DEBUG'])
+    app.run(host="127.0.0.1", port=5000, debug=app.config["DEBUG"])
