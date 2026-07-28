@@ -19,6 +19,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import HTTPException
 from configuracao_ambiente import configurar_aplicacao
+from seguranca_rate_limit import aplicar_limites_rotas
 from seguranca_csrf import configurar_csrf
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
 from modulos.fiscalizacao_contratos.permissions import admin_json_required, admin_required
@@ -5795,6 +5796,9 @@ def sucesso_conta_corrente(): return pagina_sucesso_base("Sucesso", "Conta Corre
 @desativada_online
 @login_required
 def sucesso_denuncia(): return pagina_sucesso_base("Sucesso", "Denúncia registrada com sucesso!")
+
+
+aplicar_limites_rotas(app)
 
 
 if __name__ == "__main__":

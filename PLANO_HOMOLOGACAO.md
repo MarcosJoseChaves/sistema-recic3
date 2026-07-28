@@ -775,3 +775,73 @@ atualmente aceitos.
 - [Cloudinary — Controle de acesso a arquivos](https://cloudinary.com/documentation/control_access_to_media)
 - [Flask — Segurança](https://flask.palletsprojects.com/en/stable/web-security/)
 - [Flask — Aplicação atrás de proxy](https://flask.palletsprojects.com/en/stable/deploying/proxy_fix/)
+
+## 23. Etapa H2B.2A — CSP, cabeçalhos e rate limit
+
+Em **28/07/2026**, foi preparada a proteção de conteúdo e de volume de
+requisições, ainda sem deploy:
+
+- CSP efetiva por padrão, com nonce criptográfico novo por resposta HTML;
+- `script-src` restrito à própria aplicação, Bootstrap e Font Awesome, sem
+  `unsafe-inline`, `unsafe-eval` ou curingas;
+- origens de imagens limitadas à aplicação, `data:` e ao domínio de entrega do
+  Cloudinary já utilizado;
+- cabeçalhos `nosniff`, bloqueio de frames, política de referência, política de
+  permissões (câmera somente para a própria aplicação, demais recursos não
+  usados negados), isolamento de origem e HSTS condicionado a HTTPS online;
+- Flask-Limiter com cobertura geral e grupos específicos para login, consultas
+  de CNPJ/CEP, relatórios, downloads, uploads e operações mutáveis;
+- resposta 429 amigável em HTML e JSON, antes da operação de negócio;
+- configuração online validada de forma estrita, sem desativação silenciosa.
+
+O inventário encontrou um grande script legado no cadastro que depende de
+valores Jinja. Ele recebeu nonce e não foi reescrito nesta etapa para evitar
+regressão. A UVR usada nesse script é serializada com `tojson`. Blocos menores
+foram movidos para arquivos estáticos. Permanecem exatamente 60 atributos de
+evento e 44 atributos de estilo no HTML legado; por isso a política usa,
+temporariamente, `script-src-attr 'unsafe-inline'` e
+`style-src-attr 'unsafe-inline'`. Essas exceções são restritas aos atributos e
+não liberam scripts embutidos em geral.
+
+**Pendência:** Remoção gradual dos atributos de evento e estilo inline, seguida
+da retirada de `script-src-attr` e `style-src-attr` com `unsafe-inline`. A CSP
+não será classificada como plenamente estrita antes dessa retirada. A extração
+do script principal do cadastro também deve ocorrer de forma gradual.
+
+Bootstrap, jQuery, jQuery Mask e Font Awesome usam HTTPS e versões fixadas. SRI
+não foi adicionado porque os hashes dos arquivos oficiais não foram comprovados
+nesta revisão sem consultar os CDNs. Permanecem como alternativas futuras o SRI
+verificado e a hospedagem local dessas bibliotecas.
+
+O armazenamento do limitador é `memory://` em desenvolvimento e testes.
+Produção exige Redis compartilhado. A homologação inicial, globalmente
+restringida pela barreira já implementada, pode usar memória apenas quando
+`RATELIMIT_ALLOW_MEMORY_HOMOLOGATION=true` registrar a decisão explícita; nesse
+modo, cada processo mantém seus próprios contadores e os perde ao reiniciar.
+Antes de ampliar acesso ou escalar para vários processos, deve-se adotar Redis.
+
+O inventário real possui 177 rotas e 113 endpoints com grupo específico:
+91 operações mutáveis, 8 relatórios/PDF/CSV, 8 uploads, 4 consultas externas,
+1 login e 1 download privado. A classificação usa, nesta ordem: login;
+consultas de CEP/CNPJ; uploads; download privado; prefixos de relatório,
+extrato, PDF, CSV e impressão; e métodos POST/PUT/PATCH/DELETE restantes.
+OPTIONS e HEAD não entram nos grupos de escrita. As demais rotas usam o teto
+geral de 300 por minuto por endpoint. Os contadores específicos são
+compartilhados dentro de cada categoria, de modo que alternar entre endpoints
+do mesmo grupo não amplia o limite. `/health` e arquivos estáticos são isentos.
+
+As duas rotas de denúncia desativadas são ocultadas com 404 antes do limitador,
+da barreira Basic, do CSRF e da regra de negócio em ambientes online; por isso
+repetições não mudam a resposta para 429. Fora dos ambientes online, continuam
+protegidas pelo limite de operações mutáveis e pelo CSRF aplicável.
+
+A ordem normal é: bloqueio ambiental; rate limit; barreira Basic da
+homologação; CSRF; autenticação/autorização interna e por objeto; regra de
+negócio. O limitador é executado antes da consulta do login e antes de uploads,
+relatórios, APIs e transações. Páginas HTML com nonce recebem `no-store` para
+evitar reutilização por cache compartilhado.
+
+Esta preparação não significa que a homologação ou a produção já estejam
+liberadas. Continuam pendentes a migration-base, o controle formal de
+migrations, a rotação de credenciais históricas, Neon e Cloudinary separados,
+monitoramento, remoção das exceções CSP legadas e o deploy controlado.

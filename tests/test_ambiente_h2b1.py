@@ -31,6 +31,9 @@ def ambiente_online(**valores):
         "TRUSTED_HOSTS": HOST_TESTE,
         "TRUST_PROXY": "true",
         "MAX_REQUEST_MB": "64",
+        "RATELIMIT_ENABLED": "true",
+        "RATELIMIT_STORAGE_URI": "memory://",
+        "RATELIMIT_ALLOW_MEMORY_HOMOLOGATION": "true",
     }
     ambiente.update(valores)
     return ambiente
@@ -129,7 +132,7 @@ class TestReprodutibilidadeH2B1(unittest.TestCase):
 
     def test_03_requirements_in_identifica_somente_dependencias_diretas(self):
         diretas = {
-            linha.split("==", 1)[0].casefold()
+            linha.split("==", 1)[0].split("[", 1)[0].casefold()
             for linha in (RAIZ / "requirements.in").read_text(encoding="utf-8").splitlines()
             if linha.strip() and not linha.lstrip().startswith("#")
         }
@@ -139,6 +142,7 @@ class TestReprodutibilidadeH2B1(unittest.TestCase):
                 "cloudinary",
                 "flask",
                 "flask-login",
+                "flask-limiter",
                 "flask-wtf",
                 "gunicorn",
                 "psycopg2-binary",

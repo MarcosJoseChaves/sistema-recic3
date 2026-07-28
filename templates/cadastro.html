@@ -9,113 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function escaparHtml(valor) {
-            return String(valor ?? '').replace(/[&<>"']/g, caractere => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            })[caractere]);
-        }
-
-        function idNumericoSeguro(valor) {
-            if (valor === null || valor === undefined || valor === '') return null;
-            const numero = Number(valor);
-            return Number.isSafeInteger(numero) && numero >= 0 ? numero : null;
-        }
-
-        let redirecionandoParaLogin = false;
-        function tratarSessaoExpirada(statusHttp) {
-            if (statusHttp !== 401 || redirecionandoParaLogin) return false;
-            redirecionandoParaLogin = true;
-            alert('Sua sessão terminou. Entre novamente para continuar.');
-            window.location.assign('/login');
-            return true;
-        }
-
-        $(document).ajaxSend(function (_evento, xhr, configuracao) {
-            const metodo = (configuracao.type || 'GET').toUpperCase();
-            const destino = new URL(configuracao.url, window.location.href);
-            if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(metodo)
-                    && destino.origin === window.location.origin) {
-                xhr.setRequestHeader(
-                    'X-CSRFToken',
-                    document.querySelector('meta[name="csrf-token"]').content
-                );
-            }
-        });
-
-        $(document).ajaxError(function (_evento, xhr) {
-            tratarSessaoExpirada(xhr.status);
-        });
-    </script>
-    <style>
-        /* --- ESTILO GERAL --- */
-        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
-        
-        /* --- FORM CONTAINERS --- */
-        .form-container { 
-            max-width: 1200px; 
-            background: white; 
-            padding: 30px; 
-            border-radius: 10px; 
-            box-shadow: 0 0 15px rgba(0,0,0,0.1); 
-            margin-top: 20px; 
-            display: none; /* Começa oculto */
-        }
-
-        h2 { color: #2c3e50; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
-        .required-field::after { content: "*"; color: red; margin-left: 5px; }
-        
-        /* --- ESTILO DO DASHBOARD --- */
-        .dashboard-card {
-            transition: transform 0.2s;
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .dashboard-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
-        }
-        .card-header-custom {
-            border-radius: 12px 12px 0 0 !important;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-size: 0.9rem;
-            padding: 15px;
-        }
-        .btn-dashboard {
-            text-align: left;
-            margin-bottom: 8px;
-            border-radius: 8px;
-            padding: 10px 15px;
-            font-weight: 500;
-        }
-        .btn-dashboard i {
-            width: 25px;
-            text-align: center;
-            margin-right: 8px;
-        }
-        .btn-group-dashboard {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 10px;
-        }
-        .btn-group-dashboard .btn {
-            flex: 1;
-        }
-
-        /* --- UTILITÁRIOS --- */
-        .item-row { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #dee2e6; position: relative; }
-        .remover-item { position: absolute; top: 10px; right: 10px; }
-        .valor-monetario { font-weight: bold; color: #2980b9; }
-        .tabela-container { overflow-x: auto; margin-top: 20px; }
-        #tabelaRelatorio th { white-space: nowrap; }
-    </style>
+    <script src="{{ url_for('static', filename='js/cadastro_seguranca.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cadastro.css') }}">
 </head>
 <body>
 
@@ -1209,9 +1104,9 @@
         </div>
     </div>
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
 // 1. VARIÁVEIS GLOBAIS DE PERMISSÃO
-    const usuarioLogadoUvr = "{{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else '' }}";
+    const usuarioLogadoUvr = {{ (usuario.uvr_acesso if usuario and usuario.uvr_acesso else '') | tojson }};
     const usuarioIsAdmin = "{{ 'true' if usuario and usuario.role == 'admin' else 'false' }}" === 'true';
 
     // 2. LISTA DE BANCOS E FUNÇÃO

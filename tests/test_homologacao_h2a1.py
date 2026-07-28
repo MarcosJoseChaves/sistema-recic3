@@ -39,11 +39,22 @@ def criar_app(ambiente="testing", **variaveis):
         ambiente_variaveis["TRUSTED_HOSTS"] = "localhost"
         ambiente_variaveis["TRUST_PROXY"] = "true"
         ambiente_variaveis["MAX_REQUEST_MB"] = "64"
+        ambiente_variaveis["RATELIMIT_ENABLED"] = "true"
+        ambiente_variaveis["RATELIMIT_STORAGE_URI"] = (
+            "redis://rate-limit-ficticio.invalid/0"
+            if ambiente == "production"
+            else "memory://"
+        )
+        if ambiente == "homologation":
+            ambiente_variaveis["RATELIMIT_ALLOW_MEMORY_HOMOLOGATION"] = "true"
     ambiente_variaveis.update(variaveis)
 
     with patch.dict(os.environ, ambiente_variaveis, clear=True):
         app = Flask(__name__)
         configurar_aplicacao(app)
+        if ambiente == "production":
+            # Estes testes antigos validam cookies e barreiras, não o backend Redis.
+            app.extensions["recic3_rate_limiter"].enabled = False
 
     @app.get("/privado")
     def privado():
@@ -81,6 +92,17 @@ def importar_app_isolado(**variaveis):
         ambiente.setdefault("TRUSTED_HOSTS", "localhost")
         ambiente.setdefault("TRUST_PROXY", "true")
         ambiente.setdefault("MAX_REQUEST_MB", "64")
+        ambiente.setdefault("RATELIMIT_ENABLED", "true")
+        ambiente.setdefault(
+            "RATELIMIT_STORAGE_URI",
+            (
+                "redis://rate-limit-ficticio.invalid/0"
+                if ambiente.get("APP_ENV") == "production"
+                else "memory://"
+            ),
+        )
+        if ambiente.get("APP_ENV") == "homologation":
+            ambiente.setdefault("RATELIMIT_ALLOW_MEMORY_HOMOLOGATION", "true")
     app_anterior = sys.modules.pop("app", None)
     try:
         with (
@@ -258,7 +280,7 @@ class TestConfiguracaoAmbiente(unittest.TestCase):
     def test_cabecalhos_minimos_sao_aplicados(self):
         resposta = criar_app("testing").test_client().get("/privado")
         self.assertEqual(resposta.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(resposta.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(resposta.headers["X-Frame-Options"], "DENY")
         self.assertEqual(
             resposta.headers["Referrer-Policy"],
             "strict-origin-when-cross-origin",
@@ -269,14 +291,14 @@ class TestConfiguracaoAmbiente(unittest.TestCase):
         resposta = criar_app("testing").test_client().get("/erro")
         self.assertEqual(resposta.status_code, 418)
         self.assertEqual(resposta.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(resposta.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(resposta.headers["X-Frame-Options"], "DENY")
 
     def test_hsts_e_enviado_em_https_online_sem_preload(self):
         resposta = criar_app("homologation").test_client().get(
             "/privado", base_url="https://exemplo.test"
         )
         self.assertEqual(
-            resposta.headers["Strict-Transport-Security"], "max-age=31536000"
+            resposta.headers["Strict-Transport-Security"], "max-age=86400"
         )
         self.assertNotIn("preload", resposta.headers["Strict-Transport-Security"])
         self.assertNotIn(
@@ -290,7 +312,7 @@ class TestConfiguracaoAmbiente(unittest.TestCase):
             "/privado", headers={"X-Forwarded-Proto": "https"}
         )
         self.assertEqual(
-            resposta.headers["Strict-Transport-Security"], "max-age=31536000"
+            resposta.headers["Strict-Transport-Security"], "max-age=86400"
         )
 
     def test_prefixo_cloudinary_e_exigido_online_quando_configurado(self):
@@ -433,6 +455,9 @@ class TestBarreiraHomologacao(unittest.TestCase):
                 "TRUSTED_HOSTS": "localhost",
                 "TRUST_PROXY": "true",
                 "MAX_REQUEST_MB": "64",
+                "RATELIMIT_ENABLED": "true",
+                "RATELIMIT_STORAGE_URI": "memory://",
+                "RATELIMIT_ALLOW_MEMORY_HOMOLOGATION": "true",
                 "HOMOLOGATION_GATE_ENABLED": "true",
             },
             clear=True,
@@ -450,6 +475,9 @@ class TestBarreiraHomologacao(unittest.TestCase):
                 "TRUSTED_HOSTS": "localhost",
                 "TRUST_PROXY": "true",
                 "MAX_REQUEST_MB": "64",
+                "RATELIMIT_ENABLED": "true",
+                "RATELIMIT_STORAGE_URI": "memory://",
+                "RATELIMIT_ALLOW_MEMORY_HOMOLOGATION": "true",
                 "HOMOLOGATION_GATE_ENABLED": "true",
                 "HOMOLOGATION_GATE_USER": "homologador",
                 "HOMOLOGATION_GATE_PASSWORD": "   ",

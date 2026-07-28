@@ -478,6 +478,9 @@ class TestCsrfComBarreiraHomologacao(unittest.TestCase):
             "TRUSTED_HOSTS": "localhost",
             "TRUST_PROXY": "true",
             "MAX_REQUEST_MB": "64",
+            "RATELIMIT_ENABLED": "true",
+            "RATELIMIT_STORAGE_URI": "memory://",
+            "RATELIMIT_ALLOW_MEMORY_HOMOLOGATION": "true",
         }
         with patch.dict(os.environ, variaveis, clear=True):
             self.app = Flask(
@@ -512,7 +515,7 @@ class TestCsrfComBarreiraHomologacao(unittest.TestCase):
         )
         self.assertEqual(resposta.status_code, 400)
         self.assertEqual(resposta.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(resposta.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(resposta.headers["X-Frame-Options"], "DENY")
 
     def test_24_csrf_correto_nao_substitui_basic(self):
         resposta = self.client.post(
@@ -523,7 +526,7 @@ class TestCsrfComBarreiraHomologacao(unittest.TestCase):
         )
         self.assertEqual(resposta.status_code, 401)
         self.assertEqual(resposta.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(resposta.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(resposta.headers["X-Frame-Options"], "DENY")
         self.assertNotIn("porteiro", resposta.get_data(as_text=True))
         self.assertNotIn(self.token, resposta.headers.get("WWW-Authenticate", ""))
 
@@ -546,6 +549,14 @@ class TestCsrfTodosAmbientes(unittest.TestCase):
                 variaveis["TRUSTED_HOSTS"] = "homologacao.exemplo.invalid"
                 variaveis["TRUST_PROXY"] = "true"
                 variaveis["MAX_REQUEST_MB"] = "64"
+                variaveis["RATELIMIT_ENABLED"] = "true"
+                variaveis["RATELIMIT_STORAGE_URI"] = (
+                    "redis://rate-limit-ficticio.invalid/0"
+                    if ambiente == "production"
+                    else "memory://"
+                )
+                if ambiente == "homologation":
+                    variaveis["RATELIMIT_ALLOW_MEMORY_HOMOLOGATION"] = "true"
             with self.subTest(ambiente=ambiente), patch.dict(
                 os.environ, variaveis, clear=True
             ):

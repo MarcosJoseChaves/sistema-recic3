@@ -4,10 +4,13 @@ import hmac
 import ipaddress
 import os
 import re
+import secrets
 
-from flask import Response, jsonify, request
+from flask import Response, abort, g, jsonify, request
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+from seguranca_rate_limit import configurar_rate_limit
 
 
 AMBIENTES_VALIDOS = {"development", "testing", "homologation", "production"}
@@ -124,6 +127,49 @@ def ler_limite_requisicao_mb(ambiente):
     return limite
 
 
+def _nonce_csp():
+    nonce = getattr(g, "csp_nonce", None)
+    if nonce is None:
+        nonce = secrets.token_hex(24)
+        g.csp_nonce = nonce
+    return nonce
+
+
+def _politica_csp(nonce=None):
+    """Monta uma política explícita, sem curingas nem domínios privados."""
+    origens_script = [
+        "'self'",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com",
+    ]
+    if nonce:
+        origens_script.append(f"'nonce-{nonce}'")
+    diretivas = [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+        f"script-src {' '.join(origens_script)}",
+        # Exceção temporária e limitada aos manipuladores legados onclick/onchange.
+        "script-src-attr 'unsafe-inline'",
+        (
+            "style-src 'self' https://cdn.jsdelivr.net "
+            "https://cdnjs.cloudflare.com"
+        ),
+        # Bootstrap e telas legadas alteram propriedades visuais dinamicamente.
+        "style-src-attr 'unsafe-inline'",
+        "img-src 'self' data: https://res.cloudinary.com",
+        "font-src 'self' https://cdnjs.cloudflare.com",
+        "connect-src 'self'",
+        "manifest-src 'self'",
+        "worker-src 'self'",
+        "media-src 'self'",
+        "frame-src 'none'",
+    ]
+    return "; ".join(diretivas)
+
+
 def configurar_aplicacao(app):
     """Aplica configurações seguras sem abrir conexões externas."""
     ambiente = identificar_ambiente()
@@ -178,12 +224,35 @@ def configurar_aplicacao(app):
         MAX_CONTENT_LENGTH=limite_requisicao_mb * 1024 * 1024,
     )
 
+    csp_report_only = ler_booleano("CSP_REPORT_ONLY", padrao=False)
+    if ambiente == "production" and csp_report_only:
+        raise RuntimeError("CSP_REPORT_ONLY não pode permanecer ativa em produção.")
+    app.config["CSP_REPORT_ONLY"] = csp_report_only
+
     if confiar_proxy:
         app.wsgi_app = ProxyFix(
             app.wsgi_app,
             x_for=1,
             x_proto=1,
         )
+
+    @app.before_request
+    def ocultar_endpoints_desativados_online():
+        if (
+            app.config.get("APP_ENV") in AMBIENTES_HTTPS
+            and request.endpoint in {"registrar_denuncia", "sucesso_denuncia"}
+        ):
+            abort(404)
+
+    configurar_rate_limit(app, ambiente)
+
+    @app.before_request
+    def preparar_nonce_csp():
+        _nonce_csp()
+
+    @app.context_processor
+    def disponibilizar_nonce_csp():
+        return {"csp_nonce": _nonce_csp}
 
     barreira_ativa = (
         ambiente == "homologation"
@@ -264,14 +333,37 @@ def configurar_aplicacao(app):
             resposta.status_code = codigo
             resposta.headers.update(cabecalhos_preservados)
 
+        nonce = _nonce_csp() if resposta.mimetype == "text/html" else None
+        nome_csp = (
+            "Content-Security-Policy-Report-Only"
+            if app.config["CSP_REPORT_ONLY"]
+            else "Content-Security-Policy"
+        )
+        resposta.headers.setdefault(nome_csp, _politica_csp(nonce))
         resposta.headers.setdefault("X-Content-Type-Options", "nosniff")
-        resposta.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resposta.headers.setdefault("X-Frame-Options", "DENY")
         resposta.headers.setdefault(
             "Referrer-Policy", "strict-origin-when-cross-origin"
         )
+        resposta.headers.setdefault(
+            "Permissions-Policy",
+            (
+                "accelerometer=(), camera=(self), geolocation=(), gyroscope=(), "
+                "interest-cohort=(), magnetometer=(), microphone=(), "
+                "payment=(), usb=()"
+            ),
+        )
+        resposta.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        resposta.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+        resposta.headers.setdefault("Origin-Agent-Cluster", "?1")
+        if resposta.mimetype == "text/html":
+            # O nonce pertence àquela resposta e páginas HTML podem conter
+            # dados da sessão; não devem ser reaproveitadas por cache compartilhado.
+            resposta.headers["Cache-Control"] = "no-store, private, max-age=0"
+            resposta.headers["Pragma"] = "no-cache"
         if ambiente in AMBIENTES_HTTPS and request.is_secure:
             resposta.headers.setdefault(
-                "Strict-Transport-Security", "max-age=31536000"
+                "Strict-Transport-Security", "max-age=86400"
             )
         if resposta.is_json and request.endpoint != "health":
             resposta.headers.setdefault("Cache-Control", "no-store, private, max-age=0")

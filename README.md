@@ -64,3 +64,59 @@ Migrations são executadas somente por procedimento administrativo separado e
 explicitamente autorizado. Importar `app.py` ou iniciar o Gunicorn não aplica
 migrations. A execução direta de `app.py` serve apenas para desenvolvimento no
 host local; homologação e produção exigem Gunicorn.
+
+## Segurança de conteúdo e limitação de requisições
+
+A aplicação gera um nonce criptográfico novo em cada resposta HTML e o inclui
+na Política de Segurança de Conteúdo (CSP). Scripts próprios embutidos só podem
+executar quando possuem esse nonce. Bootstrap e Font Awesome continuam
+permitidos exclusivamente nos domínios já usados pelo sistema; imagens privadas
+do Cloudinary permanecem restritas ao domínio de entrega correspondente.
+
+O código legado ainda utiliza alguns atributos de evento e estilo diretamente
+no HTML. Por compatibilidade, a CSP mantém exceções específicas em
+`script-src-attr` e `style-src-attr`; elas estão documentadas como pendência para
+remoção gradual. Não há `unsafe-eval`, curinga de origem ou liberação geral de
+scripts embutidos em `script-src`. O modo `CSP_REPORT_ONLY=true` serve apenas
+para diagnóstico controlado e é recusado em produção.
+
+A linha de base atual possui 60 atributos de evento e 44 atributos de estilo.
+Testes impedem que essa quantidade cresça silenciosamente. A política ainda não
+é considerada plenamente estrita enquanto essas exceções existirem. A extração
+do script extenso de `cadastro.html` também permanece como trabalho futuro; por
+ora, a única informação variável inserida nele usa serialização JSON segura.
+
+As URLs de Bootstrap, jQuery, jQuery Mask e Font Awesome possuem versões
+fixadas e usam HTTPS. Ainda não possuem SRI (`integrity`), pois os hashes não
+foram validados contra os arquivos oficiais nesta etapa. Adotar SRI verificado
+ou hospedar essas bibliotecas localmente permanece como risco pendente.
+
+As respostas também recebem proteção contra interpretação incorreta de
+conteúdo, enquadramento, vazamento de referência e acesso a recursos do
+dispositivo. A câmera é permitida somente para a própria aplicação porque o
+cadastro existente usa webcam; microfone, localização e demais recursos não
+utilizados continuam negados. HSTS é enviado somente em homologação ou produção
+e apenas quando a requisição chega como HTTPS pelo proxy confiável.
+
+O rate limit usa Flask-Limiter e cobre todas as rotas, com limites mais
+restritivos para login, consultas externas, relatórios, downloads, uploads e
+operações mutáveis. Excesso retorna HTTP 429 em HTML ou JSON, sem executar a
+operação. Os valores padrão estão em `.env.example`.
+
+Em desenvolvimento e testes, `memory://` é suficiente. Em produção,
+`RATELIMIT_STORAGE_URI` deve apontar para um Redis compartilhado e
+`RATELIMIT_ENABLED` deve permanecer ativo. A primeira homologação restrita pode
+usar memória somente quando
+`RATELIMIT_ALLOW_MEMORY_HOMOLOGATION=true` estiver explicitamente configurada,
+sabendo que os contadores não são compartilhados entre processos e são
+reiniciados com o processo. Usuário autenticado e endereço remoto compõem a
+chave do limite; login, senha e conteúdo enviado nunca fazem parte dela.
+
+Os limites iniciais são: 300 requisições por minuto no grupo geral, 5 no login,
+30 nas consultas de CEP/CNPJ, 10 em relatórios, 10 em uploads, 30 em downloads
+privados e 60 em operações mutáveis. `/health` e arquivos estáticos são isentos.
+Cada grupo sensível compartilha seu contador entre os endpoints da mesma
+categoria, impedindo ampliar o limite apenas alternando a URL. Esses endpoints
+também permanecem sob o teto geral amplo por rota; o limite menor é atingido
+primeiro. Um bloqueio retorna HTTP 429, `Retry-After` e resposta sem cache antes
+da operação de negócio.

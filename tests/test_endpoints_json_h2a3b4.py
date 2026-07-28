@@ -375,7 +375,10 @@ class TestEndpointsJsonH2A3B4(unittest.TestCase):
         self.assertNotRegex(fonte, r"\bjsonp\b")
 
     def test_16_frontend_ajax_e_mesma_origem_e_escapa_dados(self):
-        fonte = Path("templates/cadastro.html").read_text(encoding="utf-8")
+        fonte = (
+            Path("templates/cadastro.html").read_text(encoding="utf-8")
+            + Path("static/js/cadastro_seguranca.js").read_text(encoding="utf-8")
+        )
         self.assertIn("function escaparHtml", fonte)
         self.assertNotIn("xhr.responseText", fonte)
         self.assertNotIn('console.log("Data recebida do servidor:"', fonte)
@@ -400,7 +403,7 @@ class TestEndpointsJsonH2A3B4(unittest.TestCase):
                 self.assertEqual(
                     resposta.headers.get("X-Content-Type-Options"), "nosniff"
                 )
-                self.assertEqual(resposta.headers.get("X-Frame-Options"), "SAMEORIGIN")
+                self.assertEqual(resposta.headers.get("X-Frame-Options"), "DENY")
                 pagina.assert_not_called()
 
     def test_18_administrador_tambem_nao_reativa_endpoint_online(self):
@@ -640,7 +643,7 @@ class TestEndpointsJsonH2A3B4(unittest.TestCase):
 
         html = self.client.get("/logout", headers={"Accept": "application/json"})
         self.assertFalse(html.is_json)
-        self.assertNotIn("no-store", html.headers.get("Cache-Control", ""))
+        self.assertIn("no-store", html.headers.get("Cache-Control", ""))
 
     def test_33_accept_nao_transforma_pagina_html_em_json(self):
         resposta = self.client.get(
@@ -671,9 +674,12 @@ class TestEndpointsJsonH2A3B4(unittest.TestCase):
                     self.assertFalse(resposta.is_json)
 
     def test_35_frontend_orienta_novo_login_sem_token_em_url(self):
-        fonte = Path("templates/cadastro.html").read_text(encoding="utf-8")
+        fonte = (
+            Path("templates/cadastro.html").read_text(encoding="utf-8")
+            + Path("static/js/cadastro_seguranca.js").read_text(encoding="utf-8")
+        )
         self.assertIn("function tratarSessaoExpirada", fonte)
-        self.assertIn("window.location.assign('/login')", fonte)
+        self.assertRegex(fonte, r"window\.location\.assign\([\"']/login[\"']\)")
         self.assertNotRegex(fonte, r"/login[^'\"]*(?:csrf|token)")
         self.assertNotIn("sessionStorage", fonte)
 

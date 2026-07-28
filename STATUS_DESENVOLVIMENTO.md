@@ -1017,3 +1017,43 @@ Os documentos do módulo mantêm limite individual e inspeção de conteúdo. Al
 uploads legados de fotos ainda contam apenas com o limite global e ficaram
 registrados para uma revisão específica posterior, sem alteração dos formatos
 aceitos nesta etapa.
+
+## Etapa H2B.2A — concluída
+
+Em **28/07/2026**, foram implementados, sem deploy, CSP com nonce por resposta,
+cabeçalhos adicionais de segurança e limitação de requisições com
+Flask-Limiter. Todas as rotas permanecem registradas; login, consultas externas,
+relatórios, downloads, uploads e operações mutáveis recebem limites
+específicos, enquanto as demais usam o limite geral. Respostas excedidas usam
+HTTP 429 amigável e não iniciam a operação de negócio.
+
+A revisão preservou expressamente o uso existente da webcam: a câmera é
+permitida somente para a própria aplicação, enquanto microfone, localização e
+demais recursos não utilizados permanecem negados.
+
+A política não usa `unsafe-eval`, curingas nem liberação geral de scripts
+embutidos. Um script legado extenso permanece no template de cadastro com
+nonce. Atributos legados de evento e estilo ainda exigem exceções temporárias e
+restritas em `script-src-attr` e `style-src-attr`; sua remoção gradual está
+registrada como trabalho futuro.
+
+Desenvolvimento e testes usam armazenamento em memória. Produção exige Redis
+compartilhado. A primeira homologação restrita pode usar memória apenas mediante
+`RATELIMIT_ALLOW_MEMORY_HOMOLOGATION=true`, com aceitação explícita da limitação
+por processo. Nenhuma credencial foi incluída nos arquivos e nenhum PostgreSQL,
+Cloudinary, API externa, migration ou deploy foi executado.
+
+Na revisão final, a UVR inserida no script legado passou a usar serialização
+JSON segura; páginas HTML com nonce passaram a impedir cache compartilhado; a
+URI do armazenamento recebeu validação mais estrita; o uso de `memory://` em
+homologação passou a exigir autorização explícita; e os grupos sensíveis
+passaram a compartilhar seus contadores. As rotas de denúncia ocultas online
+permanecem em 404 mesmo sob repetição. Também foram removidas permissões CSP
+para `blob:` e `data:` que não eram necessárias.
+
+Foram aprovados **51 testes específicos da H2B.2A** e **612 testes totais**, com
+zero falhas e zero erros. Os 561 testes anteriores foram preservados. Também
+passaram, em execução separada, os 245 testes das etapas H2A e H2B.1. A
+instalação limpa das dependências fixadas foi validada com Python 3.12.6.
+Nenhum PostgreSQL, Cloudinary, Redis ou API externa foi acessado; nenhuma
+migration ou deploy foi executado.

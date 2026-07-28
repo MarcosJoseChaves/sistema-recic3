@@ -614,7 +614,7 @@ class TestRotasMutaveisH2A3B1(unittest.TestCase):
                     )
                 self.assertEqual(resposta.status_code, 404)
                 self.assertEqual(resposta.headers.get("X-Content-Type-Options"), "nosniff")
-                self.assertEqual(resposta.headers.get("X-Frame-Options"), "SAMEORIGIN")
+                self.assertEqual(resposta.headers.get("X-Frame-Options"), "DENY")
                 conectar.assert_not_called()
 
     def test_24_denuncia_autorizada_em_development_e_login_inativo_uniforme(self):
