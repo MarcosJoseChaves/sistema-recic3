@@ -1098,3 +1098,33 @@ etapa, totalizando 86 arquivos candidatos ao commit (62 da aplicação e 24 de
 testes). A contagem anterior de 103 incluía também 19 arquivos Python ignorados
 da pasta `_referencia_fiscaliza`; eles não pertencem ao sistema principal nem
 ao commit.
+
+## Etapa H2C.1 — inventário do banco concluído e revisado
+
+Em **29/07/2026**, foi concluído o inventário estático das migrations, DDL,
+consultas e testes do repositório:
+
+- 11 migrations numeradas confirmadas;
+- 23 tabelas e 351 colunas definidas pelas migrations do módulo;
+- 12 tabelas legadas com DDL no `app.py`;
+- 37 tabelas de aplicação identificadas ao todo;
+- `patrimonio` e `grupos_atividade` usados sem criação completa versionada;
+- 41 definições de coluna não determinadas pelo repositório;
+- 91 relacionamentos comprovados: 84 FKs no módulo e sete distintos no legado;
+- 70 declarações de índice, com 69 nomes distintos;
+- 103 restrições `CHECK` confirmadas;
+- divergências legadas registradas sem alteração de código ou migration;
+- estratégia e ordem da futura baseline documentadas;
+- baseline reservada exclusivamente para PostgreSQL vazio;
+- necessidade de futura exportação somente do schema, sem dados;
+- 673 testes automatizados aprovados, com zero falhas e zero erros;
+- sintaxe dos 86 arquivos Python aprovada;
+- nenhuma migration criada ou executada;
+- nenhum banco, Cloudinary ou deploy acessado.
+
+Foram criados `MAPA_SCHEMA_BANCO.md` e `PLANO_MIGRATION_BASE.md`. A revisão
+técnica final corrigiu a contagem de checks de 101 para 103, detalhou as
+exclusões físicas e confirmou a classificação **C — é necessário obter o
+schema atual do banco**. A futura exportação será somente de estrutura, sem
+dados, e permanecerá fora do Git até auditoria. A H2C.2 não deve começar antes
+de confirmar o DDL ausente e decidir as divergências documentadas.

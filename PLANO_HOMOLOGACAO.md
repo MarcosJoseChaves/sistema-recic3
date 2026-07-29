@@ -119,8 +119,9 @@ Requisitos:
 As migrations do módulo dependem da tabela `usuarios`. O sistema principal possui
 SQL de criação de tabelas dentro de `criar_tabelas_se_nao_existir()`, mas não há
 uma migration-base formal e reproduzível para o esquema principal. Além disso,
-`migrar_dados_antigos_produtos()` é executada automaticamente ao importar
-`app.py`, podendo inserir e atualizar dados durante a inicialização do Gunicorn.
+`migrar_dados_antigos_produtos()` permanece como rotina manual legada. O código
+e os testes atuais comprovam que ela não é executada ao importar `app.py` nem
+durante a inicialização do Gunicorn.
 
 Antes da homologação deve ser criada e revisada uma forma segura de:
 
@@ -886,3 +887,30 @@ retenção e alertas externos, eventual ferramenta especializada, atributos
 inline, SRI ou hospedagem local, Redis compartilhado, exclusões físicas
 legadas, migration-base, controle formal de migrations, rotação de
 credenciais, Neon e Cloudinary separados e deploy.
+
+## 25. Etapa H2C.1 — inventário do banco e projeto da migration-base
+
+Em **29/07/2026**, o banco foi inventariado somente pelos arquivos do
+repositório. Nenhum PostgreSQL, Neon, Cloudinary ou `DATABASE_URL` foi acessado
+e nenhuma migration foi executada.
+
+Foram confirmadas 11 migrations numeradas, que criam 23 tabelas do módulo. O
+`app.py` contém DDL legado para outras 12 tabelas, mas a criação completa de
+`patrimonio` e `grupos_atividade` não existe no repositório. Também estão sem
+definição comprovada as colunas `id_grupo` pressupostas em `subgrupos` e
+`produtos_servicos`, e existem duas definições incompatíveis de
+`solicitacoes_alteracao`.
+
+O comportamento atual de inicialização foi confirmado: importar `app` e
+iniciar Gunicorn **não** executam migration.
+
+A conclusão é que o repositório, sozinho, ainda não permite criar uma baseline
+integral e confiável. Antes da H2C.2 será necessária uma exportação futura
+somente do schema do banco atual, sem dados, owners, privilégios ou
+credenciais. A baseline será exclusiva para PostgreSQL vazio, deverá recusar
+banco já utilizado antes de qualquer DDL e não usará `IF NOT EXISTS` para
+ocultar drift.
+
+O inventário detalhado está em `MAPA_SCHEMA_BANCO.md`; a estratégia, ordem,
+riscos e decisões pendentes estão em `PLANO_MIGRATION_BASE.md`. A H2C.1 foi
+revisada tecnicamente e não criou migration.
