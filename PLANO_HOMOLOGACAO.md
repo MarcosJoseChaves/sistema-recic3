@@ -914,3 +914,71 @@ ocultar drift.
 O inventário detalhado está em `MAPA_SCHEMA_BANCO.md`; a estratégia, ordem,
 riscos e decisões pendentes estão em `PLANO_MIGRATION_BASE.md`. A H2C.1 foi
 revisada tecnicamente e não criou migration.
+
+## 26. Etapa H2C.1B — comparação com o schema atual
+
+Em **29/07/2026**, a exportação externa somente de estrutura foi validada pelo
+SHA-256
+`e2a9237b123aae8cab94e94055c9e31061b00f341536678b604f43f684c228cc`
+e analisada como texto. O arquivo não foi executado, alterado nem copiado para
+o Git. Não houve conexão com PostgreSQL, uso da `DATABASE_URL`, migration,
+Cloudinary, API ou deploy.
+
+Resultados:
+
+- 64 tabelas e 62 sequências;
+- 23 tabelas `fc_` sem drift estrutural em relação às migrations 001–011;
+- 103 CHECKs e 84 FKs do módulo confirmados;
+- DDL de `patrimonio` e `grupos_atividade` esclarecido;
+- versão A de `solicitacoes_alteracao` confirmada;
+- ausência de tabela `uvr` explicada pelo vínculo textual
+  `usuarios.uvr_acesso`;
+- 27 tabelas adicionais existentes somente no banco atual;
+- 22 FKs e quatro índices explícitos adicionais ligados a essas tabelas;
+- colunas históricas adicionais em tabelas legadas;
+- nenhuma função, trigger, view, tipo customizado ou extensão.
+
+A prontidão para H2C.2 permanece **C — ainda exige decisões funcionais**. A
+baseline não deve ser mera cópia do dump: é necessário decidir o escopo das 27
+tabelas adicionais, as colunas históricas e o estado desejado do catálogo e do
+patrimônio. O diagnóstico completo está em
+`RELATORIO_COMPARACAO_SCHEMA_ATUAL.md`.
+
+## 27. Etapa H2C.2A — decisões funcionais e plano de evolução
+
+Em **29/07/2026**, as lacunas levantadas na H2C.1B foram transformadas em uma
+matriz funcional e em uma sequência de incrementos pequenos e reversíveis.
+Nenhum código, rota, permissão, banco, migration, Cloudinary, API ou ambiente
+online foi alterado.
+
+As decisões centrais são preservar estruturas e históricos, substituir
+exclusões cotidianas por inativação quando aplicável, manter funcionalidades
+incompletas ocultas e não confundir a existência física de tabela com produto
+pronto. As 27 tabelas adicionais foram analisadas individualmente e continuam
+preservadas, sem inclusão automática em menu ou baseline.
+
+A evolução começará pela especificação do patrimônio, seguida por catálogo,
+UVR, usuários e permissões, solicitações, decisão dos módulos adicionais,
+interface e relatórios. Somente depois será fechado o plano da migration-base e
+seu procedimento de homologação e reversão.
+
+O documento de referência é `MATRIZ_DECISOES_FUNCIONAIS_H2C2A.md`.
+
+## 28. Etapa H2C.2B — especificação funcional do patrimônio
+
+Em **29/07/2026**, o patrimônio foi analisado exclusivamente em documentos,
+código e testes versionados. Nenhum banco, SQL, migration, código funcional,
+Cloudinary, API ou deploy foi acessado ou executado.
+
+Foram classificados os 38 campos, os cinco endpoints, as permissões atuais, o
+fluxo de solicitações e a referência lógica financeira. A homologação futura
+deverá usar dados fictícios para patrimônios completos e antigos incompletos,
+as quatro situações existentes, vínculos financeiros, múltiplos perfis e UVRs,
+duplicidades e arquivos válidos e inválidos.
+
+Os incrementos H2C.3B.1–H2C.3B.9 separam caracterização, estrutura, backend,
+interface, bloqueio de inativos, pesquisa, histórico, relatórios e homologação.
+Cada incremento terá caminho de reversão sem apagar dados.
+
+O roteiro funcional está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`.

@@ -10,16 +10,19 @@ Este plano é resultado da Etapa H2C.1. Nenhum SQL foi criado ou executado.
 
 ## Decisão atual
 
-Ainda não é seguro implementar a baseline. O repositório não contém o DDL
-completo de `patrimonio` e `grupos_atividade`, pressupõe `id_grupo` em duas
-tabelas e possui definições concorrentes de `solicitacoes_alteracao`.
+A exportação somente do schema foi obtida, auditada e comparada na H2C.1B. Ela
+resolveu as lacunas físicas de `patrimonio` e `grupos_atividade`, comprovou a
+ausência de `id_grupo`, confirmou a versão A de `solicitacoes_alteracao` e
+validou as 23 tabelas `fc_` contra as migrations 001–011.
 
-Classificação: **informação insuficiente sem futura exportação somente do
-schema do banco atual**.
+Ainda não é seguro implementar a baseline porque o banco possui 27 tabelas e
+diversas colunas legadas sem uso identificado no código versionado.
+
+Classificação: **C — ainda exige decisões funcionais**.
 
 ## Estratégia recomendada para H2C.2
 
-Depois de resolver as lacunas:
+Depois de resolver as decisões funcionais listadas neste plano:
 
 1. criar um arquivo SQL de baseline, versionado e legível;
 2. criar um executor Python pequeno e específico;
@@ -54,7 +57,8 @@ banco vazio e falhar claramente numa segunda execução.
 
 ## Ordem de criação proposta
 
-A ordem final depende da confirmação do schema legado:
+A ordem abaixo cobre o núcleo de 37 tabelas. As 27 tabelas adicionais só podem
+ser inseridas depois de decisão funcional e respeitando suas FKs:
 
 1. `usuarios`;
 2. independentes legadas: `cadastros`, `associados`, `grupos_atividade` (se
@@ -83,10 +87,15 @@ Não há ciclo entre tabelas distintas. A autorreferência
 `fc_medicoes.medicao_origem_id` pode ficar na criação da tabela ou ser
 adicionada depois, mas a escolha deve ser explícita e testada.
 
-Os itens 2 e 3 são apenas uma posição provável: a ordem definitiva de
-`grupos_atividade`, `subgrupos`, `produtos_servicos` e `patrimonio` não pode ser
-fixada antes de conhecer suas FKs reais. UVR e associação permanecem textos no
-DDL conhecido; não há tabelas centrais correspondentes comprovadas.
+O schema atual confirma que `grupos_atividade` não possui relação física com
+`subgrupos` ou `produtos_servicos`; as colunas `id_grupo` não existem.
+`patrimonio` também não possui FKs. UVR e associação permanecem textos; não há
+tabelas centrais correspondentes.
+
+Se aprovadas, as tabelas extras deverão entrar por grupos: documentos e tipos
+antes de auditoria/entrega; associados antes de EPI; hierarquia de ouvidoria
+antes de manifestações e fotos. Não há autorização para incluí-las apenas
+porque existem no banco atual.
 
 ## Relação com as migrations 001–011
 
@@ -117,6 +126,14 @@ Reproduzir somente objetos comprovados:
 
 Índices de desempenho apenas recomendados devem ficar em migration posterior,
 apoiada por consultas e planos reais. Não adicionar cascatas preventivas.
+
+Para o módulo `fc_`, as migrations são a fonte primária: as 23 tabelas, 84 FKs,
+103 CHECKs e 69 índices distintos foram confirmados. O índice
+`uq_fc_aditivos_id_contrato_id` deverá aparecer uma única vez.
+
+Para o legado sem DDL versionado, o schema atual é evidência física, mas a
+decisão de inclusão continua funcional. O relatório da H2C.1B lista as 64
+tabelas, 62 sequências, 113 FKs e 73 índices explícitos.
 
 ## Dados de referência
 
@@ -152,13 +169,15 @@ credenciais fornecidas fora do Git.
 
 ## Riscos
 
-- schema legado incompleto no Git;
+- schema legado continua incompleto no Git, embora agora documentado;
 - drift provocado por scripts manuais;
 - `IF NOT EXISTS` ter ocultado diferenças;
-- definições concorrentes de `solicitacoes_alteracao`;
-- grupos e `id_grupo` sem DDL;
-- tipos e constraints desconhecidos de `patrimonio`;
-- exclusões físicas e duas cascatas legadas;
+- script B de `solicitacoes_alteracao` conflita com versão A instalada;
+- script de importação pressupõe `id_grupo`, ausente no banco;
+- `patrimonio` possui nulabilidade ampla e exclusão física;
+- 27 tabelas existem apenas no banco atual;
+- colunas adicionais em `associados`, `transacoes_financeiras` e `usuarios`;
+- exclusões físicas e cascatas legadas adicionais nas tabelas somente do banco;
 - `TIMESTAMP` legado versus `TIMESTAMPTZ` no módulo;
 - credenciais históricas em scripts antigos;
 - dois CSVs de catálogo com conteúdo diferente;
@@ -166,23 +185,79 @@ credenciais fornecidas fora do Git.
 
 ## Decisões pendentes
 
-1. obter e auditar exportação somente do schema;
-2. decidir a definição correta de `solicitacoes_alteracao`;
-3. confirmar `grupos_atividade`, `id_grupo` e suas FKs/UQs;
-4. confirmar todo o DDL de `patrimonio`;
-5. decidir se o catálogo CSV é opcional ou obrigatório;
-6. decidir se `SERIAL`/`BIGSERIAL` serão preservados literalmente;
-7. decidir o tamanho dos blocos transacionais;
-8. definir versão/checksum esperado pela H2D;
-9. avaliar índices recomendados separadamente;
-10. remover ou isolar scripts com credenciais históricas em etapa própria.
+1. decidir quais das 27 tabelas adicionais entram na baseline;
+2. confirmar se auditoria, documentos, EPI e ouvidoria ainda são módulos ativos;
+3. decidir as 12 colunas adicionais de `associados`;
+4. decidir as 13 colunas adicionais de `transacoes_financeiras`;
+5. decidir os três campos adicionais de `usuarios`;
+6. decidir se os sete defaults `now()` instalados serão preservados;
+7. decidir se `grupos_atividade` ficará desconectada ou será objeto de migration
+   futura; não criar `id_grupo` na baseline sem essa decisão;
+8. aprovar formalmente a versão A de `solicitacoes_alteracao`;
+9. decidir nulabilidade e exclusão física de `patrimonio`;
+10. decidir se o catálogo CSV é opcional ou obrigatório;
+11. decidir se `SERIAL`/`BIGSERIAL` serão preservados literalmente;
+12. decidir o tamanho dos blocos transacionais;
+13. definir versão/checksum esperado pela H2D;
+14. avaliar índices recomendados separadamente;
+15. remover ou isolar scripts com credenciais históricas em etapa própria.
 
 ## Critério para iniciar H2C.2
 
 H2C.2 só deve começar quando:
 
-- as lacunas estruturais estiverem resolvidas;
+- o escopo desejado das 64 tabelas estiver aprovado;
+- colunas e defaults legados adicionais tiverem decisão;
+- o modelo do catálogo e de patrimônio estiver aprovado;
 - a definição final tiver revisão técnica;
 - houver PostgreSQL vazio e descartável para teste;
 - o banco atual estiver fora do alcance do executor;
 - o formato de versão esperado pela H2D estiver decidido.
+
+## Diretrizes aprovadas na H2C.2A
+
+A decisão funcional não autoriza criar a migration-base neste momento. Ela
+estabelece as seguintes barreiras para o desenho futuro:
+
+- preservar todas as estruturas e todos os dados durante a evolução;
+- usar somente migrations aditivas até que exista autorização específica,
+  evidência de ausência de uso e plano de reversão;
+- não transformar automaticamente as 27 tabelas adicionais em funcionalidades
+  ou itens de menu;
+- aguardar a H2C.2G.1 para decidir formalmente o escopo dessas 27 tabelas na
+  baseline;
+- manter as colunas históricas de `associados`, `transacoes_financeiras` e
+  `usuarios` enquanto sua finalidade é esclarecida;
+- preservar a versão A de `solicitacoes_alteracao`;
+- tratar patrimônio, catálogo e UVR em incrementos próprios antes de consolidar
+  o schema desejado;
+- não reescrever migrations históricas.
+
+A ordem funcional aprovada é H2C.2B patrimônio, H2C.2C catálogo, H2C.2D UVR,
+H2C.2E usuários e permissões, H2C.2F solicitações, H2C.2G.1 escopo dos módulos
+adicionais, H2C.2G.2 interface e relatórios, H2C.2H plano final da baseline e
+H2C.2I homologação e reversão.
+
+As decisões completas, critérios de aceite e dependências estão em
+`MATRIZ_DECISOES_FUNCIONAIS_H2C2A.md`.
+
+## Decisões estruturais preliminares da H2C.2B
+
+A H2C.2B não criou SQL nem autorizou migration. Para o patrimônio, o futuro
+desenho da baseline deverá:
+
+- preservar as 38 colunas comprovadas;
+- preservar `status_bem` e os códigos atuais até a caracterização dos dados;
+- não criar um segundo indicador concorrente de situação;
+- considerar estrutura aditiva de eventos para vários ciclos de inativação e
+  reativação;
+- preservar `data_cadastro` automática e os nulos históricos;
+- não impor unicidade antes de auditar códigos, placas e séries existentes;
+- não criar FK em `transacoes_financeiras.id_patrimonio` antes de verificar
+  referências órfãs;
+- quando aprovada, usar integridade que bloqueie exclusão, nunca cascata;
+- manter campos textuais de UVR, associação e responsáveis durante transições;
+- tratar fotografia e arquivos em decisão própria.
+
+A solução estrutural só será escolhida depois dos testes de caracterização da
+H2C.3B.1 e da aprovação das questões humanas listadas na especificação.

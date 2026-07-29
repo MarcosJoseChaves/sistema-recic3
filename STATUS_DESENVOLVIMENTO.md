@@ -1128,3 +1128,80 @@ exclusões físicas e confirmou a classificação **C — é necessário obter o
 schema atual do banco**. A futura exportação será somente de estrutura, sem
 dados, e permanecerá fora do Git até auditoria. A H2C.2 não deve começar antes
 de confirmar o DDL ausente e decidir as divergências documentadas.
+
+## Etapa H2C.1B — comparação com o schema atual
+
+Em **29/07/2026**, a exportação externa somente de estrutura foi validada pelo
+hash aprovado e analisada estaticamente, sem executar SQL ou acessar o banco.
+
+- 64 tabelas, 62 sequências, 113 FKs, 73 índices explícitos e 103 CHECKs
+  confirmados;
+- 23 tabelas `fc_` alinhadas às migrations 001–011;
+- estrutura de `patrimonio` e `grupos_atividade` comprovada;
+- ausência real das colunas `id_grupo` registrada;
+- versão A de `solicitacoes_alteracao` confirmada pelo banco e pelo código;
+- UVR confirmada como vínculo textual em `usuarios.uvr_acesso`, sem tabela
+  própria;
+- 27 tabelas adicionais classificadas, sem uso SQL identificado no código
+  versionado;
+- drift legado e decisões funcionais documentados;
+- relatório criado em `RELATORIO_COMPARACAO_SCHEMA_ATUAL.md`;
+- 673 testes automatizados aprovados, com zero falhas e zero erros;
+- dump e manifesto permaneceram fora do Git;
+- nenhuma migration, banco, API, Cloudinary ou deploy executado;
+- nenhuma credencial registrada.
+
+Prontidão para H2C.2: **C — ainda exige decisões funcionais**. Antes da
+baseline, é necessário aprovar o escopo das tabelas adicionais, das colunas
+históricas e das regras desejadas para catálogo e patrimônio.
+
+## Etapa H2C.2A — matriz de decisões funcionais concluída
+
+Em **29/07/2026**, foi concluída a análise funcional posterior à comparação do
+schema:
+
+- matriz principal criada com situação, decisão, impacto, risco, dependências,
+  critério de aceite e etapa sugerida;
+- 27 de 27 tabelas adicionais analisadas individualmente;
+- preservação integral de estruturas, colunas e dados adotada como regra;
+- patrimônio direcionado para inativação e reativação, sem exclusão cotidiana;
+- catálogo direcionado para a hierarquia grupo, subgrupo e produto;
+- versão A de `solicitacoes_alteracao` mantida como referência oficial;
+- transição futura de UVR textual para vínculo por identificador planejada sem
+  quebra de compatibilidade;
+- colunas históricas preservadas até decisão específica;
+- funcionalidades incompletas mantidas ocultas;
+- mapa das funcionalidades visíveis e proposta futura de menu documentados;
+- backlog dividido em três prioridades e sequência H2C.2B–H2C.2I definida.
+
+O resultado está em `MATRIZ_DECISOES_FUNCIONAIS_H2C2A.md`. A próxima etapa
+recomendada é **H2C.2B — especificação funcional detalhada do patrimônio**.
+
+Esta etapa foi exclusivamente documental. Nenhum código, rota, template, teste,
+SQL, migration, banco, Cloudinary, API, deploy, commit ou push foi executado.
+
+## Etapa H2C.2B — especificação funcional do patrimônio concluída
+
+Em **29/07/2026**, foi concluída a especificação funcional do patrimônio, ainda
+sem implementação:
+
+- funcionamento atual de cadastro, consulta, detalhes, edição e exclusão
+  documentado;
+- cinco rotas e a área única do painel mapeadas;
+- 38 de 38 colunas classificadas;
+- `data_cadastro` definida como automática e somente para consulta;
+- referência lógica de `transacoes_financeiras.id_patrimonio` registrada;
+- risco da exclusão física e da ausência de FK documentado;
+- risco de UVR no cadastro atual documentado;
+- situações Ativo, Em manutenção, Inativo e Baixado preservadas;
+- inativação, reativação, histórico, mensagens e permissões especificados;
+- relatórios classificados;
+- implementação futura dividida em H2C.3B.1–H2C.3B.9.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`. O próximo incremento recomendado
+é **H2C.3B.1 — testes de caracterização do patrimônio atual**, somente após
+revisão e autorização.
+
+Esta etapa foi exclusivamente documental. Nenhum código funcional, teste, SQL,
+migration, banco, Cloudinary, API, deploy, commit ou push foi executado.

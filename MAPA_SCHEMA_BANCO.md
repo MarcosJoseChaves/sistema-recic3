@@ -6,6 +6,12 @@ Inventário da Etapa H2C.1, realizado em 29/07/2026 somente pelos arquivos
 versionados do `sistema-recic3`. Não foi usada a `DATABASE_URL`, não houve
 conexão PostgreSQL, execução de SQL, migration ou criação de banco.
 
+Atualização H2C.1B: a exportação externa e auditada do schema atual foi lida
+estaticamente. Ela foi validada pelo SHA-256
+`e2a9237b123aae8cab94e94055c9e31061b00f341536678b604f43f684c228cc`.
+O SQL não foi executado nem copiado para o Git. O relatório completo está em
+`RELATORIO_COMPARACAO_SCHEMA_ATUAL.md`.
+
 Ordem de confiança das evidências:
 
 1. migrations SQL numeradas;
@@ -35,9 +41,27 @@ chave estrangeira; `UQ` = único; `DEF` = default.
 | Restrições `CHECK` nas migrations | 103 |
 | Colunas com definição não determinada | 41 |
 
+O schema atual acrescenta a seguinte fotografia física:
+
+| Medida | Schema atual |
+|---|---:|
+| Tabelas | 64 |
+| Sequências | 62 |
+| PKs | 63 |
+| UNIQUE constraints | 32 |
+| Índices normais / UNIQUE explícitos | 51 / 22 |
+| FKs | 113 |
+| CHECKs | 103 |
+| Funções, triggers, views, tipos e extensões | 0 |
+
 As 41 lacunas são as 37 colunas conhecidas pelo uso de `patrimonio`, duas de
 `grupos_atividade` e `id_grupo` pressuposta em `subgrupos` e
 `produtos_servicos`. Nomes históricos alternativos não foram contados.
+
+Essa contagem de lacunas descreve apenas o que faltava no Git durante H2C.1.
+Na H2C.1B, o dump resolveu a estrutura física de `patrimonio` e
+`grupos_atividade` e comprovou que as duas colunas `id_grupo` não existem no
+banco atual.
 
 Critérios de contagem:
 
@@ -66,9 +90,9 @@ Critérios de contagem:
 | `fluxo_caixa_transacoes_link` | `app.py` | distribuição de pagamentos | `app.py` | completo |
 | `denuncias` | `app.py` | denúncias legadas | `app.py` | completo |
 | `usuarios` | `app.py` e scripts | login/auditoria | `app.py`, `criar_admin.py` | completo |
-| `solicitacoes_alteracao` | `app.py` | aprovação de alterações | `app.py`, `criar_tabela_solicitacoes.py` | definição conflitante |
-| `grupos_atividade` | scripts legados | catálogo de grupos | nenhum `CREATE TABLE` | pressuposta sem DDL |
-| `patrimonio` | `app.py` | patrimônio legado | nenhum `CREATE TABLE` | pressuposta sem DDL |
+| `solicitacoes_alteracao` | `app.py` | aprovação de alterações | `app.py`, `criar_tabela_solicitacoes.py` | schema confirma versão A do `app.py` |
+| `grupos_atividade` | scripts legados | catálogo de grupos | schema atual | DDL físico comprovado; relação pendente |
+| `patrimonio` | `app.py` | patrimônio legado | schema atual | 38 colunas comprovadas |
 | `fc_empresas` | módulo fiscal | contratadas | migration 001 | completo |
 | `fc_servidores` | módulo fiscal | responsáveis | migration 002 | completo |
 | `fc_contratos` | módulo fiscal | contratos | migration 003 | completo |
@@ -184,6 +208,11 @@ uf VARCHAR(2)?; telefone VARCHAR(20) NN; data_hora_cadastro TIMESTAMP NN;
 foto_base64 TEXT?.
 ```
 
+O schema atual acrescenta 12 colunas opcionais não declaradas nesse DDL:
+`funcao`, datas/motivos/observações de afastamento, suspensão, exclusão e
+readmissão. O código versionado não usa essas colunas; a baseline depende de
+decisão funcional.
+
 ### `transacoes_financeiras`
 
 Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
@@ -197,6 +226,11 @@ tipo_atividade VARCHAR(255) NN; valor_total_documento DECIMAL(12,2) NN;
 data_hora_registro TIMESTAMP NN; valor_pago_recebido DECIMAL(12,2) DEF 0.00;
 status_pagamento VARCHAR(30) DEF 'Aberto'.
 ```
+
+O schema atual acrescenta 13 colunas opcionais relacionadas a patrimônio,
+motorista, combustível, medidor, manutenção e garantia. Não foi localizado uso
+delas no código atual e `id_patrimonio` não possui FK. A baseline não deve
+excluí-las nem promovê-las automaticamente sem decisão funcional.
 
 ### `itens_transacao`
 
@@ -214,15 +248,13 @@ valor_total_item DECIMAL(12,2) NN.
 Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
 
 ```text
-id SERIAL NN PK; nome VARCHAR(255) NN; atividade_pai VARCHAR(255) NN;
-id_grupo NÃO DETERMINADO PELO REPOSITÓRIO.
+id SERIAL NN PK; nome VARCHAR(255) NN; atividade_pai VARCHAR(255) NN.
 ```
 
 UQ comprovada `(nome, atividade_pai)`. Um script usa `VARCHAR(150)` e outro
-pressupõe UQ `(nome, id_grupo)`. A diferença entre `VARCHAR(255)` no `app.py` e
-`VARCHAR(150)` em `migracao_inteligente.py` pode rejeitar ou truncar valores
-aceitos por uma das versões. Não é seguro escolher um tamanho sem conferir o
-schema atual.
+pressupõe UQ `(nome, id_grupo)`. O schema atual confirma `VARCHAR(255)` e
+comprova a ausência de `id_grupo`; o script que exige essa coluna não é
+compatível com a estrutura instalada.
 
 ### `produtos_servicos`
 
@@ -232,9 +264,12 @@ Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
 id SERIAL NN PK; tipo VARCHAR(20) NN; tipo_atividade VARCHAR(255) NN;
 grupo VARCHAR(255)?; subgrupo VARCHAR(255)?; item VARCHAR(255) NN UQ;
 data_hora_cadastro TIMESTAMP NN;
-id_subgrupo INTEGER? FK subgrupos(id);
-id_grupo NÃO DETERMINADO PELO REPOSITÓRIO.
+id_subgrupo INTEGER? FK subgrupos(id).
 ```
+
+O schema atual comprova que `id_grupo` não existe. A relação física do produto
+é somente com `subgrupos(id)`; o banco também possui
+`DEFAULT now()` em `data_hora_cadastro`.
 
 ### `contas_correntes`
 
@@ -298,6 +333,11 @@ role VARCHAR(20) NN; uvr_acesso VARCHAR(50)?; ativo BOOLEAN DEF TRUE.
 `SERIAL` comprova `usuarios.id INTEGER`, compatível com as 44 FKs de auditoria
 do módulo.
 
+O schema atual acrescenta três colunas opcionais não usadas pelo código
+versionado: `email VARCHAR(255)`, `reset_token VARCHAR(255)` e
+`reset_token_expira TIMESTAMP`. A inclusão delas na baseline depende de decisão
+funcional.
+
 ### `solicitacoes_alteracao`
 
 Operações: `SELECT`, `INSERT`, `UPDATE`. Definição do `app.py`:
@@ -313,14 +353,11 @@ status VARCHAR(20) DEF 'PENDENTE'; observacoes_admin TEXT?.
 Drift: `criar_tabela_solicitacoes.py` usa `dados_novos TEXT`,
 `usuario_solicitante VARCHAR(100)` anulável e `motivo_rejeicao TEXT`.
 
-Classificação: **DIVERGÊNCIA QUE EXIGE CONFERÊNCIA NO SCHEMA ATUAL**. O
-`app.py` pressupõe atualmente `JSONB`, usuário obrigatório de 50 caracteres e
-`observacoes_admin`; o script antigo pressupõe texto, usuário anulável de 100
-caracteres e `motivo_rejeicao`. Ambas usam `id SERIAL PRIMARY KEY`,
-`tabela_alvo`, `id_registro`, `tipo_solicitacao`, timestamp/status com defaults
-e finalidade de aprovar alterações. Uma futura exportação somente do schema
-mostrará objetivamente qual definição está instalada, mas ela ainda deverá ser
-comparada com o código antes de qualquer decisão.
+Classificação após H2C.1B: **schema atual e código confirmam a versão do
+`app.py`**. Estão instalados `JSONB`, usuário obrigatório de 50 caracteres e
+`observacoes_admin`; `motivo_rejeicao` não existe. O script antigo representa
+uma versão B incompatível e não deve integrar a baseline. Falta apenas a
+decisão formal de aposentá-lo.
 
 ## Tabelas pressupostas, sem DDL completo
 
@@ -329,66 +366,50 @@ comparada com o código antes de qualquer decisão.
 Usada por `importar_csv_nuvem.py` e `fix_nomes_colunas.py`.
 
 ```text
-id NÃO DETERMINADO PELO REPOSITÓRIO;
-nome NÃO DETERMINADO PELO REPOSITÓRIO.
+id INTEGER NN PK DEF nextval(grupos_atividade_id_seq);
+nome VARCHAR(100) NN UQ.
 ```
 
-O importador pressupõe `UNIQUE(nome)`. O fixer admite o nome antigo
-`nome_grupo`. Não há `CREATE TABLE`. `importar_csv_nuvem.py` também pressupõe
-`subgrupos.id_grupo` e `produtos_servicos.id_grupo`; os tipos, nulabilidade,
-FKs, índices e comportamento na exclusão são apenas evidência histórica e
-permanecem não determinados.
+O importador pressupõe corretamente `UNIQUE(nome)`, mas também pressupõe
+`subgrupos.id_grupo` e `produtos_servicos.id_grupo`, que não existem. Não há
+FK saindo ou chegando em `grupos_atividade`. A constraint UNIQUE conserva um
+nome histórico que menciona `nome_grupo`, embora a coluna atual seja `nome`.
+O DDL físico está determinado; a ligação funcional com o catálogo ainda
+depende de decisão.
 
 ### `patrimonio`
 
-Possui `SELECT`, `INSERT`, `UPDATE` e `DELETE`, mas nenhum `CREATE TABLE`.
-Colunas conhecidas pelo uso:
+Possui `SELECT`, `INSERT`, `UPDATE` e `DELETE`, mas nenhum `CREATE TABLE`
+versionado. A H2C.1B comprovou 38 colunas:
 
-| Coluna | Definição PostgreSQL |
-|---|---|
-| `id` | tipo, nulabilidade, default, chave, índice e sequência: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `uvr` | tipo, nulabilidade, default, constraint e índice: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `associacao` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `tipo_bem` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `categoria` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `descricao` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `codigo_patrimonio` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `marca` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `modelo` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `ano_fabricacao` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `numero_serie_chassi` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `situacao_propriedade` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `entidade_proprietaria` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `orgao_cedente` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `numero_termo_comodato` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `data_inicio_comodato` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `data_fim_comodato` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `placa` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `renavam` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `combustivel` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `capacidade_carga` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `controle_por` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `medidor_inicial` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `medidor_atual` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `local_instalacao` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `setor_uso` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `nome_responsavel` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `nome_operador_principal` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `status_bem` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `estado_conservacao` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `permite_abastecimento` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `permite_manutencao` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `alerta_preventiva` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `observacoes_gerais` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `foto_bem_base64` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `eh_bem_publico` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
-| `uso_compartilhado` | idem: **NÃO DETERMINADO PELO REPOSITÓRIO** |
+```text
+id INTEGER NN PK DEF nextval(patrimonio_id_seq);
+uvr VARCHAR(50)?; associacao VARCHAR(100)?; tipo_bem VARCHAR(100)?;
+categoria VARCHAR(100)?; descricao VARCHAR(255)?;
+codigo_patrimonio VARCHAR(50)?; marca VARCHAR(100)?; modelo VARCHAR(100)?;
+ano_fabricacao INTEGER?; numero_serie_chassi VARCHAR(100)?;
+situacao_propriedade VARCHAR(100)?; entidade_proprietaria VARCHAR(100)?;
+orgao_cedente VARCHAR(100)?; numero_termo_comodato VARCHAR(100)?;
+data_inicio_comodato DATE?; data_fim_comodato DATE?;
+placa VARCHAR(20)?; renavam VARCHAR(50)?; combustivel VARCHAR(50)?;
+capacidade_carga VARCHAR(50)?; controle_por VARCHAR(50)?;
+medidor_inicial NUMERIC(15,2)?; medidor_atual NUMERIC(15,2)?;
+local_instalacao VARCHAR(150)?; setor_uso VARCHAR(100)?;
+nome_responsavel VARCHAR(150)?; nome_operador_principal VARCHAR(150)?;
+status_bem VARCHAR(50)?; estado_conservacao VARCHAR(50)?;
+permite_abastecimento BOOLEAN?; permite_manutencao BOOLEAN?;
+alerta_preventiva INTEGER?; observacoes_gerais TEXT?;
+foto_bem_base64 TEXT?; eh_bem_publico BOOLEAN?; uso_compartilhado BOOLEAN?;
+data_cadastro TIMESTAMP? DEF CURRENT_TIMESTAMP.
+```
 
-Os formulários sugerem formatos de entrada, mas isso não comprova tipo,
-obrigatoriedade, índice, constraint ou comportamento de exclusão no PostgreSQL.
-O código usa `uvr` para autorização por objeto e `associacao` como texto. Não
-há FK aparente comprovada, e relações eventualmente existentes no banco são
-desconhecidas.
+As 37 colunas antes inferidas pelo código existem; `data_cadastro` é a coluna
+adicional e só aparece indiretamente em `SELECT *`. Não há FK, UNIQUE, CHECK ou
+índice explícito além do índice implícito da PK. O código usa `uvr` para
+autorização e mantém exclusão física. `transacoes_financeiras.id_patrimonio`
+existe, mas não possui FK, portanto a exclusão pode deixar referência lógica
+sem proteção do banco. A estrutura física deixou de ser lacuna; nulabilidade e
+regra de exclusão continuam sendo decisões funcionais.
 
 ## Schema do módulo de Fiscalização de Contratos
 
@@ -775,7 +796,7 @@ Checks de tipo, status, justificativa e valores. Índice
 
 ## Relacionamentos
 
-As sete FKs legadas distintas são:
+As sete FKs legadas antes comprovadas no Git são:
 
 - transação → cadastro;
 - item → transação (`ON DELETE CASCADE`);
@@ -787,6 +808,11 @@ As sete FKs legadas distintas são:
 
 Não existem tabelas `uvrs` ou `associacoes`: o vínculo é texto. Solicitações
 também não têm FK, pois guardam nome da tabela e ID genericamente.
+
+O schema atual contém 29 FKs legadas. As 22 adicionais pertencem às tabelas de
+auditoria, documentos, EPI e ouvidoria que só existem no banco atual. Somadas
+às 84 FKs do módulo, explicam as 113 FKs físicas. A lista nominal e as ações de
+exclusão estão em `RELATORIO_COMPARACAO_SCHEMA_ATUAL.md`.
 
 Nas migrations há 84 FKs: 44 para `usuarios`, 8 para `fc_contratos`, 7 para
 `fc_servidores`, 6 para `fc_medicoes`, 3 para `fc_fiscalizacoes`, 3 para
@@ -834,8 +860,9 @@ em FKs de documentos/auditoria somente se consultas reais justificarem.
 - todas as FKs entre tabelas `fc_*` são `BIGINT`;
 - as 44 FKs do módulo para `usuarios.id` são `INTEGER`;
 - não foi encontrada incompatibilidade de tipo nas migrations 001–011;
-- `patrimonio.id`, `grupos_atividade.id` e as duas colunas `id_grupo` não têm
-  tipo PostgreSQL comprovado e não foram classificados por inferência Python.
+- `patrimonio.id` e `grupos_atividade.id` são `INTEGER` com sequência;
+- `subgrupos.id_grupo` e `produtos_servicos.id_grupo` não existem no schema
+  atual.
 
 ## Exclusões físicas legadas
 
@@ -851,7 +878,7 @@ Foram encontradas 15 ocorrências de `DELETE FROM`, atingindo nove tabelas:
 | `cadastros` | `excluir_cadastro` e `responder_solicitacao`: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | referenciado por transações e fluxo, sem cascata; pode bloquear |
 | `contas_correntes` | `excluir_conta_corrente` e aprovação: `WHERE id = %s` | rota e execução final administrativas | referenciada por fluxo, sem cascata; tratamento espera erro de integridade |
 | `transacoes_financeiras` | `excluir_transacao` e aprovação: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | itens têm cascata; link não tem cascata; pode apagar itens ou ser bloqueada |
-| `patrimonio` | `excluir_patrimonio` e aprovação: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | schema e relações desconhecidos; risco não mensurável |
+| `patrimonio` | `excluir_patrimonio` e aprovação: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | 38 colunas comprovadas; sem FKs; `transacoes_financeiras.id_patrimonio` pode ficar órfão |
 | `subgrupos` | `api_subgrupos`: `WHERE id = %s` | `admin_json_required` | produto referencia subgrupo sem cascata; código tenta bloquear quando há uso |
 | `produtos_servicos` | `api_produtos_crud`: `WHERE id = %s` | `admin_json_required` | sem FK filha comprovada; código faz busca textual em itens antes de apagar |
 | `fluxo_caixa` | `excluir_movimentacao`: `WHERE id = %s` | `admin_json_required` | links têm cascata; função estorna valores antes da exclusão |
@@ -896,7 +923,7 @@ triggers, funções SQL, arrays, UUID de banco ou colunas geradas.
 |---|---|
 | `patrimonio` sem DDL | objeto não documentado |
 | `grupos_atividade` sem DDL | objeto não documentado |
-| `id_grupo` em duas tabelas sem DDL | código/script legado |
+| `id_grupo` em duas tabelas | ausente no banco; script legado incompatível |
 | duas versões de `solicitacoes_alteracao` | provável evolução manual divergente |
 | `subgrupos.nome` com 255 ou 150 | drift legado |
 | fixer admite `nome_subgrupo`/`nome_grupo` antigos | histórico desconhecido |
@@ -906,23 +933,69 @@ triggers, funções SQL, arrays, UUID de banco ou colunas geradas.
 | documento antigo dizia haver migration no import | superado pelo código/testes |
 | scripts antigos têm configurações/credenciais padrão | risco histórico |
 
+Atualização H2C.1B:
+
+- as 23 tabelas `fc_` não apresentam drift estrutural em relação às migrations;
+- a versão A de `solicitacoes_alteracao` está instalada e é usada pelo código;
+- `subgrupos.nome` está instalado como `VARCHAR(255)`;
+- há 27 tabelas adicionais sem uso SQL identificado no Git;
+- `associados`, `transacoes_financeiras` e `usuarios` possuem colunas adicionais
+  que exigem decisão funcional;
+- sete colunas de data/hora legadas possuem `DEFAULT now()` não declarado no
+  `CREATE TABLE` atual;
+- a ausência de tabela `uvr` é coerente com o modelo textual do sistema.
+
 ## Suficiência do repositório
 
-Resposta: **C — é necessário obter o schema do banco atual**.
+Resposta após H2C.1B: **C — ainda exige decisões funcionais**.
 
-O Git basta para as 23 tabelas do módulo e quase todo o DDL legado, mas não para
-`patrimonio`, `grupos_atividade`, `id_grupo` nem para decidir a versão real de
-`solicitacoes_alteracao`.
+A exportação somente do schema já foi obtida, auditada e comparada. As lacunas
+técnicas de `patrimonio`, `grupos_atividade`, `solicitacoes_alteracao` e UVR
+foram esclarecidas. A baseline ainda não deve ser criada porque é necessário
+decidir o destino das 27 tabelas adicionais, das colunas históricas extras e
+das divergências funcionais do catálogo e do patrimônio.
 
-Em etapa futura, será necessária exportação **somente do schema**, sem dados,
-credenciais, owners ou privilégios. O procedimento operacional será preparado
-separadamente, com versão de `pg_dump` compatível com o PostgreSQL e as opções
-conceituais `--schema-only`, `--no-owner`, `--no-privileges` e formato SQL
-texto auditável.
+O schema atual é evidência do que existe, não aprovação automática do que deve
+ser recriado. O dump e o manifesto permanecem fora do Git.
 
-A conexão não deve aparecer no comando documentado, no histórico do terminal
-nem no arquivo gerado. O resultado deve permanecer temporariamente fora do Git,
-ser auditado antes de qualquer inclusão e ser comparado objeto a objeto com
-código e migrations. O banco atual será uma fonte adicional, não uma verdade
-automaticamente correta. Não é necessário exportar linhas, senhas ou
-documentos.
+## Decisões funcionais da H2C.2A
+
+A H2C.2A definiu que nenhuma das 64 tabelas, coluna ou dado será removido
+durante esta fase. As classificações funcionais servem para orientar análise,
+visibilidade e prioridade; elas não autorizam exclusão nem inclusão automática
+na futura baseline.
+
+Foram analisadas individualmente as 27 tabelas adicionais. Elas permanecem
+preservadas e ocultas até que cada conjunto possua responsável, regra de negócio
+e critério de aceite. Também foram validadas como direções futuras:
+
+- substituir a exclusão cotidiana de patrimônio por inativação e reativação;
+- estruturar gradualmente o catálogo como grupo, subgrupo e produto;
+- manter a versão A de `solicitacoes_alteracao` como referência oficial;
+- evoluir UVR textual para cadastro e vínculo por identificador, preservando
+  compatibilidade durante a transição;
+- preservar as colunas históricas adicionais até decisão específica;
+- manter os 11 módulos de Fiscalização de Contratos administrativos enquanto
+  não houver uma nova matriz de perfis aprovada.
+
+O detalhamento e a sequência dos incrementos estão em
+`MATRIZ_DECISOES_FUNCIONAIS_H2C2A.md`.
+
+## Especificação funcional do patrimônio — H2C.2B
+
+A análise de leitura confirmou cinco rotas de patrimônio e uma única área em
+`templates/cadastro.html`. O cadastro, a consulta, os detalhes, a edição e a
+exclusão estão concentrados no `app.py`.
+
+As 38 colunas foram classificadas. A recomendação é preservar todas, reutilizar
+`status_bem` após caracterizar os valores existentes e introduzir histórico de
+situações de forma aditiva. `data_cadastro` permanece automática, somente para
+consulta, e valores nulos antigos não devem receber datas inventadas.
+
+O cadastro atual não aplica no servidor a proteção de UVR já usada na consulta
+e na edição. A exclusão física também não verifica a referência lógica em
+`transacoes_financeiras.id_patrimonio`. Esses são bloqueadores para a evolução
+segura.
+
+A especificação completa está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`.
