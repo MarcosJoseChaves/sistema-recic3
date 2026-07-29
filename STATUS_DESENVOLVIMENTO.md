@@ -1057,3 +1057,44 @@ passaram, em execução separada, os 245 testes das etapas H2A e H2B.1. A
 instalação limpa das dependências fixadas foi validada com Python 3.12.6.
 Nenhum PostgreSQL, Cloudinary, Redis ou API externa foi acessado; nenhuma
 migration ou deploy foi executado.
+
+## Etapa H2B.2B — concluída
+
+Em **29/07/2026**, foi concluída a base de logs estruturados, identificação de
+requisições e monitoramento operacional, sem migration ou deploy:
+
+- logs JSON de uma linha e em UTC obrigatórios online;
+- níveis, formato e chaves booleanas validados;
+- `request_id` novo por requisição e cabeçalho `X-Request-ID`;
+- duração calculada com relógio monotônico;
+- eventos operacionais e de segurança com nomes estáveis;
+- redação recursiva com proteção contra ciclos, profundidade e tamanho;
+- JSON estrito, inclusive para valores não finitos e objetos não serializáveis;
+- falha do próprio handler isolada, sem interromper a resposta;
+- resposta 500 genérica em HTML e JSON, com código de referência;
+- `/health` mínimo e fora do evento comum de requisição;
+- stdout sem arquivos locais de log;
+- guia `MONITORAMENTO_OPERACIONAL.md`.
+
+O inventário identificou 190 chamadas legadas de log ainda presentes no
+sistema principal e no módulo: 20 informativas, 12 avisos, 60 erros, uma de
+depuração e 97 chamadas `logger.exception`. Os pontos que expunham nome de
+usuário, valores digitados, SQL, parâmetros ou mensagens cruas de exceção foram
+corrigidos. As chamadas `logger.exception` restantes usam mensagens genéricas;
+o formatador online omite traceback bruto e registra somente o tipo da exceção.
+Não existe `print` usado como logging no runtime Flask, nem `FileHandler` ou
+`RotatingFileHandler`. Scripts administrativos antigos que já utilizavam
+`print` não são executados pela aplicação e ficaram fora do escopo desta etapa.
+
+Foram aprovados **61 testes específicos da H2B.2B** e **673 testes totais**, com
+zero falhas e zero erros. Os 612 testes anteriores foram preservados. Também
+passaram, em execução separada, os 296 testes das etapas H2A, H2B.1 e H2B.2A.
+Nenhum banco, Cloudinary, Redis ou API real foi acessado e nenhuma migration ou
+deploy foi executado.
+
+A contagem de sintaxe foi normalizada: existem 84 arquivos Python já rastreados
+no commit-base (61 da aplicação e 23 de testes) e dois arquivos novos desta
+etapa, totalizando 86 arquivos candidatos ao commit (62 da aplicação e 24 de
+testes). A contagem anterior de 103 incluía também 19 arquivos Python ignorados
+da pasta `_referencia_fiscaliza`; eles não pertencem ao sistema principal nem
+ao commit.

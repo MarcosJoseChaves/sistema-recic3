@@ -8,6 +8,8 @@ from flask import Response, current_app, jsonify, render_template, request
 from flask_limiter import Limiter
 from flask_login import current_user
 
+from logging_operacional import registrar_evento
+
 
 AMBIENTES_ONLINE = {"homologation", "production"}
 PADRAO_LIMITE = re.compile(
@@ -186,6 +188,13 @@ def configurar_rate_limit(app, ambiente):
 
     @app.errorhandler(429)
     def tratar_limite_excedido(_erro):
+        registrar_evento(
+            "rate_limit_exceeded",
+            nivel="WARNING",
+            mensagem="Limite de solicitações excedido.",
+            categoria_seguranca="rate_limit",
+            status_code=429,
+        )
         classificador_json = current_app.config.get("JSON_ENDPOINT_CLASSIFIER")
         if classificador_json and classificador_json():
             resposta = jsonify(

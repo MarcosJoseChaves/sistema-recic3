@@ -10,6 +10,12 @@ from flask import Response, abort, g, jsonify, request
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from logging_operacional import (
+    configurar_logging_operacional,
+    emitir_erro_configuracao_minimo,
+    registrar_evento,
+    registrar_inicio_aplicacao,
+)
 from seguranca_rate_limit import configurar_rate_limit
 
 
@@ -171,8 +177,28 @@ def _politica_csp(nonce=None):
 
 
 def configurar_aplicacao(app):
+    """Configura o logger primeiro e interrompe startup inseguro sem expor valores."""
+    try:
+        ambiente = identificar_ambiente()
+    except RuntimeError:
+        emitir_erro_configuracao_minimo("unknown")
+        raise
+    configurar_logging_operacional(app, ambiente)
+    try:
+        return _configurar_aplicacao_validada(app, ambiente)
+    except RuntimeError:
+        registrar_evento(
+            "application_configuration_error",
+            nivel="CRITICAL",
+            mensagem="Uma configuração de inicialização é inválida.",
+            categoria_seguranca="configuration",
+            configuration_name="startup_security",
+        )
+        raise
+
+
+def _configurar_aplicacao_validada(app, ambiente):
     """Aplica configurações seguras sem abrir conexões externas."""
-    ambiente = identificar_ambiente()
     secret_key = _valor_obrigatorio("SECRET_KEY")
     database_url = (os.getenv("DATABASE_URL") or "").strip() or None
 
@@ -277,6 +303,13 @@ def configurar_aplicacao(app):
         if autorizado:
             return None
 
+        registrar_evento(
+            "basic_auth_failed",
+            nivel="WARNING",
+            mensagem="Falha na barreira de acesso da homologação.",
+            categoria_seguranca="authentication",
+            status_code=401,
+        )
         return Response(
             "Autenticação necessária.",
             status=401,
@@ -370,4 +403,5 @@ def configurar_aplicacao(app):
             resposta.headers.setdefault("Pragma", "no-cache")
         return resposta
 
+    registrar_inicio_aplicacao(app)
     return ambiente

@@ -120,3 +120,24 @@ categoria, impedindo ampliar o limite apenas alternando a URL. Esses endpoints
 também permanecem sob o teto geral amplo por rota; o limite menor é atingido
 primeiro. Um bloqueio retorna HTTP 429, `Retry-After` e resposta sem cache antes
 da operação de negócio.
+
+## Logs operacionais e código de referência
+
+A aplicação gera um `X-Request-ID` novo para cada requisição e usa o mesmo
+identificador nos eventos relacionados. Em homologação e produção, os logs da
+aplicação são linhas JSON em UTC enviadas para stdout. A duração usa relógio
+monotônico e `/health` e arquivos estáticos não geram o evento comum de acesso.
+
+Erros 500 apresentam somente uma mensagem genérica e um código de referência,
+em HTML ou JSON. Senhas, tokens, formulários, JSON completo, query string,
+cookies, dados pessoais, SQL, credenciais, arquivos, `public_id` e URLs
+assinadas não são registrados. O documento
+`MONITORAMENTO_OPERACIONAL.md` descreve os eventos, a investigação por
+`request_id` e as limitações atuais.
+
+As variáveis `LOG_LEVEL`, `LOG_FORMAT`, `LOG_REQUESTS` e
+`LOG_SECURITY_EVENTS` controlam a camada. Homologação e produção exigem JSON,
+recusam `DEBUG` e não permitem desativar eventos de segurança. O ambiente de
+testes usa configuração fixa, sem depender do `.env` pessoal. Logs normais
+seguem para stdout; erros mínimos da própria configuração ou emissão podem
+seguir para stderr.

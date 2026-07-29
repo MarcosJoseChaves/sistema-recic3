@@ -845,3 +845,44 @@ Esta preparação não significa que a homologação ou a produção já estejam
 liberadas. Continuam pendentes a migration-base, o controle formal de
 migrations, a rotação de credenciais históricas, Neon e Cloudinary separados,
 monitoramento, remoção das exceções CSP legadas e o deploy controlado.
+
+## 24. Etapa H2B.2B — logs e monitoramento operacional básico
+
+Em **29/07/2026**, foi revisada, ainda sem deploy, a camada de logs
+operacionais estruturados:
+
+- `request_id` hexadecimal gerado no servidor por requisição e devolvido em
+  `X-Request-ID`;
+- duração em milissegundos calculada por relógio monotônico;
+- JSON de uma linha, timestamp UTC e campos opcionais omitidos online;
+- níveis e formatos validados por lista permitida;
+- `DEBUG` e formato textual recusados online;
+- stdout para a aplicação e stdout/stderr para o Gunicorn, sem arquivos locais;
+- respostas 500 genéricas em HTML e JSON, com código de referência;
+- eventos estáveis de startup, autenticação, autorização, CSRF, rate limit,
+  serviço externo, upload, URL privada e erro interno;
+- redação recursiva com limites de tamanho, profundidade e ciclos, sem coleta
+  de corpos de requisição;
+- `/health` público, mínimo, independente de serviços e fora do log comum.
+
+O inventário concentrou os logs legados no grande `app.py` e nas rotas do
+módulo. Foram encontrados logs com nome de usuário, valores digitados,
+SQL/parâmetros e mensagens cruas de exceções; esses pontos foram substituídos
+por eventos ou mensagens genéricas. A configuração manual duplicada do servidor
+local também foi removida. Permanecem mensagens operacionais legadas com
+`logger.exception`; no formato online, o formatador central omite o traceback e
+qualquer mensagem crua, conservando somente mensagem genérica e tipo da
+exceção. A conversão gradual
+dessas mensagens para nomes de eventos específicos continua recomendada.
+
+O Gunicorn registra eventos de servidor e acessos sem query string, cookies ou
+cabeçalhos sensíveis. A aplicação registra eventos operacionais e de segurança,
+sem IP bruto. Não há arquivo de log, banco de auditoria, serviço de
+monitoramento, alerta, métrica ou retenção centralizada nesta etapa. Os sinais e
+procedimentos iniciais estão documentados em `MONITORAMENTO_OPERACIONAL.md`.
+
+Esta etapa não declara o sistema pronto para produção. Permanecem pendentes
+retenção e alertas externos, eventual ferramenta especializada, atributos
+inline, SRI ou hospedagem local, Redis compartilhado, exclusões físicas
+legadas, migration-base, controle formal de migrations, rotação de
+credenciais, Neon e Cloudinary separados e deploy.

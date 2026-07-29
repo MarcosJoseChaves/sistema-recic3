@@ -5,6 +5,8 @@ from datetime import date
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
+from logging_operacional import registrar_evento
+
 from ..permissions import admin_required
 from ..services.cloudinary_storage import CloudinaryStorage, CloudinaryStorageError
 from ..services.atestes_service import AtesteService, AtesteServiceError
@@ -467,7 +469,12 @@ def registrar_rotas_medicoes(blueprint, conectar_banco):
                 except ERROS_NEGOCIO as erro:
                     erros.append(str(erro))
                 except CloudinaryStorageError:
-                    current_app.logger.exception("Falha no armazenamento do documento da medição")
+                    registrar_evento(
+                        "upload_rejected",
+                        nivel="ERROR",
+                        mensagem="Falha no armazenamento do documento da medição.",
+                        error_type="CloudinaryStorageError",
+                    )
                     erros.append("Não foi possível enviar o documento agora. Tente novamente.")
                 except MedicaoServiceError:
                     current_app.logger.exception("Falha ao registrar documento da medição")

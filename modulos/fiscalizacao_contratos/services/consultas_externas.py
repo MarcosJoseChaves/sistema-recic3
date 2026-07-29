@@ -4,6 +4,8 @@ import logging
 
 import requests
 
+from logging_operacional import registrar_evento
+
 from ..validacoes import somente_numeros, validar_cep, validar_cnpj
 
 
@@ -16,6 +18,10 @@ class ConsultaExternaError(Exception):
 
 class _RespostaExternaInvalida(Exception):
     """Resposta que não pode ser usada pelo módulo."""
+
+    def __init__(self, codigo):
+        super().__init__("Resposta externa inválida.")
+        self.codigo = codigo
 
 
 def _texto(valor):
@@ -35,7 +41,7 @@ def _tipo_resumido_erro(erro):
     if isinstance(erro, requests.exceptions.ConnectionError):
         return "conexao_dns_ou_rede"
     if isinstance(erro, _RespostaExternaInvalida):
-        return str(erro)
+        return erro.codigo
     return type(erro).__name__
 
 
@@ -70,13 +76,15 @@ def _consultar_json(servico, url, *, segunda_opcao=False):
             raise _RespostaExternaInvalida("formato_json_inesperado")
         return dados
     except (requests.RequestException, _RespostaExternaInvalida) as erro:
-        logger.warning(
-            "Consulta externa falhou: servico=%s status_http=%s erro_tipo=%s "
-            "segunda_opcao_acionada=%s",
-            servico,
-            _status_http(erro),
-            _tipo_resumido_erro(erro),
-            segunda_opcao,
+        registrar_evento(
+            "external_service_error",
+            nivel="WARNING",
+            mensagem="Falha em consulta externa.",
+            service=servico,
+            operation="lookup",
+            status_code=_status_http(erro),
+            error_type=_tipo_resumido_erro(erro),
+            fallback_attempt=segunda_opcao,
         )
         raise
 

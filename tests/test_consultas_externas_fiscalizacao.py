@@ -75,9 +75,15 @@ class TestConsultasExternasFiscalizacao(unittest.TestCase):
         )
         get_mock.side_effect = [brasil, opencnpj]
 
-        with self.assertLogs(
-            "modulos.fiscalizacao_contratos.services.consultas_externas", level="INFO"
-        ) as logs:
+        with (
+            self.assertLogs(
+                "modulos.fiscalizacao_contratos.services.consultas_externas",
+                level="INFO",
+            ) as logs,
+            patch(
+                "modulos.fiscalizacao_contratos.services.consultas_externas.registrar_evento"
+            ) as evento_mock,
+        ):
             dados = consultar_cnpj(CNPJ_VALIDO)
 
         self.assertEqual(get_mock.call_count, 2)
@@ -87,10 +93,18 @@ class TestConsultasExternasFiscalizacao(unittest.TestCase):
         self.assertEqual(dados["telefone"], "(21) 22223333")
         self.assertEqual(dados["email"], "contato@alternativa.test")
         registro = " ".join(logs.output)
-        self.assertIn("status_http=500", registro)
-        self.assertIn("erro_tipo=resposta_http_invalida", registro)
         self.assertIn("segunda_opcao_acionada=True", registro)
         self.assertNotIn("https://", registro)
+        evento_mock.assert_called_once()
+        self.assertEqual(
+            "external_service_error",
+            evento_mock.call_args.args[0],
+        )
+        self.assertEqual(500, evento_mock.call_args.kwargs["status_code"])
+        self.assertEqual(
+            "resposta_http_invalida",
+            evento_mock.call_args.kwargs["error_type"],
+        )
 
     @patch("modulos.fiscalizacao_contratos.services.consultas_externas.requests.get")
     def test_duas_apis_falham_com_mensagem_amigavel(self, get_mock):

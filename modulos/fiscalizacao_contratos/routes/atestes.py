@@ -5,6 +5,8 @@ from datetime import date
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
+from logging_operacional import registrar_evento
+
 from ..permissions import admin_required
 from ..services.cloudinary_storage import CloudinaryStorage, CloudinaryStorageError
 from ..services.atestes_service import (
@@ -141,7 +143,20 @@ def registrar_rotas_atestes(blueprint, conectar_banco):
                 servico().salvar_nota_com_upload(ateste_id,dados,arquivo,current_user.id,CloudinaryStorage(),nota_id)
             else: servico().salvar_nota(ateste_id,dados,current_user.id,nota_id)
         except ERROS_NEGOCIO as erro: flash(str(erro),"danger");return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",400)
-        except CloudinaryStorageError: current_app.logger.exception("Falha no armazenamento da nota fiscal");flash("Não foi possível enviar o arquivo agora. Tente novamente.","danger");return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",500)
+        except CloudinaryStorageError:
+            registrar_evento(
+                "upload_rejected",
+                nivel="ERROR",
+                mensagem="Falha no armazenamento da nota fiscal.",
+                error_type="CloudinaryStorageError",
+            )
+            flash("Não foi possível enviar o arquivo agora. Tente novamente.","danger")
+            return formulario_nota(
+                ateste_id,
+                dados,
+                "editar" if nota_id else "nova",
+                500,
+            )
         except AtesteServiceError: current_app.logger.exception("Falha ao salvar nota");flash("Não foi possível salvar a nota fiscal.","danger");return formulario_nota(ateste_id,dados,"editar" if nota_id else "nova",500)
         flash("Nota fiscal salva.","success");return voltar(ateste_id)
 

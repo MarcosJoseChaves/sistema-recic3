@@ -19,6 +19,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import HTTPException
 from configuracao_ambiente import configurar_aplicacao
+from logging_operacional import registrar_evento, resposta_erro_interno
 from seguranca_rate_limit import aplicar_limites_rotas
 from seguranca_csrf import configurar_csrf
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
@@ -196,11 +197,7 @@ def _tratar_metodo_incorreto(erro):
 
 @app.errorhandler(500)
 def _tratar_erro_interno(erro):
-    return _resposta_erro_http_json(
-        500,
-        "Não foi possível processar a solicitação.",
-        erro,
-    )
+    return resposta_erro_interno(erro)
 
 
 def _validar_limites_estrutura_json(dados):
@@ -776,8 +773,13 @@ def criar_tabelas_se_nao_existir():
         """)
 
         conn.commit()
-    except psycopg2.Error as e:
-        app.logger.error(f"Erro tabelas: {e}")
+    except psycopg2.Error:
+        registrar_evento(
+            "internal_error",
+            nivel="ERROR",
+            mensagem="Falha na preparação das estruturas locais.",
+            error_type="DatabaseError",
+        )
         if conn: conn.rollback()
     finally:
         if conn: conn.close()
@@ -820,11 +822,20 @@ def migrar_dados_antigos_produtos():
             
         conn.commit()
         if migrados > 0:
-            app.logger.info(f"--- MIGRAÇÃO: {migrados} novos subgrupos foram criados e vinculados. ---")
+            registrar_evento(
+                "maintenance_completed",
+                mensagem="Atualização interna concluída.",
+                affected_count=migrados,
+            )
             
-    except Exception as e:
+    except Exception:
         if conn: conn.rollback()
-        app.logger.error(f"Erro na migração de produtos: {e}")
+        registrar_evento(
+            "internal_error",
+            nivel="ERROR",
+            mensagem="Falha em atualização interna.",
+            error_type="MaintenanceError",
+        )
     finally:
         if conn: conn.close()
 
@@ -849,6 +860,12 @@ def load_user(user_id):
     conn.close()
     if data:
         return User(id=data[0], username=data[1], role=data[2], uvr_acesso=data[3])
+    registrar_evento(
+        "inactive_session_rejected",
+        nivel="WARNING",
+        mensagem="Sessão interna não reconhecida.",
+        categoria_seguranca="authentication",
+    )
     return None
 
 
@@ -872,11 +889,23 @@ def login():
         senha_valida = check_password_hash(hash_para_validar, password)
 
         if not user_data or not senha_valida:
+            registrar_evento(
+                "authentication_failed",
+                nivel="WARNING",
+                mensagem="Falha de autenticação.",
+                categoria_seguranca="authentication",
+            )
             return render_template('login.html', erro="Usuário ou senha inválidos.")
 
         user_obj = User(id=user_data[0], username=user_data[1], role=user_data[3], uvr_acesso=user_data[4])
         login_user(user_obj)
-        app.logger.info(f"Usuário {username} logado com sucesso.")
+        registrar_evento(
+            "authentication_succeeded",
+            mensagem="Autenticação concluída.",
+            categoria_seguranca="authentication",
+            actor_id=str(user_data[0]),
+            actor_type="internal_user",
+        )
         return redirect(url_for('index'))
             
     return render_template('login.html')
@@ -918,13 +947,22 @@ def alterar_senha():
                 novo_hash = generate_password_hash(nova_senha)
                 cur.execute("UPDATE usuarios SET password_hash = %s WHERE id = %s", (novo_hash, current_user.id))
                 conn.commit()
-                app.logger.info(f"Senha alterada com sucesso para o usuário: {current_user.username}")
+                registrar_evento(
+                    "credential_updated",
+                    mensagem="Credencial interna atualizada.",
+                    categoria_seguranca="authentication",
+                )
                 return render_template('alterar_senha.html', sucesso="Senha alterada com sucesso!")
             else:
                 return render_template('alterar_senha.html', erro="Senha atual incorreta.")
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            app.logger.error(f"Erro ao alterar senha: {e}")
+            registrar_evento(
+                "internal_error",
+                nivel="ERROR",
+                mensagem="Falha interna ao atualizar credencial.",
+                error_type="CredentialUpdateError",
+            )
             return render_template('alterar_senha.html', erro="Erro interno ao alterar senha.")
         finally:
             cur.close()
@@ -1050,10 +1088,10 @@ def cadastrar():
         if conn: conn.rollback()
         if 'uq_cadastros_cnpj_tipo_uvr' in str(e): 
             return "Este CNPJ já está cadastrado para o Tipo de Cadastro e UVR selecionados.", 400
-        return f"Erro de integridade: {e}", 400
-    except Exception as e:
+        return "Não foi possível concluir o cadastro por conflito nos dados.", 400
+    except Exception:
         if conn: conn.rollback()
-        return f"Erro ao cadastrar: {e}", 500
+        raise
     finally:
         if conn: conn.close()
 
@@ -1087,8 +1125,8 @@ def cadastrar_associado():
             data_nascimento = datetime.strptime(dados["data_nascimento"], '%Y-%m-%d').date()
             data_admissao = datetime.strptime(dados["data_admissao"], '%Y-%m-%d').date()
             data_hora = datetime.strptime(dados["data_hora_cadastro"], '%d/%m/%Y %H:%M:%S')
-        except ValueError as e:
-            return f"Formato de data inválido: {e}", 400
+        except ValueError:
+            return "Formato de data inválido.", 400
 
         # --- LÓGICA DE FOTO INTELIGENTE (CORREÇÃO) ---
         foto_final = ""
@@ -1134,10 +1172,9 @@ def cadastrar_associado():
         conn.commit()
         return redirect(url_for("sucesso_associado"))
 
-    except Exception as e:
+    except Exception:
         if conn: conn.rollback()
-        app.logger.error(f"Erro cadastro associado: {e}")
-        return f"Erro: {e}", 500
+        raise
     finally:
         if conn: conn.close()
 
@@ -1466,14 +1503,14 @@ def cadastrar_conta_corrente():
         }
         for field, msg in required_fields.items():
             if not dados.get(field):
-                app.logger.error(f"Campo obrigatório ausente: {msg}")
+                app.logger.error("Campo obrigatório ausente no cadastro de conta.")
                 return f"{msg} é obrigatório(a).", 400
 
         banco_selecionado = dados["banco_conta"]
         try:
             banco_codigo, banco_nome = banco_selecionado.split("|", 1)
         except ValueError:
-            app.logger.error(f"Valor inválido para o campo Banco: {banco_selecionado}")
+            app.logger.error("Valor inválido no cadastro de conta.")
             return "Valor inválido para o campo Banco. Formato esperado: 'codigo|nome'.", 400
 
         agencia = re.sub(r'[^0-9]', '', dados["agencia_conta"])
@@ -1900,8 +1937,8 @@ def registrar_transacao_financeira():
         try:
             data_documento = datetime.strptime(dados["data_documento_transacao"], '%Y-%m-%d').date()
             data_hora_registro = datetime.strptime(dados["data_hora_cadastro_transacao"], '%d/%m/%Y %H:%M:%S')
-        except ValueError as e:
-            return f"Formato de data inválido: {e}", 400
+        except ValueError:
+            return "Formato de data inválido.", 400
 
         conn = conectar_banco()
         cur = conn.cursor()
@@ -2375,7 +2412,7 @@ def registrar_fluxo_caixa():
                 try:
                     id_cadastro_cf_db = int(id_cadastro_cf_str_from_js)
                 except ValueError:
-                    app.logger.error(f"FluxoCaixa: ID '{id_cadastro_cf_str_from_js}' não numérico para não-rateio no registro.")
+                    app.logger.error("Identificador inválido no registro de fluxo de caixa.")
                     return jsonify({"error": "ID do Cliente/Fornecedor inválido para registro."}), 400
             else: 
                  return jsonify({"error": "ID do Cliente/Fornecedor ausente para não-rateio."}), 400
@@ -2931,7 +2968,7 @@ def fetch_report_data(filters):
                     cur_nome_assoc.close()
                     
             except ValueError:
-                app.logger.warning(f"ID da entidade inválido: {id_entidade_str} para tipo {tipo_entidade}")
+                app.logger.warning("Identificador de entidade inválido no relatório.")
 
 
         if filters.get("tipo_transacao_rel"): 
@@ -2979,8 +3016,7 @@ def fetch_report_data(filters):
         
         base_query += " ORDER BY data_efetiva_pag_rec, tf.data_documento, tf.id, it.valor_total_item, it.id"
         
-        app.logger.debug(f"Query do Relatório Financeiro Atualizada: {base_query}")
-        app.logger.debug(f"Parâmetros do Relatório Financeiro: {params}")
+        app.logger.debug("Consulta parametrizada do relatório financeiro preparada.")
 
         cur.execute(base_query, tuple(params))
         columns = [desc[0] for desc in cur.description]
@@ -5511,10 +5547,9 @@ def cadastrar_patrimonio():
         conn.commit()
         return pagina_sucesso_base("Sucesso", "Bem/Patrimônio cadastrado com sucesso!")
         
-    except Exception as e:
+    except Exception:
         if conn: conn.rollback()
-        app.logger.error(f"Erro ao cadastrar patrimônio: {e}")
-        return f"Erro: {e}", 500
+        raise
     finally:
         if conn: conn.close()
 
@@ -5802,20 +5837,8 @@ aplicar_limites_rotas(app)
 
 
 if __name__ == "__main__":
-    import logging
-
     if app.config["APP_ENV"] in {"homologation", "production"}:
         raise RuntimeError(
             "Ambientes online devem iniciar a aplicação exclusivamente pelo Gunicorn."
         )
-
-    logging.basicConfig(level=logging.INFO, 
-                        format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s - %(message)s')
-    
-    if not app.debug: 
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(logging.INFO)
-        app.logger.addHandler(stream_handler)
-    
-    app.logger.info("Iniciando o aplicativo Flask...")
     app.run(host="127.0.0.1", port=5000, debug=app.config["DEBUG"])

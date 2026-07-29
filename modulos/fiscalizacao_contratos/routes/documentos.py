@@ -5,6 +5,8 @@ from urllib.parse import urlsplit
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
+from logging_operacional import registrar_evento
+
 from ..permissions import admin_required
 from ..services.cloudinary_storage import CloudinaryStorage, CloudinaryStorageError
 from ..services.documentos_service import (
@@ -160,9 +162,11 @@ def registrar_rotas_documentos(blueprint, conectar_banco):
             flash("Documento não encontrado.", "warning")
             return redirect(url_for("fiscalizacao_contratos.documentos_lista"))
         except (DocumentoServiceError, CloudinaryStorageError) as erro:
-            current_app.logger.error(
-                "Falha ao gerar acesso temporário. erro_tipo=%s",
-                type(erro).__name__,
+            registrar_evento(
+                "signed_url_generation_failed",
+                nivel="ERROR",
+                mensagem="Falha ao gerar acesso temporário.",
+                error_type=type(erro).__name__,
             )
             flash("Não foi possível abrir o documento agora.", "danger")
             return redirect(url_for("fiscalizacao_contratos.documentos_lista"))
