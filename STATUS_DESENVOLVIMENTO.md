@@ -1205,3 +1205,34 @@ revisão e autorização.
 
 Esta etapa foi exclusivamente documental. Nenhum código funcional, teste, SQL,
 migration, banco, Cloudinary, API, deploy, commit ou push foi executado.
+
+## Etapa H2C.2C — especificação funcional do catálogo concluída
+
+Em **29/07/2026**, foi concluída a especificação funcional de grupos, subgrupos
+e produtos/serviços, ainda sem implementação:
+
+- funcionamento atual, rotas, tela, consultas e relatórios documentados;
+- 21 campos de quatro tabelas centrais ou relacionadas analisados;
+- vínculo físico incompleto e dependências textuais registrados;
+- importadores e CSVs históricos mapeados sem execução;
+- importador antigo classificado como incompatível e não autorizado;
+- hierarquia Grupo → Subgrupo → Produto/Serviço especificada;
+- estado transitório “Não classificado” e fila administrativa recomendados;
+- inativação, reativação, reclassificação e preservação histórica definidas;
+- permissões, mensagens, filtros, relatórios e integrações propostos;
+- implementação futura dividida em H2C.3C.1–H2C.3C.12.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`. O próximo passo documental
+recomendado é **H2C.2D — especificação funcional de UVR**, após revisão humana
+da H2C.2C.
+
+A revisão humana da H2C.2C foi aprovada em **29/07/2026**. Ficou definido que
+`grupos_atividade` será a referência inicial do cadastro oficial, mas seus
+registros deverão ser caracterizados antes do reaproveitamento. A interface
+usará o nome amigável “Grupos”, e nenhum dado com finalidade diferente será
+adaptado automaticamente.
+
+Esta etapa foi exclusivamente documental. Nenhum código funcional, teste, SQL,
+migration, banco, Cloudinary, API, importador, deploy, commit ou push foi
+executado.

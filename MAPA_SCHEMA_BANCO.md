@@ -999,3 +999,20 @@ segura.
 
 A especificação completa está em
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`.
+
+## Especificação funcional do catálogo — H2C.2C
+
+A leitura confirmou quatro estruturas centrais ou relacionadas:
+`grupos_atividade` (2 campos), `subgrupos` (3),
+`produtos_servicos` (8) e a tabela adicional `produtos` (8). O único vínculo
+físico atual do catálogo operacional é `produtos_servicos.id_subgrupo` para
+`subgrupos.id`; não há `id_grupo` nas tabelas esperadas pelo importador antigo.
+
+O desenho futuro deverá ser aditivo: grupo oficial, subgrupo ligado ao grupo e
+produto ligado ao subgrupo. Os textos antigos serão preservados durante a
+transição, e registros pendentes continuarão visíveis como “Não classificado”.
+Não haverá fusão automática com `produtos`, patrimônio, EPI ou catálogos do
+módulo Fiscalização.
+
+Os detalhes, campos, riscos e incrementos H2C.3C.1–H2C.3C.12 estão em
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.

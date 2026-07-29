@@ -261,3 +261,22 @@ desenho da baseline deverá:
 
 A solução estrutural só será escolhida depois dos testes de caracterização da
 H2C.3B.1 e da aprovação das questões humanas listadas na especificação.
+
+## Decisões estruturais preliminares da H2C.2C
+
+A H2C.2C também não criou SQL nem autorizou migration. Para o catálogo, a
+baseline futura deverá:
+
+- preservar `grupos_atividade`, `subgrupos`, `produtos_servicos` e `produtos`;
+- criar vínculos hierárquicos de modo aditivo e inicialmente opcional;
+- manter textos legados enquanto transações e relatórios ainda dependerem deles;
+- classificar registros existentes com revisão humana, sem fusão automática;
+- permitir estado transitório “Não classificado” sem criar categoria artificial;
+- introduzir situação e auditoria antes de substituir exclusões;
+- não remover a unicidade global de item antes de transações guardarem
+  identificador e fotografia;
+- adicionar obrigatoriedade e unicidade novas somente depois de inventário,
+  saneamento, validação e mudança das leituras.
+
+O SQL definitivo dependerá dos testes de caracterização H2C.3C.1 e das decisões
+humanas registradas em `ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.

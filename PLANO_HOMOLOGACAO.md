@@ -982,3 +982,22 @@ Cada incremento terá caminho de reversão sem apagar dados.
 
 O roteiro funcional está em
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`.
+
+## 29. Etapa H2C.2C — especificação funcional do catálogo
+
+Em **29/07/2026**, o catálogo foi analisado somente por artefatos de leitura.
+Nenhum banco, SQL, migration, importador, planilha, código funcional, API ou
+deploy foi acessado ou executado.
+
+A homologação futura deverá cobrir hierarquia, seleção encadeada, registros não
+classificados, normalização, duplicidades, situação, reclassificação, perfis e
+preservação de transações e relatórios antigos. Também deverá confirmar que
+nenhum importador legado é executado na inicialização.
+
+Os incrementos H2C.3C.1–H2C.3C.12 separam caracterização, proteção de
+importadores, estrutura, classificação assistida, backends, interface,
+pesquisa, situação, relatórios e homologação. Cada incremento deverá ser
+reversível sem apagar dados.
+
+O roteiro completo está em
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.

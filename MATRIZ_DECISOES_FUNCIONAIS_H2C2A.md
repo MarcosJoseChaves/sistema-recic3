@@ -308,3 +308,28 @@ Decisões detalhadas:
 
 Os detalhes, critérios de aceite e incrementos H2C.3B.1–H2C.3B.9 estão em
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`.
+
+## 15. Resultado da H2C.2C — catálogo
+
+A especificação confirmou que o catálogo atual ainda não possui o vínculo
+físico completo Grupo → Subgrupo → Produto. `grupos_atividade` não alimenta as
+listas atuais, `subgrupos` identifica o grupo por texto e
+`produtos_servicos` combina textos legados com `id_subgrupo` opcional.
+
+Decisões preliminares consolidadas:
+
+- preservar `produtos_servicos` como catálogo operacional durante a transição;
+- usar futuramente `grupos_atividade` como entidade oficial de grupo;
+- criar vínculos de forma aditiva, inicialmente opcionais;
+- representar registros antigos pendentes como “Não classificado”, sem criar
+  grupo técnico selecionável;
+- impedir novas classificações inválidas e não fundir nomes automaticamente;
+- substituir exclusão cotidiana por inativação e reativação;
+- tratar reclassificação como operação auditada, separada da edição comum;
+- não integrar automaticamente patrimônio, EPI, Fiscalização ou a tabela
+  adicional `produtos`;
+- classificar o importador antigo como incompatível e não autorizado.
+
+As decisões sobre Receita/Despesa, nomes repetidos, unidade, código, perfil
+administrador e destino da tabela `produtos` ainda dependem de validação humana.
+O detalhamento está em `ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.
