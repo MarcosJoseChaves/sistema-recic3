@@ -1068,3 +1068,33 @@ migration e isolamento físico do script continuam pendentes.
 A próxima etapa recomendada é **H2C.2G — Consolidação das Decisões Funcionais
 Pendentes de Patrimônio**. A aprovação da H2C.2F não declara o sistema pronto
 para produção.
+
+## 33. Etapa H2C.2G — decisões patrimoniais aprovadas
+
+Em **30/07/2026**, a H2C.2G reconstruiu o fluxo patrimonial somente a partir dos
+documentos e do código versionado. Nenhum banco, dump externo, `.env`, SQL,
+migration, API, arquivo real ou deploy foi acessado ou executado.
+
+A homologação futura deverá cobrir:
+
+- cadastro provisório e ativação com campos obrigatórios;
+- unicidade normalizada de número, placa, Renavam e série conforme a classe;
+- duplicidades antigas sem fusão ou exclusão automática;
+- separação de associação responsável, UVR de localização/uso e custodiante;
+- estados, inativação, baixa e reversão excepcional;
+- transferências concorrentes, aceite do destino e segregação;
+- bloqueios por operações ativas e alertas por histórico concluído;
+- preservação de referências financeiras, eventos, fotos e documentos;
+- permissões por ação e escopo, inclusive valor, relatório e exportação;
+- ausência de exclusão física depois da ativação;
+- equivalência entre leituras legadas e estruturas futuras;
+- baseline sem dados reais.
+
+As 30 decisões foram aprovadas em **30/07/2026**. Nenhuma implementação foi
+realizada. A exclusão física cotidiana permanece risco legado até a futura
+implementação; a baseline continua bloqueada pelas decisões técnicas restantes.
+
+A próxima etapa recomendada é **H2C.2H — Consolidação das Decisões Funcionais
+Pendentes do Catálogo**. A especificação
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md` não declara o patrimônio nem o
+sistema prontos para homologação online ou produção.

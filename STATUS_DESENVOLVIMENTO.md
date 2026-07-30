@@ -1333,3 +1333,33 @@ funcionais e técnicas remanescentes.
 
 Nenhum código, teste completo, SQL, migration, banco, dump externo, API, deploy,
 commit ou push foi executado.
+
+## Etapa H2C.2G — decisões patrimoniais aprovadas
+
+Em **30/07/2026**, foi concluída a consolidação documental do patrimônio:
+
+- comportamento atual reconstruído no código;
+- 38 de 38 colunas preservadas e classificadas;
+- identificação, propriedade, responsabilidade, localização, uso, conservação
+  e situação separados conceitualmente;
+- regras de número patrimonial, placa, Renavam, série e valores ausentes
+  aprovadas;
+- duplicidades tratadas por saneamento humano, sem fusão automática;
+- estados, transições, inativação, baixa e reversão excepcional aprovados;
+- atores, segregação, transferências e compartilhamento aprovados;
+- bloqueios, alertas, fotos, documentos, retenção, relatórios e baseline
+  aprovados funcionalmente;
+- 30 decisões funcionais aprovadas pelo usuário em **30/07/2026**.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`. Permanecem pendentes nomes e
+tipos técnicos, constraints, índices, catálogos, migrations, migração do legado,
+saneamento, permissões, fluxos, interfaces, armazenamento, relatórios e testes.
+A exclusão física cotidiana permanece risco legado até a implementação.
+
+A próxima etapa recomendada é **H2C.2H — Consolidação das Decisões Funcionais
+Pendentes do Catálogo**. A baseline continua bloqueada pelas decisões técnicas e
+funcionais remanescentes, e o sistema não está pronto para produção.
+
+Esta etapa alterou somente documentação. Não foram executados suíte completa,
+SQL, migration, banco, dump externo, `.env`, API, deploy, commit ou push.

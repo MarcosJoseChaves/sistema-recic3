@@ -1080,3 +1080,41 @@ envio, solicitados, vigentes antes da aplicação e efetivamente aplicados.
 A versão B não integra o estado desejado. Nenhum DDL, tabela, coluna, tipo, chave
 ou constraint foi criado nesta etapa. Os detalhes aprovados estão em
 `ESPECIFICACAO_FUNCIONAL_SOLICITACOES_ALTERACAO_H2C2F.md`.
+
+## Especificação funcional aprovada do patrimônio — H2C.2G
+
+A H2C.2G confirmou documentalmente que as 38 colunas atuais de `patrimonio`
+continuam preservadas e que nenhuma delas será removida na transição. O cadastro
+mistura hoje identificação, propriedade, responsabilidade, localização, uso,
+situação, conservação e indicadores operacionais. Somente `id` é obrigatório
+no schema; as demais colunas aceitam nulo, embora o formulário exija UVR,
+descrição, categoria e tipo.
+
+Foram mantidas como evidências do estado atual:
+
+- ausência de FK, UNIQUE, CHECK e índice explícito além da PK;
+- `uvr` textual usada na autorização por objeto;
+- `associacao`, responsáveis e operador armazenados como texto;
+- `status_bem` com quatro opções na interface, alterável como campo comum;
+- foto principal armazenada em Base64;
+- `transacoes_financeiras.id_patrimonio` opcional e sem FK;
+- exclusão física em rota própria e na aprovação de solicitação;
+- inexistência comprovada de estruturas próprias de transferência, custódia,
+  manutenção, abastecimento, documentos, fotos adicionais ou eventos.
+
+Em **30/07/2026**, foi aprovado o estado desejado:
+
+- preservar inicialmente as 38 colunas;
+- usar `status_bem` para situação administrativa;
+- separar condições operacionais;
+- tratar associação como responsável institucional e UVR como unidade de uso,
+  localização ou custódia;
+- manter identificador interno global e número patrimonial único por associação;
+- tornar placa e Renavam únicos quando aplicáveis e preenchidos;
+- condicionar a unicidade da série a fabricante e classificação/modelo;
+- manter histórico permanente;
+- limitar exclusão física a rascunho nunca ativado, enviado ou vinculado.
+
+Nenhum DDL foi criado. Nomes, tipos, constraints, índices, migrations e migração
+do legado permanecem pendentes. O detalhamento está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`.

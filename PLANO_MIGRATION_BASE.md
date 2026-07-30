@@ -224,8 +224,8 @@ estabelece as seguintes barreiras para o desenho futuro:
   evidência de ausência de uso e plano de reversão;
 - não transformar automaticamente as 27 tabelas adicionais em funcionalidades
   ou itens de menu;
-- aguardar a H2C.2G.1 para decidir formalmente o escopo dessas 27 tabelas na
-  baseline;
+- aguardar etapa funcional específica posterior para decidir formalmente o
+  escopo dessas 27 tabelas na baseline;
 - manter as colunas históricas de `associados`, `transacoes_financeiras` e
   `usuarios` enquanto sua finalidade é esclarecida;
 - preservar a versão A de `solicitacoes_alteracao`;
@@ -340,3 +340,36 @@ Não entrarão solicitações, mensagens, anexos, usuários, aprovações,
 justificativas, documentos ou dados históricos reais, nem conteúdo da versão B.
 Nomes, tipos, constraints, índices, compatibilidade dos registros antigos e DDL
 permanecem pendentes.
+
+## Decisões patrimoniais aprovadas na H2C.2G
+
+A H2C.2G não criou SQL nem autorizou migration. A futura baseline deverá
+preservar as 38 colunas atuais de `patrimonio` e poderá, depois do desenho
+técnico, conter estruturas vazias para:
+
+- patrimônio;
+- estados administrativos e condições operacionais;
+- eventos e histórico patrimonial;
+- transferências entre UVRs e, excepcionalmente, associações;
+- custódia, compartilhamentos e responsabilidades;
+- fotografias e documentos com metadados;
+- bloqueios, alertas, saneamento de duplicidades e reversões excepcionais.
+
+Poderão integrar como códigos estáveis: estados, condições, eventos, motivos de
+baixa, tipos de transferência, categorias de documento e fotografia e
+categorias de bloqueio e alerta.
+
+Não poderão integrar: bens e números reais, placas, Renavam, séries, valores,
+associações, UVRs, usuários, fotografias, documentos, transferências, baixas ou
+históricos reais.
+
+A migração futura deverá ser aditiva: preservar colunas e textos, caracterizar
+`status_bem`, classificar incompletos, detectar duplicidades sem fusão
+automática, mapear associação/UVR, criar marco histórico identificado, comparar
+leituras antigas e novas e retirar a exclusão física cotidiana apenas quando a
+compatibilidade estiver comprovada.
+
+Permanecem pendentes nomes técnicos, colunas novas, tipos, constraints, índices,
+catálogo técnico definitivo, migrations, migração do legado, detecção de
+duplicidades e implementação. O detalhamento funcional aprovado está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`.

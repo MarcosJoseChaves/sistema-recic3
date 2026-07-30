@@ -268,14 +268,13 @@ implantação.
 3. **H2C.2D — especificação do cadastro e vínculo de UVRs.**
 4. **H2C.2E — especificação de usuários e permissões.**
 5. **H2C.2F — consolidação do fluxo de solicitações.**
-6. **H2C.2G.1 — decisão de escopo dos módulos adicionais.**
-7. **H2C.2G.2 — planejamento da interface, menus e relatórios.**
-8. **H2C.2H — plano técnico de migrations por incremento.**
-9. **H2C.2I — plano de homologação e reversão por incremento.**
+6. **H2C.2G — consolidação das decisões patrimoniais (aprovada).**
+7. **H2C.2H — consolidação das decisões funcionais pendentes do catálogo.**
+8. **Etapas seguintes — escopo dos módulos adicionais, interface e relatórios.**
+9. **Plano técnico de migrations, homologação e reversão por incremento.**
 
-A subdivisão de H2C.2G evita misturar a decisão sobre módulos desconhecidos
-com a reforma visual do sistema. H2C.2H só deverá consolidar a baseline depois
-das decisões funcionais anteriores.
+O plano técnico da baseline só deverá ser consolidado depois das decisões
+funcionais restantes, sem misturar patrimônio, catálogo e outros módulos.
 
 ## 13. Critério de encerramento da H2C.2A
 
@@ -410,3 +409,27 @@ técnico final, migrations, eventos, interfaces, aplicação transacional,
 concorrência técnica, anexos, notificações, permissões, testes e isolamento
 físico do script legado. O detalhamento aprovado está em
 `ESPECIFICACAO_FUNCIONAL_SOLICITACOES_ALTERACAO_H2C2F.md`.
+
+## 19. Resultado aprovado da H2C.2G — patrimônio
+
+Em **30/07/2026**, o comportamento atual do patrimônio foi novamente confrontado
+com o código versionado e com as especificações H2C.2B, H2C.2D, H2C.2E e
+H2C.2F. Foram confirmadas as 38 colunas preservadas, a ausência de unicidade nos
+identificadores, a nulabilidade ampla, a exclusão física atual, o escopo textual
+por UVR e a referência financeira opcional sem chave estrangeira.
+
+As 30 decisões funcionais foram aprovadas em **30/07/2026**. Foram encerradas
+as decisões sobre número patrimonial e identificador interno, unicidade de
+placa/Renavam/série, valores ausentes, duplicidades, estados, inativação, baixa,
+cadastro, identificação crítica, segregação, transferências, compartilhamento,
+fotografias, documentos, bloqueios, alertas, reversão de baixa, exclusão física,
+valores, relatórios e conteúdo estrutural da baseline.
+
+Permanecem pendentes somente aspectos técnicos: nomes de tabelas e colunas,
+tipos, constraints, índices, catálogo técnico definitivo, migrations, migração
+dos registros atuais, detecção de duplicidades, implementação de permissões e
+fluxos, interfaces, armazenamento de arquivos, relatórios e testes.
+
+O detalhamento aprovado está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`. Não foram definidos SQL,
+tabelas, constraints ou migrations nesta etapa.
