@@ -324,3 +324,19 @@ O primeiro Administrador Global será criado por procedimento seguro separado.
 Nomes de tabelas, tipos, constraints, DDL e migration permanecem pendentes. A
 transição futura comparará o modelo antigo e o novo antes de retirar a
 dependência de `role` e `uvr_acesso`.
+
+## Decisões aprovadas da H2C.2F
+
+A H2C.2F não criou SQL nem autorizou migration. A baseline futura preservará a
+versão A de `solicitacoes_alteracao`; a versão B incompatível ficará fora.
+
+A baseline futura poderá conter estruturas vazias para solicitação principal,
+eventos, mensagens, quatro fotografias, tipos, estados, categorias de mensagem,
+níveis de risco, controle de aplicação e, quando tecnicamente aprovado, anexos.
+Poderão entrar como dados estruturais códigos de estados, eventos, categorias
+técnicas e ações aprovadas do fluxo.
+
+Não entrarão solicitações, mensagens, anexos, usuários, aprovações,
+justificativas, documentos ou dados históricos reais, nem conteúdo da versão B.
+Nomes, tipos, constraints, índices, compatibilidade dos registros antigos e DDL
+permanecem pendentes.

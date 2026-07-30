@@ -1059,3 +1059,24 @@ módulo e ação; escopos poderão ser global, associação, UVR ou objeto atrib
 Nenhuma tabela nova deve ser considerada existente: não foram definidos DDL,
 nomes técnicos, colunas, chaves ou tipos. O desenho técnico futuro seguirá
 `ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md`.
+
+## Especificação funcional de solicitações de alteração — H2C.2F
+
+A versão A permanece a referência oficial: nove colunas, JSONB para os valores
+solicitados, solicitante textual obrigatório, três estados utilizados e
+`observacoes_admin` sem uso localizado. Não há FK para usuário ou objeto,
+fotografia anterior, analisador, data de análise, evento ou controle de versão
+do objeto.
+
+O script da versão B diverge no formato do JSON, tamanho/nulabilidade do
+solicitante e campo de rejeição. Ele é legado incompatível e não representa
+tabela existente nem fonte de DDL autorizada.
+
+A versão A será preservada e evoluída aditivamente. O estado desejado separará
+aprovação e aplicação, preservará solicitações aplicadas, exigirá catálogo
+técnico de objetos/campos, histórico de eventos e quatro fotografias: dados no
+envio, solicitados, vigentes antes da aplicação e efetivamente aplicados.
+
+A versão B não integra o estado desejado. Nenhum DDL, tabela, coluna, tipo, chave
+ou constraint foi criado nesta etapa. Os detalhes aprovados estão em
+`ESPECIFICACAO_FUNCIONAL_SOLICITACOES_ALTERACAO_H2C2F.md`.

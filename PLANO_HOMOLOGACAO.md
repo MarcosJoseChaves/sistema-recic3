@@ -1047,3 +1047,24 @@ A próxima etapa recomendada é **H2C.2F — Especificação Final do Fluxo de
 Solicitações de Alteração**. A especificação aprovada
 `ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md` não declara o sistema
 pronto para produção.
+
+## 32. Etapa H2C.2F — especificação do fluxo de solicitações
+
+Em **30/07/2026**, o fluxo foi analisado somente em documentos, código
+versionado, template e script histórico. Nenhum banco, dump externo, SQL,
+migration, API ou deploy foi acessado ou executado.
+
+A homologação futura deverá caracterizar a versão A e testar allowlists,
+escopos, segregação, estados, devolução, rejeição, cancelamento, expiração,
+fotografias, concorrência, atomicidade, idempotência, falha de aplicação,
+mensagens, anexos, dados pessoais, visibilidade e auditoria.
+
+A versão B permanecerá bloqueada e fora da baseline. As 25 decisões funcionais
+foram aprovadas em **30/07/2026**, incluindo estados, transições, segregação,
+concorrência, quatro fotografias e aplicação atômica. Nenhuma implementação foi
+realizada; estruturas, eventos, interfaces, permissões, anexos, notificações,
+migration e isolamento físico do script continuam pendentes.
+
+A próxima etapa recomendada é **H2C.2G — Consolidação das Decisões Funcionais
+Pendentes de Patrimônio**. A aprovação da H2C.2F não declara o sistema pronto
+para produção.

@@ -1300,3 +1300,36 @@ funcionais e técnicas.
 
 Nenhum código, teste completo, SQL, migration, banco, dump externo, API, deploy,
 commit ou push foi executado.
+
+## Etapa H2C.2F — fluxo de solicitações aprovado
+
+Em **30/07/2026**, foi elaborada a especificação funcional final do fluxo:
+
+- versão A e suas nove colunas documentadas;
+- rotas de criação, lista, detalhe, aprovação, rejeição e aplicação inventariadas;
+- cinco objetos atuais e tipos `EDICAO`/`EXCLUSAO` confirmados;
+- versão B classificada como legado incompatível e não executável;
+- modelos simples, com eventos e configurável comparados;
+- atores, segregação, estados, transições e concorrência avaliados;
+- impactos em dados pessoais, UVR, permissões, patrimônio, financeiro, catálogo
+  e Fiscalização registrados;
+- baseline, migração gradual, auditoria, mensagens e anexos planejados;
+- 25 decisões funcionais aprovadas pelo usuário.
+
+A versão A será preservada e evoluída aditivamente com eventos, fotografias,
+segregação, concorrência e aplicação atômica. A versão B permanece legado
+incompatível e não autorizado. Nenhuma decisão está implementada e nenhuma
+estrutura foi criada.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_SOLICITACOES_ALTERACAO_H2C2F.md`. Permanecem pendentes
+nomes, tipos, constraints, catálogo técnico, migrations, eventos, interfaces,
+aplicação transacional, concorrência técnica, anexos, notificações, permissões,
+testes e isolamento físico do script legado.
+
+A próxima etapa recomendada é **H2C.2G — Consolidação das Decisões Funcionais
+Pendentes de Patrimônio**. A baseline continua bloqueada por decisões
+funcionais e técnicas remanescentes.
+
+Nenhum código, teste completo, SQL, migration, banco, dump externo, API, deploy,
+commit ou push foi executado.

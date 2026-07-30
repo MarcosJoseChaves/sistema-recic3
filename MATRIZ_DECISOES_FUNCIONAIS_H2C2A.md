@@ -384,3 +384,29 @@ catálogo final de códigos, migration, transição de `role` e `uvr_acesso`,
 decorators, helpers, interfaces, auditoria técnica, encerramento de sessões e
 testes. O detalhamento aprovado está em
 `ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md`.
+
+## 18. Resultado aprovado da H2C.2F — solicitações de alteração
+
+Em **30/07/2026**, a versão A de `solicitacoes_alteracao` foi confirmada como
+estrutura oficial atual. Ela recebe pedidos `EDICAO` e `EXCLUSAO` de associados,
+cadastros, contas correntes, transações e patrimônio, e usa somente os estados
+`PENDENTE`, `APROVADO` e `REJEITADO`.
+
+A versão B de `criar_tabela_solicitacoes.py` foi classificada como **LEGADO
+INCOMPATÍVEL — NÃO AUTORIZADO PARA EXECUÇÃO**. Ela não orientará a baseline e
+deverá ser isolada em etapa futura.
+
+As 25 decisões foram aprovadas em **30/07/2026**. A versão A será preservada e
+evoluída com eventos, quatro fotografias, tipos controlados, justificativas,
+concorrência, aplicação atômica e falha registrada. Foram aprovados rascunho,
+devolução, cancelamento antes da aprovação, expiração por categoria, segregação
+de funções, dupla aprovação somente para alto risco, mensagens com visibilidade
+separada e anexos futuros por tipo.
+
+Também foram concluídas as decisões sobre usuários, UVR, associação, acesso,
+financeiro, patrimônio, catálogo e exclusão dos fluxos específicos de
+Fiscalização. Permanecem pendentes somente nomes, tipos, constraints, catálogo
+técnico final, migrations, eventos, interfaces, aplicação transacional,
+concorrência técnica, anexos, notificações, permissões, testes e isolamento
+físico do script legado. O detalhamento aprovado está em
+`ESPECIFICACAO_FUNCIONAL_SOLICITACOES_ALTERACAO_H2C2F.md`.
