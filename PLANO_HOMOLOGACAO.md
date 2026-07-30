@@ -1001,3 +1001,22 @@ reversível sem apagar dados.
 
 O roteiro completo está em
 `ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.
+
+## 30. Etapa H2C.2D — especificação funcional de UVRs
+
+Em **30/07/2026**, o uso de UVR e associação foi analisado somente nos
+documentos e no código versionado. Nenhum banco, dump externo, SQL, migration,
+API ou deploy foi acessado ou executado.
+
+A homologação futura deverá comparar autorização textual e por identificador,
+usuários sem vínculo, múltiplas UVRs, aliases seguros, valores desconhecidos,
+inativação, transferência, relatórios e acesso direto a objetos. Divergências
+deverão falhar fechadas.
+
+As vinte decisões funcionais foram aprovadas em **30/07/2026**. Associação e
+UVR serão entidades distintas; usuários terão vínculos explícitos; textos
+desconhecidos falharão fechados; e a baseline não conterá dados reais.
+
+A homologação ainda depende da futura implementação técnica. O roteiro aprovado
+está em `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`. Essa aprovação não declara o
+sistema pronto para produção.

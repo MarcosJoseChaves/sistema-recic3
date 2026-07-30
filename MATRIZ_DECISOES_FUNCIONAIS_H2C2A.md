@@ -333,3 +333,28 @@ Decisões preliminares consolidadas:
 As decisões sobre Receita/Despesa, nomes repetidos, unidade, código, perfil
 administrador e destino da tabela `produtos` ainda dependem de validação humana.
 O detalhamento está em `ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.
+
+## 16. Resultado aprovado da H2C.2D — UVRs e associações
+
+A especificação confirmou que UVR é hoje um texto usado como escopo do usuário,
+propriedade de registros, filtro e informação de relatório. Associação é outro
+texto, armazenado separadamente, mas sem cadastro central e sem participação
+direta na autorização.
+
+Foram comparados três modelos e foi aprovado o modelo com associação e UVR como
+entidades distintas, identificadores próprios, aliases, vínculos auditáveis e
+migração gradual. Uma associação poderá possuir várias UVRs; usuário comum
+poderá possuir várias UVRs com uma principal; e poderão existir administrador
+global e administrador limitado a associação.
+
+Também foram aprovados: falha fechada para texto desconhecido, preservação
+histórica, transferência auditada, conta corrente pertencente à associação,
+separação entre responsabilidade institucional e unidade de uso do patrimônio,
+Fiscalização de Contratos global, baseline sem dados reais e bloqueio da
+inativação enquanto houver usuários ou operações ativas.
+
+Permanecem pendentes somente desenho SQL, nomes e tipos finais, constraints,
+migration dos textos, implementação de permissões, auditoria e interfaces.
+
+A especificação e as perguntas de decisão estão em
+`ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.

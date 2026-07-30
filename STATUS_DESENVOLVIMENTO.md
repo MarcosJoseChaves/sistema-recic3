@@ -1236,3 +1236,36 @@ adaptado automaticamente.
 Esta etapa foi exclusivamente documental. Nenhum código funcional, teste, SQL,
 migration, banco, Cloudinary, API, importador, deploy, commit ou push foi
 executado.
+
+## Etapa H2C.2D — especificação funcional de UVRs aprovada
+
+Em **30/07/2026**, foi elaborada a especificação funcional do cadastro e vínculo
+de UVRs e associações:
+
+- uso textual atual em usuários, cadastros e operações inventariado;
+- helpers, rotas, filtros, relatórios, formulários e testes analisados;
+- diferença entre UVR e associação mantida como decisão funcional;
+- modelos de texto controlado, cadastro central e entidades distintas comparados;
+- cadastro conceitual, aliases, inativação e migração gradual propostos;
+- impactos em usuários, autorização, patrimônio, financeiro e Fiscalização
+  documentados;
+- vinte perguntas objetivas preparadas para validação do usuário;
+- dados reais e usuário administrador mantidos fora da futura baseline.
+
+As vinte decisões funcionais foram aprovadas em **30/07/2026**. Associação e
+UVR serão entidades distintas; uma associação poderá possuir várias UVRs;
+usuários poderão ter várias UVRs com uma principal; administradores poderão ser
+globais ou limitados a associação; e textos desconhecidos não concederão acesso.
+
+Conta corrente pertencerá à associação, patrimônio separará responsabilidade
+institucional da unidade de uso e Fiscalização de Contratos permanecerá global.
+A baseline nascerá sem associações, UVRs, aliases, usuários ou credenciais
+reais.
+
+O documento principal é `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`. A próxima etapa
+é **H2C.2E — Especificação Funcional de Perfis e Permissões**. Permanecem
+pendentes o desenho SQL, migration, migração dos textos, implementação das
+permissões, auditoria, interfaces e outras decisões da migration-base.
+
+Nenhum código funcional, teste, SQL, migration, banco, dump externo, API,
+deploy, commit ou push foi executado.

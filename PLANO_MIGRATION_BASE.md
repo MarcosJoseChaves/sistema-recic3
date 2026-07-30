@@ -280,3 +280,30 @@ baseline futura deverá:
 
 O SQL definitivo dependerá dos testes de caracterização H2C.3C.1 e das decisões
 humanas registradas em `ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.
+
+## Decisões funcionais aprovadas na H2C.2D
+
+A H2C.2D não criou SQL nem autorizou migration. A futura baseline deverá prever
+estruturas vazias, ainda sem nomes ou tipos definitivos, para:
+
+- associações;
+- UVRs vinculadas à entidade responsável;
+- aliases;
+- vínculos de usuários com uma ou mais UVRs;
+- indicação de UVR principal;
+- escopos de administrador global ou limitado a associação;
+- histórico ou auditoria, conforme desenho técnico posterior.
+
+Não entrarão na baseline associações reais, UVRs reais, aliases reais, usuário
+administrador ou credenciais. A carga inicial será separada. A migração dos
+textos será posterior e controlada, e o fallback textual nunca concederá acesso
+global.
+
+Conta corrente pertencerá à associação; UVR poderá ser dimensão gerencial.
+Patrimônio separará responsabilidade institucional da unidade de uso.
+Fiscalização de Contratos permanecerá global, sem dependência obrigatória de
+UVR.
+
+O desenho SQL, nomes, tipos, constraints e auditoria permanecem tecnicamente
+pendentes. As decisões funcionais aprovadas estão em
+`ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.

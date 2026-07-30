@@ -1016,3 +1016,24 @@ módulo Fiscalização.
 
 Os detalhes, campos, riscos e incrementos H2C.3C.1–H2C.3C.12 estão em
 `ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.
+
+## Especificação funcional de UVRs — H2C.2D
+
+A leitura do código confirmou que não existe entidade central de UVR ou
+associação. `usuarios.uvr_acesso` fornece o escopo textual e as colunas `uvr`
+dos registros são usadas para autorização, pesquisa e relatórios. As colunas
+`associacao` são textuais e não participam diretamente dos helpers de
+autorização.
+
+Cadastros, associados, contas correntes, transações, fluxo de caixa, denúncias e
+patrimônio armazenam UVR e associação. A interface contém opções e pares fixos,
+sem validação institucional no servidor. Nenhuma FK ou cardinalidade entre os
+conceitos foi confirmada.
+
+O modelo desejado foi aprovado: associação e UVR serão entidades distintas; uma
+associação poderá possuir várias UVRs; usuários terão vínculos explícitos e uma
+UVR principal; e os textos atuais serão legado transitório.
+
+A inexistência atual de tabela `uvr` não é erro do dump. As novas estruturas
+serão desenhadas em migration futura, sem inventar DDL nesta especificação. Os
+detalhes aprovados estão em `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.
