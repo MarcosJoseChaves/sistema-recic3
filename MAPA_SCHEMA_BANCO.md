@@ -1118,3 +1118,26 @@ Em **30/07/2026**, foi aprovado o estado desejado:
 Nenhum DDL foi criado. Nomes, tipos, constraints, índices, migrations e migração
 do legado permanecem pendentes. O detalhamento está em
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`.
+
+## Consolidação funcional aprovada do catálogo — H2C.2H
+
+A H2C.2H confirmou, apenas por fontes versionadas, que o catálogo atual continua
+híbrido: `grupos_atividade` não possui FK para `subgrupos`; `subgrupos` usa
+`atividade_pai` textual; `produtos_servicos` tem textos legados e somente
+`id_subgrupo` opcional; `produtos` permanece uma estrutura adicional sem uso
+operacional localizado.
+
+Transações guardam a descrição e unidade, não `produto_id`, e relatórios ainda
+associam o catálogo pelo texto. As APIs administrativas atuais incluem exclusão
+física e não oferecem estado ou histórico. Esses fatos descrevem o legado e não
+autorizam alteração.
+
+O estado desejado aprovado separa natureza financeira da árvore Grupo →
+Subgrupo → Produto/Serviço. Cada entidade terá ID interno e código funcional;
+Produto/Serviço terá tipo, descrição e unidade padrão; aliases serão estruturas
+próprias; estados serão separados da classificação; e transações preservarão a
+fotografia histórica.
+
+`produtos` permanece legado fora da baseline inicial e os textos atuais serão
+preservados durante a transição. Nenhuma coluna, tabela, tipo, constraint ou DDL
+foi criado nesta etapa.

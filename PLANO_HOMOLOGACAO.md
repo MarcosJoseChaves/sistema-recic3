@@ -1098,3 +1098,27 @@ A próxima etapa recomendada é **H2C.2H — Consolidação das Decisões Funcio
 Pendentes do Catálogo**. A especificação
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md` não declara o patrimônio nem o
 sistema prontos para homologação online ou produção.
+
+## 34. Etapa H2C.2H — decisões do catálogo aprovadas
+
+Em **30/07/2026**, a análise documental confirmou a dependência atual de listas
+fixas, textos de grupo/subgrupo e associação de transações ao produto pelo nome.
+Também confirmou exclusões físicas legadas e ausência de estados, histórico,
+unidades centrais e hierarquia relacional completa.
+
+A homologação futura do catálogo deverá testar hierarquia, natureza separada,
+normalização, duplicidades, códigos, unidades, estados, inativação sem cascata,
+reativação, substituição, reclassificação, fotografia histórica, aliases,
+itens não classificados, concorrência, permissões, relatórios e convivência
+temporária entre texto e ID.
+
+As 35 escolhas do documento
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2H.md` foram aprovadas em **30/07/2026**.
+Nenhuma foi implementada. A dependência textual continua sendo risco até a
+migração, e `produtos` permanece legado pendente de auditoria.
+
+Nenhum banco, dump, CSV, importador, SQL, migration ou deploy foi acessado ou
+executado. A baseline ainda depende das decisões e desenhos técnicos restantes;
+esta etapa não declara o sistema pronto para homologação online ou produção. A
+próxima etapa recomendada é **H2C.2I — Delimitação Funcional das Tabelas
+Adicionais do Banco**.

@@ -433,3 +433,28 @@ fluxos, interfaces, armazenamento de arquivos, relatórios e testes.
 O detalhamento aprovado está em
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`. Não foram definidos SQL,
 tabelas, constraints ou migrations nesta etapa.
+
+## Etapa H2C.2H — decisões do catálogo aprovadas
+
+Em **30/07/2026**, o comportamento do catálogo foi reconstruído e as decisões
+remanescentes foram organizadas em 35 perguntas no documento
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2H.md`.
+
+Continuam aprovadas as diretrizes da H2C.2C: preservar dados e textos, adotar
+ligações por identificador gradualmente, tratar “Não classificado” como condição
+transitória, manter administração central, receber sugestões de UVRs pelo fluxo,
+não executar importadores antigos e não integrar automaticamente `produtos`.
+
+As 35 decisões foram aprovadas em **30/07/2026**: natureza separada; hierarquia
+Grupo → Subgrupo → Produto/Serviço; tipos `PRODUTO`/`SERVICO`; códigos estáveis;
+unicidade normalizada; aliases; descrição e unidade obrigatórias; quatro
+estados; inativação sem cascata; reclassificação formal; fotografia histórica;
+administração central; sugestões por associação/UVR; legado e CSVs isolados;
+importação futura controlada; exclusão restrita; relatórios mínimos; baseline
+sem catálogo real; e dupla aprovação para reclassificação de alto impacto.
+
+Permanecem pendentes somente aspectos técnicos: nomes de tabelas e colunas,
+formatos de códigos, tipos, constraints, índices, catálogo definitivo de
+unidades e catálogo real, migrations, mapeamento e saneamento, aliases reais,
+duplicidades, integração financeira, permissões, interfaces, relatórios,
+importadores e testes. Nenhuma implementação foi feita.

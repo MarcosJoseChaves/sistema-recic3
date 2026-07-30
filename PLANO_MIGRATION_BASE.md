@@ -373,3 +373,22 @@ Permanecem pendentes nomes técnicos, colunas novas, tipos, constraints, índice
 catálogo técnico definitivo, migrations, migração do legado, detecção de
 duplicidades e implementação. O detalhamento funcional aprovado está em
 `ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`.
+
+## Decisões funcionais aprovadas da H2C.2H — catálogo
+
+A H2C.2H não criou SQL nem autorizou migration. As 35 decisões funcionais foram
+aprovadas em 30/07/2026. A baseline futura poderá conter:
+
+- estruturas vazias para naturezas, grupos, subgrupos, produtos/serviços,
+  unidades, aliases, estados, históricos, reclassificações, substituições e
+  fotografias históricas nas transações;
+- códigos estáveis `RECEITA`, `DESPESA`, `PRODUTO`, `SERVICO`, estados, eventos,
+  ações técnicas e regras estruturais aprovadas;
+- transição aditiva com textos e identificadores coexistindo;
+- fotografia da classificação nas transações e comparação de relatórios.
+
+Não poderão integrar a baseline: catálogo real, dados dos CSVs, aliases reais,
+transações, associações, UVRs, usuários ou conteúdo da tabela legado
+`produtos`. Essa tabela permanece fora da baseline nova até auditoria adicional.
+Permanecem pendentes os nomes e tipos técnicos finais, constraints, índices,
+migrations e catálogo real.

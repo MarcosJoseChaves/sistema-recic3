@@ -1363,3 +1363,33 @@ funcionais remanescentes, e o sistema não está pronto para produção.
 
 Esta etapa alterou somente documentação. Não foram executados suíte completa,
 SQL, migration, banco, dump externo, `.env`, API, deploy, commit ou push.
+
+## Etapa H2C.2H — consolidação funcional do catálogo aprovada
+
+Em **30/07/2026**, foi concluída a análise documental das decisões pendentes de
+grupos, subgrupos e produtos/serviços:
+
+- comportamento atual, quatro tabelas e dependências financeiras inventariados;
+- natureza financeira diferenciada da hierarquia do catálogo;
+- alternativas de códigos, nomes, unidades, unicidade e normalização avaliadas;
+- estados, inativação, reativação, reclassificação e fotografia histórica
+  especificados como propostas;
+- tratamento de não classificados, aliases, `produtos`, CSVs e importadores
+  delimitado;
+- atores, segregação, exclusão física, relatórios e baseline avaliados;
+- 35 perguntas objetivas preparadas para decisão humana.
+
+As 35 decisões foram aprovadas integralmente em **30/07/2026**. O modelo separa
+natureza financeira da hierarquia Grupo → Subgrupo → Produto/Serviço, estabelece
+tipos, códigos, descrição, unidades, estados, inativação sem cascata,
+reclassificação formal, fotografia histórica, gestão central e dupla aprovação
+para alto impacto.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2H.md`. Permanecem pendentes somente
+detalhes e implementação técnica. Não houve alteração de código, banco, dump,
+SQL, migration, CSV, importador, API ou deploy. A suíte completa de 673 testes
+não foi repetida porque a alteração é exclusivamente documental.
+
+A próxima etapa recomendada é **H2C.2I — Delimitação Funcional das Tabelas
+Adicionais do Banco**. O sistema não está declarado pronto para produção.
