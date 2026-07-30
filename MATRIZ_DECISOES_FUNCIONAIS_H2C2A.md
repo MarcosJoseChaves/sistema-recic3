@@ -458,3 +458,25 @@ formatos de códigos, tipos, constraints, índices, catálogo definitivo de
 unidades e catálogo real, migrations, mapeamento e saneamento, aliases reais,
 duplicidades, integração financeira, permissões, interfaces, relatórios,
 importadores e testes. Nenhuma implementação foi feita.
+
+## Etapa H2C.2I — delimitação das tabelas adicionais aprovada
+
+A H2C.2I abriu a análise documental de seis domínios e 27 tabelas:
+
+- auditoria funcional (6);
+- cadastro de pessoa física (1);
+- documentos e entregas (5);
+- EPI (8);
+- Ouvidoria (6);
+- `produtos` legado (1).
+
+As 40 decisões foram aprovadas em **30/07/2026**. Foi adotada baseline nuclear;
+auditoria funcional, documentos/entregas e EPI foram delimitados como módulos
+opcionais futuros; Ouvidoria, pessoa mestre e estruturas ambíguas ficaram fora
+do núcleo ou adiadas. As 27 tabelas serão preservadas no banco atual e nenhuma
+será reproduzida automaticamente ou removida.
+
+Permanecem pendentes somente desenho de substitutas, nomes, colunas, tipos,
+constraints, índices, migrations opcionais, migração de dados, arquivamento,
+somente leitura, rotas, permissões, interfaces, testes e homologação. A decisão
+sobre `produtos` permanece: legado fora da baseline e sem integração automática.

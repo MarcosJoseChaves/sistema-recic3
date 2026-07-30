@@ -392,3 +392,22 @@ transações, associações, UVRs, usuários ou conteúdo da tabela legado
 `produtos`. Essa tabela permanece fora da baseline nova até auditoria adicional.
 Permanecem pendentes os nomes e tipos técnicos finais, constraints, índices,
 migrations e catálogo real.
+
+## H2C.2I — estratégia de baseline nuclear aprovada
+
+As 27 tabelas adicionais não entrarão automaticamente na baseline. Foi aprovado
+separar:
+
+- núcleo obrigatório;
+- módulos opcionais, depois de especificação e com migrations próprias;
+- legado preservado no banco atual e ausente de instalações novas.
+
+Módulos opcionais terão migrations independentes e não serão necessários para
+inicializar o núcleo. Dados reais não entrarão em migrations estruturais. O
+banco atual terá plano separado; suas tabelas serão preservadas e `produtos`
+continuará fora.
+
+A baseline é exclusiva para PostgreSQL vazio e deverá parar antes do primeiro
+DDL ao detectar tabelas anteriores do sistema. `IF NOT EXISTS` não será usado
+para esconder divergências e nenhuma tabela será removida durante a criação da
+baseline. Nenhum DDL foi definido nesta etapa.

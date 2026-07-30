@@ -1141,3 +1141,29 @@ fotografia histórica.
 `produtos` permanece legado fora da baseline inicial e os textos atuais serão
 preservados durante a transição. Nenhuma coluna, tabela, tipo, constraint ou DDL
 foi criado nesta etapa.
+
+## Delimitação aprovada das 27 tabelas adicionais — H2C.2I
+
+A pesquisa estática não localizou SQL operacional, interface, teste ou migration
+para nenhuma das 27 tabelas adicionais. A estrutura e as relações continuam
+comprovadas pelo inventário do schema; ausência no código não comprova
+obsolescência.
+
+| Domínio | Tabelas | Classificação aprovada | Destino | Confiança/risco |
+|---|---:|---|---|---|
+| Auditoria funcional | 6 | C/E/G | somente após especificação | média; histórico financeiro |
+| Pessoa física | 1 | F/G | decisão adiada | baixa; CPF e duplicidade |
+| Documentos/entregas | 5 | C/D/E | especificar ou substituir | média; arquivos e privacidade |
+| EPI | 8 | C/D/E/G | módulo opcional futuro | média; três catálogos e estoque |
+| Ouvidoria | 6 | C/E/G | fora do núcleo | média; manifestações sensíveis |
+| `produtos` | 1 | D | fora, decisão H2C.2H | alta |
+
+Nenhuma das 27 tabelas integra automaticamente a baseline nuclear e nenhuma está
+autorizada para remoção. Auditoria funcional é separada da trilha técnica;
+pessoa física permanece ambígua; documentos/entregas dependem de módulo próprio;
+EPI depende de redesenho; Ouvidoria fica fora do núcleo; e `produtos` continua
+legado.
+
+Estruturas substitutas deverão preservar referências antigas. Nenhuma alteração
+física, DDL ou modo somente leitura foi executado. A matriz individual está
+em `ESPECIFICACAO_FUNCIONAL_TABELAS_ADICIONAIS_H2C2I.md`.

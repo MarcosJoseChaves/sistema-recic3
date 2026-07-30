@@ -1122,3 +1122,18 @@ executado. A baseline ainda depende das decisões e desenhos técnicos restantes
 esta etapa não declara o sistema pronto para homologação online ou produção. A
 próxima etapa recomendada é **H2C.2I — Delimitação Funcional das Tabelas
 Adicionais do Banco**.
+
+## 35. Etapa H2C.2I — tabelas adicionais aprovadas funcionalmente
+
+A H2C.2I classificou individualmente 27 tabelas e aprovou 40 decisões em
+**30/07/2026**. Foi adotada a baseline nuclear; auditoria,
+documentos/entregas e EPI foram delimitados como módulos opcionais; Ouvidoria,
+pessoa mestre e legado ficaram fora do núcleo ou adiados. Nenhuma tabela foi
+autorizada para remoção.
+
+Uma homologação futura deverá tratar cada módulo opcional separadamente, com
+permissões, escopos, privacidade, retenção, migração e testes próprios. Nenhum
+código, banco, dump, SQL, migration, importador ou dado real foi alterado ou
+acessado. A baseline técnica não está concluída e o sistema não está declarado
+pronto para produção. A próxima etapa é **H2C.2J — Consolidação das Colunas
+Adicionais e do Escopo Final da Baseline**.

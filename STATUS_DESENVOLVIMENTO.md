@@ -1393,3 +1393,29 @@ não foi repetida porque a alteração é exclusivamente documental.
 
 A próxima etapa recomendada é **H2C.2I — Delimitação Funcional das Tabelas
 Adicionais do Banco**. O sistema não está declarado pronto para produção.
+
+## Etapa H2C.2I — delimitação das tabelas adicionais aprovada
+
+Em **30/07/2026**, foi aberto o inventário documental das 27 tabelas adicionais,
+agrupadas em auditoria, pessoa física, documentos/entregas, EPI, Ouvidoria e
+`produtos` legado.
+
+Nenhuma possui uso operacional localizado no repositório, mas isso não autoriza
+considerá-la órfã ou removê-la. Nenhuma foi aprovada para a baseline; nenhuma
+foi autorizada para exclusão. `produtos` continua fora da baseline conforme a
+H2C.2H.
+
+As 40 decisões foram aprovadas em **30/07/2026** e as 27 tabelas receberam
+classificação individual. A baseline nuclear foi adotada; auditoria funcional,
+documentos/entregas e EPI foram delimitados como módulos opcionais; Ouvidoria,
+cadastro mestre e legados ficaram fora do núcleo ou adiados. Nenhuma tabela foi
+autorizada para remoção.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_TABELAS_ADICIONAIS_H2C2I.md`. A baseline técnica,
+migrations opcionais, substitutas, migração, somente leitura, arquivamento,
+permissões, interfaces e testes permanecem pendentes. Não houve alteração de
+código, banco, dump, SQL, migration, CSV, importador, API ou deploy.
+
+A próxima etapa recomendada é **H2C.2J — Consolidação das Colunas Adicionais e
+do Escopo Final da Baseline**. O sistema não está pronto para produção.
