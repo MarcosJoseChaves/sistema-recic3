@@ -1020,3 +1020,30 @@ desconhecidos falharão fechados; e a baseline não conterá dados reais.
 A homologação ainda depende da futura implementação técnica. O roteiro aprovado
 está em `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`. Essa aprovação não declara o
 sistema pronto para produção.
+
+## 31. Etapa H2C.2E — especificação de perfis, permissões e escopos
+
+Em **30/07/2026**, a autorização atual foi analisada somente em documentos e
+código versionado. Nenhum banco, dump externo, SQL, migration, API ou deploy foi
+acessado ou executado.
+
+A homologação futura deverá testar negação por padrão, usuário inativo,
+concessões globais explícitas, associação e UVRs ativas, múltiplos perfis,
+perfis diferentes por escopo, expiração e revogação, proteção do último
+administrador, autoelevação, autorização por objeto, HTML/JSON, exportações,
+downloads e auditoria.
+
+Basic Auth continuará sendo apenas a barreira externa da homologação; não
+substituirá login, permissão, escopo ou autorização do objeto. As 105 rotas de
+Fiscalização permanecem administrativas até uma implementação futura.
+
+As 25 decisões funcionais e o modelo híbrido foram aprovados em
+**30/07/2026**. Nenhuma implementação foi realizada: decorators, helpers,
+interfaces, auditoria técnica, encerramento de sessões, tabelas e migration
+continuam pendentes. A baseline também permanece bloqueada pelas demais
+decisões funcionais e técnicas.
+
+A próxima etapa recomendada é **H2C.2F — Especificação Final do Fluxo de
+Solicitações de Alteração**. A especificação aprovada
+`ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md` não declara o sistema
+pronto para produção.

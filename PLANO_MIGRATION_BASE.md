@@ -307,3 +307,20 @@ UVR.
 O desenho SQL, nomes, tipos, constraints e auditoria permanecem tecnicamente
 pendentes. As decisões funcionais aprovadas estão em
 `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.
+
+## Decisões aprovadas da H2C.2E
+
+A H2C.2E não criou SQL nem autorizou migration. Foi aprovado que a baseline
+futura poderá conter estruturas vazias para perfis, permissões, módulos, ações,
+relações entre perfis e permissões, vínculos entre usuários, perfis e escopos,
+delegações por módulo e auditoria das alterações de acesso.
+
+Poderão existir como dados estruturais estáveis códigos técnicos de módulos e
+ações, permissões estruturais e perfis institucionais protegidos. Não entrarão
+na baseline usuários reais, e-mails, senhas, associações ou UVRs reais,
+atribuições ou vínculos pessoais, tokens ou credenciais.
+
+O primeiro Administrador Global será criado por procedimento seguro separado.
+Nomes de tabelas, tipos, constraints, DDL e migration permanecem pendentes. A
+transição futura comparará o modelo antigo e o novo antes de retirar a
+dependência de `role` e `uvr_acesso`.

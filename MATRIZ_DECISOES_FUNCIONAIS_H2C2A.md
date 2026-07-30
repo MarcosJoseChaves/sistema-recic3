@@ -358,3 +358,29 @@ migration dos textos, implementação de permissões, auditoria e interfaces.
 
 A especificação e as perguntas de decisão estão em
 `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.
+
+## 17. Resultado aprovado da H2C.2E — perfis, permissões e escopos
+
+Em **30/07/2026**, o modelo atual de autorização foi inventariado. O código
+versionado reconhece os valores textuais `admin` e `user`, usa
+`usuarios.uvr_acesso` como escopo legado de uma UVR e mantém as 105 rotas
+funcionais de Fiscalização protegidas como administrativas.
+
+As 25 decisões foram aprovadas em **30/07/2026**. Foi escolhido o modelo
+híbrido, com perfis institucionais protegidos, permissões técnicas estáveis,
+vários perfis por usuário e concessões vinculadas a escopos. Foram aprovados os
+perfis gerais e especializados, administração global sem atos de negócio
+automáticos, administração limitada à associação, gestão operacional de UVR,
+permissões específicas para financeiro, patrimônio, dados pessoais, catálogo e
+Fiscalização, proteção do último Administrador Global e futura recuperação de
+senha segura.
+
+Consulta, exportação, relatório e download serão permissões distintas.
+Alterações críticas exigirão justificativa. Delegações por módulo terão ação,
+escopo, situação e validade explícitos.
+
+Permanecem pendentes somente desenho das tabelas, nomes, tipos, constraints,
+catálogo final de códigos, migration, transição de `role` e `uvr_acesso`,
+decorators, helpers, interfaces, auditoria técnica, encerramento de sessões e
+testes. O detalhamento aprovado está em
+`ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md`.

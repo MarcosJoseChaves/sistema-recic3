@@ -1037,3 +1037,25 @@ UVR principal; e os textos atuais serão legado transitório.
 A inexistência atual de tabela `uvr` não é erro do dump. As novas estruturas
 serão desenhadas em migration futura, sem inventar DDL nesta especificação. Os
 detalhes aprovados estão em `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.
+
+## Especificação funcional de perfis e permissões — H2C.2E
+
+O schema atual representa autorização por `usuarios.role` e
+`usuarios.uvr_acesso`. O primeiro é texto livre e o segundo guarda uma única UVR
+como texto. Não há modelo formal confirmado para catálogo de permissões,
+vínculos de múltiplos perfis, associação, várias UVRs, vigência ou auditoria das
+concessões.
+
+O código versionado reconhece `admin` e `user`. Administrador recebe alcance
+global por verificações textuais; usuário comum depende da UVR textual e de
+helpers de autorização por objeto. Fiscalização permanece global e
+administrativa.
+
+A H2C.2E aprovou separar perfil, permissão e escopo. Usuários poderão possuir
+vários perfis, inclusive perfis distintos por escopo. Permissões identificarão
+módulo e ação; escopos poderão ser global, associação, UVR ou objeto atribuído.
+`role` e `uvr_acesso` serão estruturas legadas transitórias.
+
+Nenhuma tabela nova deve ser considerada existente: não foram definidos DDL,
+nomes técnicos, colunas, chaves ou tipos. O desenho técnico futuro seguirá
+`ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md`.

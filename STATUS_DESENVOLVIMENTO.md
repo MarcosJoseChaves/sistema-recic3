@@ -1269,3 +1269,34 @@ permissões, auditoria, interfaces e outras decisões da migration-base.
 
 Nenhum código funcional, teste, SQL, migration, banco, dump externo, API,
 deploy, commit ou push foi executado.
+
+## Etapa H2C.2E — especificação de perfis, permissões e escopos aprovada
+
+Em **30/07/2026**, foi elaborada a especificação funcional:
+
+- modelo atual com `admin`, `user` e UVR textual inventariado;
+- regras centrais, locais, legadas e de autorização por objeto registradas;
+- perfil, permissão e escopo separados conceitualmente;
+- modelos fixo, configurável e híbrido comparados;
+- perfis gerais e especializados, módulos, ações, escopos e conflitos definidos;
+- administradores, usuários operacionais e Fiscalização analisados;
+- ciclo de vida, auditoria, recuperação de senha e baseline documentados;
+- 25 decisões funcionais aprovadas pelo usuário.
+
+O modelo híbrido foi aprovado, com perfis institucionais protegidos, permissões
+técnicas estáveis, vários perfis por usuário e concessões vinculadas a escopos.
+As 105 rotas funcionais de Fiscalização continuam administrativas, pois nenhuma
+permissão foi implementada.
+
+O documento principal é
+`ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md`. Permanecem pendentes
+tabelas, nomes técnicos, tipos, constraints, catálogo final de códigos,
+migration, transição de `role` e `uvr_acesso`, decorators, helpers, interfaces,
+auditoria técnica, encerramento de sessões e testes.
+
+A próxima etapa recomendada é **H2C.2F — Especificação Final do Fluxo de
+Solicitações de Alteração**. A baseline continua bloqueada pelas demais decisões
+funcionais e técnicas.
+
+Nenhum código, teste completo, SQL, migration, banco, dump externo, API, deploy,
+commit ou push foi executado.
