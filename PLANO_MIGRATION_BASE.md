@@ -475,3 +475,27 @@ rateios e definição formal da estratégia `fc_*`. Os quatro bloqueadores imped
 a implementação até seu tratamento. A H2C.3C deverá tratar também os dez achados
 de prioridade alta. Nenhuma migration foi criada e testes PostgreSQL não foram
 executados.
+
+## H2C.3C — plano físico detalhado aprovado
+
+A H2C.3C foi aprovada documentalmente. O plano adota manifesto JSON versionado,
+SHA-256 minúsculo calculado sobre UTF-8 com finais LF normalizados, duas tabelas
+de controle (`schema_migrations` para sucessos imutáveis e
+`schema_migration_execucoes` para tentativas), preflight de banco vazio e
+advisory lock estável. O protocolo resolve conceitualmente a criação do próprio
+ledger: validar destino/manifesto e, na mesma transação, criar as duas tabelas e
+registrar a própria aplicação e execução; só então executar as demais migrations.
+Falha após rollback é registrada sanitizada em transação separada.
+
+A ordem proposta contém operações do executor, 13 blocos nucleares, execução
+literal das 001–011, escopo contratual, dados estruturais complementares e
+validação final. Dados indispensáveis entram com suas dependências; usuários e
+dados reais são proibidos. As 001–011 são a única fonte executável `fc_*`; não
+há snapshot concorrente.
+
+O preflight distingue banco novo, controlado e legado/desconhecido. Os quatro
+bloqueadores têm tratamento documental definido, mas continuam
+bloqueando até implementação e testes. Testes PostgreSQL reais permanecem
+obrigatórios. Nenhum manifesto real, migration, SQL, executor ou teste foi
+criado; as 24 decisões físicas foram aprovadas. A conferência final H2C.3D é
+obrigatória antes de qualquer arquivo executável.

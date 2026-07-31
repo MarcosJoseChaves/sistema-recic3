@@ -1469,3 +1469,24 @@ executados.
 Próxima etapa: **H2C.3C**, exclusivamente documental, para incorporar os ajustes
 aprovados ao desenho. A baseline continua sem autorização para implementação ou
 produção.
+
+## Etapa H2C.3C — especificação física aprovada documentalmente
+
+Em **31/07/2026**, foram aprovados documentalmente o catálogo físico final
+proposto e o plano detalhado das migrations. O parecer é **APTA PARA CONGELAMENTO
+DOCUMENTAL E CONFERÊNCIA FINAL PRÉ-IMPLEMENTAÇÃO**. A proposta contém 82 tabelas
+nucleares, 58 tabelas novas, 1.104 especificações de colunas, matrizes de
+constraints, índices e DELETE, além de ledger, execuções, manifesto, preflight,
+advisory lock, sequência planejada, dados estruturais e plano de testes.
+
+Os quatro bloqueadores e os 24 achados da H2C.3B possuem tratamento localizado;
+nenhum bloqueador foi implementado. As 23 tabelas `fc_*` continuam vinculadas
+exclusivamente às migrations históricas 001–011. As 24 decisões físicas foram
+aprovadas. O ledger de duas tabelas, autorregistro transacional, manifesto JSON,
+checksum UTF-8/LF, preflight em três situações e advisory lock foram consolidados.
+
+A aprovação permanece exclusivamente documental; nenhum SQL, migration, manifesto real,
+código, tabela, bootstrap ou teste PostgreSQL foi criado ou executado. Nenhum
+banco, dump, `.env`, dado real ou serviço externo foi acessado. Próxima etapa:
+**H2C.3D — Conferência Final Pré-Implementação**. A baseline continua sem
+autorização para implementação.

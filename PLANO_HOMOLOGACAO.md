@@ -1176,3 +1176,21 @@ Nenhum bloqueador foi implementado; nenhum código, migration, SQL, tabela ou
 banco foi alterado ou acessado, e testes PostgreSQL não foram executados. A
 próxima etapa autorizada é somente a H2C.3C. A baseline ainda não está pronta
 para implementação ou produção.
+
+## 39. Etapa H2C.3C — especificação física aprovada
+
+Foram aprovados documentalmente o desenho físico e o plano detalhado das
+migrations. A proposta cataloga 82 tabelas, 58 novas, 23 `fc_*`, 1.104 colunas,
+relações, constraints,
+índices, DELETE, ledger, histórico de execuções, manifesto, preflight, advisory
+lock, ordem e testes futuros. As migrations históricas 001–011 permanecem
+imutáveis e com fonte executável única.
+
+As 24 decisões físicas foram aprovadas; os quatro bloqueadores têm solução
+documentada, mas nenhum foi
+implementado. Não houve SQL, migration, manifesto real, código, tabela,
+bootstrap, teste PostgreSQL, acesso a banco/dump ou deploy. Próxima ação:
+executar a **H2C.3D — Conferência Final Pré-Implementação**, revendo tabelas,
+finalidades, colunas, nomes, tipos, FKs, ciclos, constraints, índices, DELETE,
+manifesto, ledger, hashes, ordem, dados estruturais, achados e testabilidade. A
+baseline não está pronta para implementação.

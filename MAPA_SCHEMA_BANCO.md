@@ -1243,3 +1243,29 @@ namespace comum de nomes/aliases, validação transacional de períodos e rateio
 uma estratégia executável única para `fc_*`. Nenhum DDL foi criado. Os 24
 achados e as 20 decisões aprovadas estão em `MATRIZ_AJUSTES_TECNICOS_H2C3B.md`.
 Nenhum ajuste foi implementado; a próxima etapa autorizada é somente a H2C.3C.
+
+## Especificação física aprovada — H2C.3C
+
+Em **31/07/2026**, foi aprovada documentalmente uma proposta fechada de **82
+tabelas nucleares** e **1.104 especificações de colunas**. O conjunto inclui 58
+tabelas novas, a forma futura de `usuarios` e as 23 tabelas `fc_*` preservadas.
+O catálogo separa controle técnico, autenticação, autorização, organizações,
+associados, documentos, catálogo, financeiro, patrimônio, solicitações,
+auditoria e Fiscalização.
+
+Tipos, nulabilidade, PKs, FKs, constraints, índices, DELETE, histórico,
+concorrência e compatibilidade foram localizados no desenho físico. IDs seguem o
+modelo híbrido; documentos usam metadado privado e vínculos específicos;
+alocações usam UVR e validação transacional; auditoria admite ator humano,
+técnico ou sistema. As 38 colunas patrimoniais atuais têm destino e risco
+documentados. As migrations 001–011 continuam sendo a única fonte executável
+das 23 `fc_*` e seus hashes foram calculados estaticamente.
+
+Não existe ciclo incontornável: autorização básica precede organizações;
+escopos vêm depois; documentos precedem vínculos; eventos seguem entidades. As
+24 decisões físicas foram aprovadas. Vínculos são fonte de verdade; fotografias
+reais são documentos privados; JSONB guarda apenas fotografia estruturada;
+alocações usam modo exclusivo. As sete estruturas patrimoniais serão
+reconferidas e simplificadas se alguma não tiver finalidade própria. Nenhum SQL,
+migration, manifesto, tabela, código ou teste PostgreSQL foi criado ou
+executado. Próxima etapa: H2C.3D.
