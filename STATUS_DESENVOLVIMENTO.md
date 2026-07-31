@@ -1490,3 +1490,20 @@ código, tabela, bootstrap ou teste PostgreSQL foi criado ou executado. Nenhum
 banco, dump, `.env`, dado real ou serviço externo foi acessado. Próxima etapa:
 **H2C.3D — Conferência Final Pré-Implementação**. A baseline continua sem
 autorização para implementação.
+
+## Etapa H2C.3D — conferência final aprovada documentalmente
+
+Em **31/07/2026**, foi concluída a conferência documental pré-implementação. O
+parecer final aprovado é **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**. Foram
+confirmadas 82 tabelas e 58 novas; após uma fusão, uma
+separação e ajuste de FKs, a contagem recomendada é 1.103 colunas.
+
+O hash UTF-8/LF da migration 001 precisa de correção documental; os outros dez
+hashes coincidem. As matrizes do núcleo precisam ser expandidas por coluna, FK,
+constraint, índice e DELETE. Os quatro bloqueadores continuam não implementados.
+Nenhuma nova decisão humana foi necessária.
+
+Nenhuma migration, SQL, manifesto real, código, tabela ou teste PostgreSQL foi
+criado ou executado; nenhum banco, dump, `.env`, dado real ou serviço externo
+foi acessado. Próxima etapa obrigatória: **H2C.3E — Correção e Completude da
+Especificação Física**, inicialmente documental.

@@ -1194,3 +1194,16 @@ executar a **H2C.3D — Conferência Final Pré-Implementação**, revendo tabel
 finalidades, colunas, nomes, tipos, FKs, ciclos, constraints, índices, DELETE,
 manifesto, ledger, hashes, ordem, dados estruturais, achados e testabilidade. A
 baseline não está pronta para implementação.
+
+## 40. Etapa H2C.3D — conferência final aprovada documentalmente
+
+A conferência crítica foi aprovada sem banco ou testes PostgreSQL. O parecer
+final é **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**: existem correções
+documentais necessárias no catálogo de colunas, matrizes, hash 001 e três
+estruturas físicas. O total final recomendado permanece em 82 tabelas/58 novas,
+mas passa a 1.103 colunas.
+
+Os quatro bloqueadores continuam não implementados. Nenhum SQL, migration,
+manifesto, executor, bootstrap, código, tabela ou deploy foi criado. Próxima
+ação: H2C.3E documental obrigatória. Nenhuma nova decisão humana é necessária. A baseline não
+está autorizada para implementação.

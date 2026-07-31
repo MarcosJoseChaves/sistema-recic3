@@ -499,3 +499,18 @@ bloqueando até implementação e testes. Testes PostgreSQL reais permanecem
 obrigatórios. Nenhum manifesto real, migration, SQL, executor ou teste foi
 criado; as 24 decisões físicas foram aprovadas. A conferência final H2C.3D é
 obrigatória antes de qualquer arquivo executável.
+
+## H2C.3D — conferência final aprovada documentalmente
+
+Ledger, autorregistro atômico, manifesto JSON, preflight em três classes e lock
+determinístico foram considerados implementáveis. A ordem permanece acíclica,
+mas só pode ser congelada após ajustar patrimônio, vínculos de solicitações e
+FKs de eventos do catálogo, além de expandir as matrizes nominais.
+
+O hash normalizado UTF-8/LF da 001 é
+`a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc`, diferente
+do valor H2C.3C calculado sobre bytes locais; 002–011 coincidem. Nenhuma migration
+foi alterada. Parecer aprovado: **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**. As
+lacunas de FKs, constraints, índices e DELETE deverão ser relacionadas
+individualmente a migration e teste. A H2C.3E é obrigatória antes de qualquer
+arquivo executável.

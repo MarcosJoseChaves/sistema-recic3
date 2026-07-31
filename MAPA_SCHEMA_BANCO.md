@@ -1269,3 +1269,20 @@ alocações usam modo exclusivo. As sete estruturas patrimoniais serão
 reconferidas e simplificadas se alguma não tiver finalidade própria. Nenhum SQL,
 migration, manifesto, tabela, código ou teste PostgreSQL foi criado ou
 executado. Próxima etapa: H2C.3D.
+
+## Conferência final pré-implementação — H2C.3D
+
+Em **31/07/2026**, a recontagem confirmou 82 tabelas, 58 novas e 23 `fc_*`, mas
+ajustou o total para **1.103 colunas**: fundir fotografias patrimoniais em
+documentos (−1 tabela/−8 colunas), separar solicitações de associação e UVR (+1
+tabela/+5 colunas) e dar três FKs exclusivas a eventos do catálogo (+2 colunas).
+
+Foram inferidas 82 PKs e 239 FKs. Nas FC, confirmaram-se 23 PKs, 84 FKs, 25
+UNIQUEs distintos, 103 CHECKs e 69 índices distintos. O núcleo ainda não possui
+matrizes nominais suficientes para contar/auditar constraints, índices e DELETE.
+O hash UTF-8/LF da migration 001 diverge do valor documentado; 002–011 coincidem.
+
+Parecer aprovado documentalmente: **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**. Não há ciclo
+incontornável, mas o catálogo de colunas e as matrizes precisam ser expandidos.
+Nenhum SQL, migration, código ou banco foi alterado. Nenhuma nova decisão humana
+foi identificada; a H2C.3E documental é obrigatória.
