@@ -1137,3 +1137,15 @@ código, banco, dump, SQL, migration, importador ou dado real foi alterado ou
 acessado. A baseline técnica não está concluída e o sistema não está declarado
 pronto para produção. A próxima etapa é **H2C.2J — Consolidação das Colunas
 Adicionais e do Escopo Final da Baseline**.
+
+## 36. Etapa H2C.2J — escopo funcional aprovado
+
+A H2C.2J foi aprovada em **31/07/2026**, com 50 decisões, Modelo C e escopo
+funcional nuclear consolidados. Nenhuma coluna foi removida e nenhuma tabela ou
+estrutura foi implementada.
+
+A homologação futura deverá comparar autorização antiga/nova, vínculos textuais
+e por ID, fotografias financeiras, estados, bootstrap e controle de migrations.
+Nenhum código, banco, dump, SQL, migration ou dado real foi alterado ou acessado.
+A próxima etapa recomendada é **H2C.3A — Consolidação Técnica do Schema da
+Baseline Nuclear**. O sistema ainda não está pronto para produção.

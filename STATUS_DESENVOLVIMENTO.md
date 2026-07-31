@@ -1419,3 +1419,18 @@ código, banco, dump, SQL, migration, CSV, importador, API ou deploy.
 
 A próxima etapa recomendada é **H2C.2J — Consolidação das Colunas Adicionais e
 do Escopo Final da Baseline**. O sistema não está pronto para produção.
+
+## Etapa H2C.2J — concluída e aprovada funcionalmente
+
+Em **31/07/2026**, as 50 decisões funcionais foram aprovadas, o Modelo C foi
+adotado e o escopo funcional da baseline nuclear foi consolidado.
+
+Os principais bloqueios funcionais foram encerrados. Nenhuma implementação foi
+realizada: nenhuma coluna foi removida e nenhuma tabela, código, banco, dump,
+SQL, migration, CSV, importador, API ou deploy foi alterado ou acessado.
+
+A próxima etapa recomendada é **H2C.3A — Consolidação Técnica do Schema da
+Baseline Nuclear**, ainda inicialmente documental, para definir tabelas,
+colunas, tipos PostgreSQL, chaves, constraints, índices, históricos, catálogos,
+dependências, ordem de criação e estratégia técnica de migrations. O sistema
+não está pronto para produção.

@@ -480,3 +480,24 @@ Permanecem pendentes somente desenho de substitutas, nomes, colunas, tipos,
 constraints, índices, migrations opcionais, migração de dados, arquivamento,
 somente leitura, rotas, permissões, interfaces, testes e homologação. A decisão
 sobre `produtos` permanece: legado fora da baseline e sem integração automática.
+
+## Etapa H2C.2J — decisões funcionais aprovadas
+
+A H2C.2J abriu a análise de dez colunas de `usuarios`, 19 colunas nucleares mais
+12 extras de `associados` e 13 colunas nucleares mais 13 extras de
+`transacoes_financeiras`. Também consolidou os dados estruturais permitidos e o
+escopo funcional do núcleo.
+
+- **Concluído:** Modelo C; `role` e `uvr_acesso` fora da instalação nova;
+- **Concluído:** conta de usuário separada de associado e bootstrap seguro;
+- **Concluído:** CPF, estados, vínculos, histórico e dados bancários relacionados;
+- **Concluído:** natureza, estados, conta, catálogo, rateio e escopo financeiro;
+- **Concluído:** dados estruturais permitidos, dados reais proibidos e escopo nuclear;
+- **Concluído:** banco vazio, versão/checksum, imutabilidade e módulos opcionais;
+- **Mantido:** banco atual preservado, baseline para banco vazio, módulos opcionais
+  separados e Fiscalização como módulo global.
+
+As 50 decisões foram aprovadas em **31/07/2026**. Permanecem pendentes somente
+nomes e tipos finais, constraints, índices, códigos, históricos físicos,
+mecanismo de migrations, bootstrap, compatibilidade, migração de dados,
+interfaces, testes e homologação. Nenhuma decisão anterior foi reaberta.

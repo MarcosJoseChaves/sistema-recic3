@@ -1167,3 +1167,36 @@ legado.
 Estruturas substitutas deverão preservar referências antigas. Nenhuma alteração
 física, DDL ou modo somente leitura foi executado. A matriz individual está
 em `ESPECIFICACAO_FUNCIONAL_TABELAS_ADICIONAIS_H2C2I.md`.
+
+## Colunas adicionais e baseline — H2C.2J
+
+| Grupo documentado | Uso/sensibilidade | Destino funcional aprovado | Banco atual/possível futuro | Confiança |
+|---|---|---|---|---|
+| 7 colunas operacionais de `usuarios` (`id`, `username`, `password_hash`, `nome_completo`, `role`, `uvr_acesso`, `ativo`) | autenticação, identificação e autorização; acesso e dados pessoais | núcleo da conta, exceto autorização textual transitória | preservar; perfis e escopos próprios substituirão `role`/`uvr_acesso` | alta, código/schema/testes |
+| 3 opcionais de `usuarios` (`email`, `reset_token`, `reset_token_expira`) | sem uso localizado; pessoais/segredo temporário | e-mail quando aplicável; tokens em estrutura própria, nunca como dado estrutural | preservar; recuperação de acesso futura | média para estrutura, baixa para finalidade atual |
+| 19 colunas nominais de `associados` | cadastro, contato, documentos, vínculos, status, foto e auditoria; dados pessoais/restritos | núcleo futuro com vínculos por ID e histórico | preservar; histórico de associação/UVR e proteção documental futuros | alta, código/schema/interface |
+| 12 extras de `associados` | função e eventos de afastamento, suspensão, exclusão e readmissão; sensibilidade funcional | não entram automaticamente | preservar; possível histórico de situação | média por grupo, não determinada por coluna |
+| 13 colunas nominais de `transacoes_financeiras` | natureza, contraparte, documento, valores, estado, associação/UVR e auditoria; financeiro | núcleo financeiro com IDs, rateio e fotografia histórica | preservar; natureza, catálogo, conta e escopo estruturados | alta, código/schema/interface |
+| 13 extras de `transacoes_financeiras` | patrimônio, motorista, combustível, medidor, manutenção e garantia; operacional/financeiro | fora do núcleo até confirmação | preservar; possível estrutura relacionada | média por grupo, não determinada por coluna |
+
+Os nomes individuais das colunas extras não estão integralmente reproduzidos no
+Git e não foram inventados. O inventário nominal comprovado e sua classificação
+estão no documento H2C.2J.
+
+Nenhuma coluna foi removida ou promovida automaticamente. Os campos atuais ficam
+preservados no banco existente e nenhum DDL foi criado.
+
+### Estado funcional aprovado em 31/07/2026
+
+- a conta de usuário é separada do associado; `role`, `uvr_acesso` e tokens
+  legados não integram a nova tabela de usuários;
+- o associado tem uma associação principal, uma UVR principal, vínculos
+  secundários de UVR da mesma associação e histórico permanente;
+- dados bancários usam estrutura própria;
+- a transação tem associação obrigatória, natureza explícita, conta financeira,
+  UVR gerencial opcional, rateios próprios, Produto/Serviço por ID quando
+  aplicável e fotografia histórica;
+- campos legados e todas as colunas atuais permanecem no banco existente até
+  projeto específico de migração, sem autorização para remoção.
+
+Este é um modelo funcional: nenhuma estrutura física foi criada nesta etapa.

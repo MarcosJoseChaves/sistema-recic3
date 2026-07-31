@@ -411,3 +411,24 @@ A baseline é exclusiva para PostgreSQL vazio e deverá parar antes do primeiro
 DDL ao detectar tabelas anteriores do sistema. `IF NOT EXISTS` não será usado
 para esconder divergências e nenhuma tabela será removida durante a criação da
 baseline. Nenhum DDL foi definido nesta etapa.
+
+## H2C.2J — escopo funcional final aprovado
+
+O escopo funcional aprovado inclui controle de migrations, autenticação,
+perfis/permissões/escopos,
+associações/UVRs, associados, financeiro/contas, patrimônio, catálogo,
+solicitações, rateios, dados bancários relacionados, Fiscalização global e
+auditoria técnica.
+
+Poderão ser estruturais códigos estáveis de módulos, ações, permissões, perfis,
+escopos, estados, eventos, riscos, `RECEITA`, `DESPESA`, `PRODUTO`, `SERVICO`,
+patrimônio, catálogo e fluxos `fc_*`. Usuários, entidades, documentos,
+transações, catálogos operacionais e demais dados reais são proibidos.
+`role`, `uvr_acesso` e tokens legados ficam fora da instalação nova.
+
+O Modelo C foi aprovado. A baseline não contém usuários; o primeiro Administrador
+Global será criado por bootstrap seguro separado. A execução falhará antes do
+primeiro DDL em banco não vazio. Migrations terão identificação, ordem, versão,
+checksum e imutabilidade verificável; módulos opcionais terão controle próprio.
+A migração do banco atual será projeto separado. Nenhum DDL ou nome técnico
+final foi definido nesta etapa.
