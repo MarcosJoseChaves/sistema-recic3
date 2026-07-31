@@ -1149,3 +1149,18 @@ e por ID, fotografias financeiras, estados, bootstrap e controle de migrations.
 Nenhum código, banco, dump, SQL, migration ou dado real foi alterado ou acessado.
 A próxima etapa recomendada é **H2C.3A — Consolidação Técnica do Schema da
 Baseline Nuclear**. O sistema ainda não está pronto para produção.
+
+## 37. Etapa H2C.3A — schema técnico aprovado
+
+A fase funcional está encerrada. Em **31/07/2026**, a H2C.3A aprovou 30 decisões
+técnicas sobre tabelas,
+tipos, relacionamentos, constraints, índices, integridade, ordem de criação,
+dados estruturais e compatibilidade das 23 tabelas `fc_*`.
+
+O modelo conceitual foi aprovado, mas nenhuma migration, SQL, código, tabela ou
+bootstrap foi criado. Nenhum banco, dump ou dado real foi acessado. A próxima
+etapa é **H2C.3B — Revisão Técnica Independente do Schema e da Estratégia de
+Migrations**, abrangendo nomes, tipos, precisão, FKs, constraints, índices,
+deletes, normalização, JSONB, documentos, auditoria, `fc_*`, ordem, dados
+estruturais, segurança e testes. A baseline ainda não está pronta para
+implementação ou produção.

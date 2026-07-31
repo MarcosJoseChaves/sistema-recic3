@@ -1200,3 +1200,28 @@ preservados no banco existente e nenhum DDL foi criado.
   projeto específico de migração, sem autorização para remoção.
 
 Este é um modelo funcional: nenhuma estrutura física foi criada nesta etapa.
+
+## Modelo técnico aprovado do schema — H2C.3A
+
+A proposta aprovada em **31/07/2026** adota nomes portugueses em `snake_case`, PK `id`, FKs
+`*_id`, `TIMESTAMPTZ` para instantes, `DATE` para datas civis, `NUMERIC` para
+valores e quantidades, códigos ASCII estáveis e constraints nomeadas.
+
+O modelo de identificadores é híbrido: `usuarios.id` permanece `INTEGER`; novas
+tabelas usam `BIGINT IDENTITY`; as 23 `fc_*` preservam `BIGSERIAL`. São propostas
+estruturas próprias para migrations, autorização, associações/UVRs, vínculos de
+associados, dados bancários, catálogo, financeiro/rateios, patrimônio,
+solicitações, documentos privados e auditoria. Tabelas atuais e legadas não são
+removidas.
+
+Relacionamentos históricos usam RESTRICT; únicos parciais protegem vínculos
+principais ativos; CHECKs cobrem estados, valores e datas; regras entre várias
+linhas continuam transacionais. Índices se concentram em FKs, códigos, nomes
+normalizados, períodos, estados, objetos e `request_id`, sem duplicar PK/UNIQUE.
+
+A ordem aprovada parte da verificação do banco vazio e controle de migrations,
+segue dependências nucleares e termina com as migrations 001–011, dados
+estruturais e validações. As 30 decisões técnicas estão aprovadas em
+`MATRIZ_DECISOES_TECNICAS_H2C3A.md`. CPF usa `VARCHAR(11)` ou `TEXT`, nunca
+`CHAR(11)`; checksum textual usa `VARCHAR(64)`, nunca `CHAR(64)`. Nenhum DDL,
+migration ou banco foi criado ou alterado.

@@ -1434,3 +1434,20 @@ Baseline Nuclear**, ainda inicialmente documental, para definir tabelas,
 colunas, tipos PostgreSQL, chaves, constraints, índices, históricos, catálogos,
 dependências, ordem de criação e estratégia técnica de migrations. O sistema
 não está pronto para produção.
+
+## Etapa H2C.3A — concluída e aprovada tecnicamente
+
+Em **31/07/2026**, foram aprovadas as 30 decisões técnicas do schema nuclear:
+convenções, identificadores, tipos, tabelas, relacionamentos, constraints,
+índices, históricos, deletes, dados estruturais, ordem de criação e
+compatibilidade das 23 tabelas `fc_*`.
+
+A fase funcional e o modelo técnico conceitual estão aprovados. CPF foi ajustado
+para `VARCHAR(11)` ou `TEXT` e checksum textual para `VARCHAR(64)`, ambos com
+CHECK; `CHAR` foi descartado nesses casos. Nenhuma migration, SQL, tabela,
+bootstrap ou código foi criado; nenhum banco, dump, `.env`, dado real ou serviço
+foi acessado.
+
+Próxima etapa: **H2C.3B — Revisão Técnica Independente do Schema e da Estratégia
+de Migrations**. A baseline não está pronta para implementação nem produção antes
+dessa revisão.

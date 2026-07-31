@@ -432,3 +432,25 @@ primeiro DDL em banco não vazio. Migrations terão identificação, ordem, vers
 checksum e imutabilidade verificável; módulos opcionais terão controle próprio.
 A migração do banco atual será projeto separado. Nenhum DDL ou nome técnico
 final foi definido nesta etapa.
+
+## H2C.3A — estratégia técnica aprovada
+
+A baseline foi aprovada em blocos: verificação de banco vazio; ledger central;
+catálogos técnicos; usuários; autorização; associações/UVRs; associados;
+documentos; catálogo; financeiro/rateios; patrimônio; solicitações; auditoria;
+Fiscalização; dados estruturais; validações finais.
+
+O ledger proposto registra módulo, identificador, ordem, versão, checksum,
+início/conclusão, situação, duração, erro sanitizado, aplicativo e dependências.
+Checksum divergente bloqueia execução. Módulos opcionais mantêm sequência própria
+sem criar dependência inversa no núcleo.
+
+As migrations 001–011 permanecem imutáveis e deverão ter seu resultado
+reproduzido na ordem histórica. Banco com tabela conhecida falha antes do
+primeiro DDL. Só códigos estruturais aprovados podem ser carregados; dados reais
+continuam proibidos. Compatibilidade com o banco atual será projeto separado.
+
+Foram aprovados várias migrations nucleares ordenadas, ledger central com módulo,
+versão e checksum, imutabilidade, núcleo comum de documentos e compatibilidade
+das 23 tabelas `fc_*`. Nenhuma migration real foi criada. A revisão técnica
+independente H2C.3B é obrigatória antes da implementação.
