@@ -1451,3 +1451,21 @@ foi acessado.
 Próxima etapa: **H2C.3B — Revisão Técnica Independente do Schema e da Estratégia
 de Migrations**. A baseline não está pronta para implementação nem produção antes
 dessa revisão.
+
+## Etapa H2C.3B — revisão independente concluída e aprovada
+
+Em **31/07/2026**, a proposta H2C.3A foi confrontada com código, documentação e
+migrations 001–011. O parecer final **APROVADO COM AJUSTES** foi aprovado.
+Foram registradas e aprovadas 20 decisões e 24 achados: 4 bloqueadores, 10 de
+prioridade alta, 5 de prioridade média, 3 de prioridade baixa e 2 informativos.
+
+Os bloqueadores concentram-se na compatibilidade do código atual com o novo
+modelo de autorização, bootstrap/ledger, ordem de dependências, normalização,
+rateios e estratégia única para as 23 tabelas `fc_*`. Nenhum bloqueador foi
+implementado; nenhuma migration, SQL, tabela ou código foi criado; nenhum banco,
+dump, `.env`, dado real ou serviço foi acessado. Testes PostgreSQL não foram
+executados.
+
+Próxima etapa: **H2C.3C**, exclusivamente documental, para incorporar os ajustes
+aprovados ao desenho. A baseline continua sem autorização para implementação ou
+produção.

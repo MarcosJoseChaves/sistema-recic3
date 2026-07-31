@@ -454,3 +454,24 @@ Foram aprovados várias migrations nucleares ordenadas, ledger central com módu
 versão e checksum, imutabilidade, núcleo comum de documentos e compatibilidade
 das 23 tabelas `fc_*`. Nenhuma migration real foi criada. A revisão técnica
 independente H2C.3B é obrigatória antes da implementação.
+
+## H2C.3B — parecer e ajustes aprovados
+
+O parecer documental **APROVADO COM AJUSTES** foi aprovado em 31/07/2026.
+Antes de qualquer DDL, o executor deverá verificar banco vazio, adquirir advisory
+lock, validar manifesto/checksums, criar o ledger em bootstrap transacional e
+registrar falhas sanitizadas após rollback em transação separada.
+
+A ordem revisada separa autorização básica de escopos organizacionais, cria
+auditoria mínima após usuários, antecipa documentos aos vínculos que os usam e
+aplica literalmente as migrations imutáveis 001–011 sob o ledger central. Um
+snapshot `fc_*` poderá existir apenas para comparação, não como segunda fonte
+executável. Futuras mudanças do módulo começam em migration posterior comum.
+
+Dados estruturais indispensáveis entram antes das validações finais e divergência
+de código/checksum bloqueia execução. Permanecem bloqueadores a compatibilidade
+do código de autorização, protocolo do bootstrap/ledger, ordem, normalização,
+rateios e definição formal da estratégia `fc_*`. Os quatro bloqueadores impedem
+a implementação até seu tratamento. A H2C.3C deverá tratar também os dez achados
+de prioridade alta. Nenhuma migration foi criada e testes PostgreSQL não foram
+executados.

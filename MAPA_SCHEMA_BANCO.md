@@ -1225,3 +1225,21 @@ estruturais e validações. As 30 decisões técnicas estão aprovadas em
 `MATRIZ_DECISOES_TECNICAS_H2C3A.md`. CPF usa `VARCHAR(11)` ou `TEXT`, nunca
 `CHAR(11)`; checksum textual usa `VARCHAR(64)`, nunca `CHAR(64)`. Nenhum DDL,
 migration ou banco foi criado ou alterado.
+
+## Revisão técnica independente — H2C.3B
+
+**Parecer final aprovado em 31/07/2026: APROVADO COM AJUSTES.** O modelo híbrido de IDs, tipos,
+históricos, alocações, documentos e 23 tabelas `fc_*` foi confirmado. As
+ressalvas principais são compatibilidade do código atual com a ausência de
+`role`/`uvr_acesso`, normalização, bootstrap, ledger e referências lógicas.
+
+Ciclos não impedem o schema se a fonte de verdade dos vínculos ficar nas tabelas
+temporais, documentos precederem seus vínculos e autorização for dividida em
+base e escopos organizacionais. Auditoria aceita ator técnico de bootstrap
+somente por exceção controlada.
+
+Ajustes aprovados para tratamento: ordem revisada, protocolo de lock/checksum do executor,
+namespace comum de nomes/aliases, validação transacional de períodos e rateios e
+uma estratégia executável única para `fc_*`. Nenhum DDL foi criado. Os 24
+achados e as 20 decisões aprovadas estão em `MATRIZ_AJUSTES_TECNICOS_H2C3B.md`.
+Nenhum ajuste foi implementado; a próxima etapa autorizada é somente a H2C.3C.

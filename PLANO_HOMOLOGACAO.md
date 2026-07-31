@@ -1164,3 +1164,15 @@ Migrations**, abrangendo nomes, tipos, precisão, FKs, constraints, índices,
 deletes, normalização, JSONB, documentos, auditoria, `fc_*`, ordem, dados
 estruturais, segurança e testes. A baseline ainda não está pronta para
 implementação ou produção.
+
+## 38. Etapa H2C.3B — revisão independente aprovada
+
+A revisão independente foi aprovada documentalmente em **31/07/2026**, com
+parecer final **APROVADO COM AJUSTES**. Foram aprovadas 20 decisões e registrados
+24 achados: 4 bloqueadores, 10 de prioridade alta, 5 de prioridade média, 3 de
+prioridade baixa e 2 informativos.
+
+Nenhum bloqueador foi implementado; nenhum código, migration, SQL, tabela ou
+banco foi alterado ou acessado, e testes PostgreSQL não foram executados. A
+próxima etapa autorizada é somente a H2C.3C. A baseline ainda não está pronta
+para implementação ou produção.
