@@ -1507,3 +1507,114 @@ Nenhuma migration, SQL, manifesto real, código, tabela ou teste PostgreSQL foi
 criado ou executado; nenhum banco, dump, `.env`, dado real ou serviço externo
 foi acessado. Próxima etapa obrigatória: **H2C.3E — Correção e Completude da
 Especificação Física**, inicialmente documental.
+
+## Etapa H2C.3E — especificação física completa em validação
+
+Em **31/07/2026**, foram produzidos o catálogo físico definitivo e a matriz de
+integridade relacional. A baseline foi fechada em 82 tabelas (58 novas,
+`usuarios` reutilizada e 23 FC), 1.103 colunas, 82 PKs, 238 FKs, 86 UNIQUEs, 32
+UNIQUEs parciais, 377 CHECKs, 213 índices explícitos e 20 regras transacionais.
+
+Foram formalizadas a fusão de fotografias patrimoniais em documentos, a
+separação dos vínculos de solicitações para associações e UVRs, e as três FKs
+exclusivas de `catalogo_eventos`. A estimativa antiga de 239 FKs foi corrigida
+para 238 porque a substituição de item é derivada exclusivamente de
+`catalogo_substituicoes`; `medidor_atual` também é derivado do histórico e não é
+armazenado como segunda fonte de verdade.
+
+Parecer: **A — ESPECIFICAÇÃO FÍSICA COMPLETA E APTA PARA REVISÃO FINAL DE
+AUTORIZAÇÃO**. Nenhuma nova decisão humana é necessária, mas os quatro
+bloqueadores continuam não implementados. Nenhuma migration, SQL, manifesto
+real, código, tabela ou teste PostgreSQL foi criado ou executado; nenhum banco,
+dump, `.env`, dado real ou serviço externo foi acessado. Próxima ação: validação
+humana do parecer de completude.
+
+## Encerramento documental H2C.3E.1–H2C.3E.3
+
+Em **03/08/2026**, a H2C.3E.1 concluiu integridade relacional e nomenclatura; a
+H2C.3E.2 concluiu CHECKs, índices, medição patrimonial e sequência; e a
+H2C.3E.3 concluiu testes parametrizados, ciclos de vida e consistência dos seis
+documentos.
+
+Recontagem final normativa: 82 tabelas, 58 novas, 1.103 colunas, 82 PKs, 238
+FKs, 377 CHECKs, 363 índices e 28 operações. O plano possui 2.341
+identificadores completos em nove modelos. As 82 tabelas foram classificadas
+individualmente em nove categorias: 19 A, 8 B, 15 C, 7 D, 11 E, 12 F, 7 G, 2 H
+e 1 I. Menções anteriores a 213 índices, 27
+operações ou 2.190 testes são históricas e estão superadas.
+
+Parecer integral: **A — ESPECIFICAÇÃO FÍSICA COMPLETA E APTA PARA REVISÃO FINAL
+DE AUTORIZAÇÃO**. Nenhuma implementação foi feita; nenhuma migration, SQL,
+manifesto, código ou teste executável foi criado; nenhum banco, dump, `.env`,
+dado real ou serviço foi acessado; nenhum teste foi executado.
+
+Continuam ativos os quatro bloqueadores: substituir `role`/`uvr_acesso`, criar e
+testar o executor, implementar/testar o bootstrap e validar H001–H011 em
+PostgreSQL efêmero. Próxima etapa recomendada: **H2C.3F — Revisão Final de
+Autorização da Implementação**, somente leitura e validação independente.
+
+## Etapa H2C.3F — revisão independente concluída
+
+A revisão somente de leitura emitiu parecer **B — recomendada a autorização
+após ajustes documentais menores**. O desenho físico, relações, contagens e
+sequência de migrations foram considerados consistentes. Restaram apenas três
+lacunas documentais: individualizar três scripts legados, nominalizar dois
+grupos de oito testes e classificar a sensibilidade das 351 colunas FC_*.
+
+## Etapa H2C.3F.1 — ajustes documentais finais em validação
+
+Os ajustes documentais foram completados sem implementação:
+
+- `criar_admin.py`, `criar_usuario_uvr.py` e `criar_usuario_uvr02.py` estão
+  registrados como legados, bloqueados na instalação nova e com substituição
+  futura definida;
+- todos os usos funcionais de `role` e `uvr_acesso` possuem destino futuro;
+- oito testes de segurança sem PostgreSQL e oito cenários concorrentes de
+  migrations foram identificados nominalmente;
+- os totais permanecem 2.341 testes, 2.333 com PostgreSQL, 8 sem PostgreSQL, 64
+  concorrentes, 1.952 com rollback mutável, 92 com auditoria e 52 de ausência
+  de dados reais;
+- cada uma das 351 colunas FC_* possui classificação própria de sensibilidade;
+  `fc_documentos.armazenamento_chave` e referências técnicas equivalentes
+  possuem proteção coerente com `documentos_privados.chave_provedor`.
+
+Parecer documental: **A — ajustes documentais finais completados**. Nenhuma
+decisão humana nova é necessária, mas isso não autoriza implementação. B1, B2,
+B3 e B4 continuam ativos e não foram marcados como implementados ou testados.
+Próxima etapa recomendada: **H2C.3F.2 — Verificação Final Somente de Leitura**,
+restrita às três correções documentais.
+
+## Encerramento aprovado H2C.3E/H2C.3F — 03/08/2026
+
+**DOCUMENTAÇÃO APROVADA.** H2C.3E está integralmente aprovada com parecer **A —
+ESPECIFICAÇÃO FÍSICA COMPLETA E APTA PARA REVISÃO FINAL DE AUTORIZAÇÃO**.
+H2C.3F, H2C.3F.1 e H2C.3F.2 estão concluídas. A revisão independente final
+emitiu **A — RECOMENDADA A AUTORIZAÇÃO HUMANA PARA INÍCIO DA IMPLEMENTAÇÃO
+CONTROLADA**.
+
+O usuário registrou: “Aprovado. Autorizo o encerramento documental da
+H2C.3E/H2C.3F e o início controlado da H2C.4A nos limites definidos.” Não há
+nova decisão humana pendente.
+
+Números finais: 82 tabelas (58 novas, `usuarios`, 23 FC_*), 1.103 colunas (752
++ 351), 82 PKs, 238 FKs (154 RESTRICT + 84 NO ACTION), 86 unicidades (32
+parciais), 377 CHECKs, 363 índices e 28 operações. O plano tem 9 modelos e
+2.341 casos: 2.333 PostgreSQL, 8 sem PostgreSQL, 64 concorrentes, 1.952 com
+rollback, 92 com auditoria e 52 de ausência de dados reais.
+
+As 351 FC_* fecham em 190 `NAO-SENSIVEL`, 59 `S-PESSOAL`, 30 `S-FINANCEIRO`,
+33 `S-LIVRE`, 24 `S-OPERACIONAL`, 12 `S-DOCUMENTAL` e 3 `S-TECNICO`. O
+inventário legado fecha em 7 arquivos/88 linhas e zero uso sem destino; os três
+scripts administrativos estão bloqueados na instalação nova.
+
+Os 24 achados fecham em 15 tratamentos documentais, 3 bloqueadores de código, 1
+bloqueador PostgreSQL, 3 riscos aceitos e 2 melhorias. **B1, B2, B3 e B4 seguem
+ativos e não implementados/testados.**
+
+**AUTORIZAÇÃO PARA IMPLEMENTAÇÃO CONTROLADA.** O próximo incremento autorizado
+é H2C.4A, limitado a manifesto, validador, hash, preflight, lock/timeout, ledger,
+histórico, M0000/M0001, testes unitários e PostgreSQL efêmero, somente para as
+duas tabelas de controle.
+
+**IMPLEMENTAÇÃO AINDA NÃO INICIADA.** Não foram criados código, SQL, migration,
+manifesto, executor, bootstrap ou teste; nenhum banco ou serviço foi acessado.

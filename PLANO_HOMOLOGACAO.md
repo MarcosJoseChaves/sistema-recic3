@@ -1207,3 +1207,104 @@ Os quatro bloqueadores continuam não implementados. Nenhum SQL, migration,
 manifesto, executor, bootstrap, código, tabela ou deploy foi criado. Próxima
 ação: H2C.3E documental obrigatória. Nenhuma nova decisão humana é necessária. A baseline não
 está autorizada para implementação.
+
+## H2C.3E — especificação física em validação humana
+
+O catálogo físico e a matriz relacional foram completados documentalmente em
+31/07/2026. A recontagem final é 82 tabelas, 1.103 colunas e 238 FKs exatas. Não
+foi criada ou executada migration, manifesto, executor, bootstrap ou SQL; nenhum
+código foi alterado; nenhum banco, dump, `.env`, dado real ou serviço externo
+foi acessado; nenhum teste PostgreSQL foi executado.
+
+Os quatro bloqueadores permanecem não implementados: novo resolvedor sem
+`role`/`uvr_acesso`, executor controlado, bootstrap seguro e equivalência FC em
+PostgreSQL efêmero. A próxima ação é a validação humana da H2C.3E; o parecer A
+não autoriza automaticamente implementação ou homologação.
+
+## H2C.3E.3 — estratégia futura de homologação da baseline
+
+O plano usa nove modelos e 2.341 identificadores. Cada caso declara estado
+sintético mínimo, parâmetros concretos, operação, resultado, rollback,
+auditoria, migration e situação. São planejados 2.333 casos com PostgreSQL, 64
+concorrentes, 1.952 com rollback mutável, 92 com auditoria e 52 que comprovam
+ausência de dados reais. Esses números descrevem trabalho futuro: **nenhum teste
+foi executado nesta etapa**.
+
+A homologação usará PostgreSQL efêmero e isolado, sem cópia de produção; dados
+serão exclusivamente sintéticos. Banco, arquivos, Cloudinary e credenciais reais
+permanecem proibidos. Segurança cobre permissão, escopo, inatividade, último
+Administrador Global, autoelevação, mascaramento e ausência de segredo em logs.
+A homologação humana verificará mensagens, fluxos e navegação, sem substituir as
+assertivas automatizadas.
+
+Aceite futuro exige zero divergências, todos os identificadores materializados,
+rollback/concorrência aprovados, bloqueadores encerrados e nenhum dado real. A
+recontagem normativa é 82 tabelas, 1.103 colunas, 238 FKs, 377 CHECKs, 363
+índices e 28 operações; números anteriores são históricos. Próxima etapa:
+H2C.3F, revisão independente somente leitura.
+
+## 41. Etapas H2C.3F e H2C.3F.1 — revisão e ajustes documentais finais
+
+A revisão independente H2C.3F emitiu o parecer **B — recomendada a autorização
+após ajustes documentais menores**. Não encontrou erro material no desenho
+físico nem nova decisão de tabela, coluna, FK, CHECK, índice ou sequência de
+migrations. A H2C.3F.1 corrigiu somente as três lacunas apontadas:
+
+- `criar_admin.py`, `criar_usuario_uvr.py` e `criar_usuario_uvr02.py` foram
+  individualizados como scripts legados, bloqueados na instalação nova e
+  substituídos pelo bootstrap/fluxo administrativo/perfis e escopos relacionais;
+- os oito testes sem PostgreSQL foram identificados como `TSEC-002`,
+  `TSEC-004`, `TSEC-006`, `TSEC-007`, `TSEC-021`, `TSEC-022`, `TSEC-023` e
+  `TSEC-024`; os outros 16 testes de segurança exigem PostgreSQL;
+- os oito cenários concorrentes de migration foram identificados como
+  `TMIG-M0000`, `TMIG-M0001`, `TMIG-M0002`, `TMIG-H001`, `TMIG-H011`,
+  `TMIG-M0025`, `TMIG-M0026` e `TMIG-M0027`;
+- as 351 colunas históricas FC_* passaram a ter campo próprio de sensibilidade
+  e política explícita de mascaramento, log, auditoria, leitura, exportação,
+  minimização e preservação. `fc_documentos.armazenamento_chave`,
+  `armazenamento_versao` e `sha256` foram classificadas como referências
+  técnicas confidenciais.
+
+Os totais permanecem reconciliados: **2.341** testes, **2.333** com PostgreSQL,
+**8** sem PostgreSQL, **64** concorrentes, **1.952** com rollback mutável,
+**92** com auditoria e **52** verificando ausência de dados reais. Os nove
+modelos parametrizados não mudaram.
+
+Parecer da H2C.3F.1: **A — ajustes documentais finais completados**. Nenhuma
+implementação, SQL, migration, executor, manifesto ou bootstrap foi criado ou
+executado. B1 (`role`/`uvr_acesso`), B2 (executor), B3 (bootstrap) e B4
+(equivalência H001–H011 em PostgreSQL efêmero) continuam ativos. A próxima
+etapa recomendada é **H2C.3F.2 — Verificação Final Somente de Leitura**; não se
+inicia H2C.4A neste ponto.
+
+Para o teste de ciclo de vida, as 82 tabelas estão distribuídas em 19 A, 8 B,
+15 C, 7 D, 11 E, 12 F, 7 G, 2 H e 1 I. A homologação deverá materializar os
+testes `TLV` da lista individual, sem reinterpretar essas categorias.
+
+## 42. Encerramento H2C.3E/H2C.3F e autorização controlada — 03/08/2026
+
+**DOCUMENTAÇÃO APROVADA.** H2C.3E encerrou com parecer A de especificação física
+completa; H2C.3F.1 completou os ajustes; H2C.3F.2 concluiu a revisão independente
+com **A — RECOMENDADA A AUTORIZAÇÃO HUMANA PARA INÍCIO DA IMPLEMENTAÇÃO
+CONTROLADA**.
+
+Os números normativos são 82 tabelas, 58 novas, `usuarios` reutilizada, 23 FC_*,
+1.103 colunas (752 + 351), 82 PKs, 238 FKs, 86 unicidades, 32 parciais, 377
+CHECKs, 363 índices e 28 operações. São planejados 9 modelos e 2.341 casos:
+2.333 com PostgreSQL, 8 sem, 64 concorrentes, 1.952 com rollback, 92 com
+auditoria e 52 sem dados reais. Nenhum foi executado.
+
+Os ciclos fecham em 19 cadastros inativáveis, 8 fatos canceláveis/estornáveis,
+15 históricos append-only, 7 documentos, 11 vínculos temporais, 12 rascunhos,
+7 catálogos, 2 estruturas de migration e 1 sem ciclo. Os mecanismos sobrepostos
+são: 34 inativações, 7 cancelamentos, 1 estorno, 9 substituições, 6 expirações,
+7 revogações/encerramentos, 16 append-only, 24 retenções e 17 tabelas em 12
+relações de descarte controlado.
+
+**AUTORIZAÇÃO PARA IMPLEMENTAÇÃO CONTROLADA.** O usuário autorizou o início
+posterior da H2C.4A apenas em branch de desenvolvimento, com testes unitários e
+PostgreSQL efêmero, sem banco/dados reais, deploy ou merge na `main`.
+
+**IMPLEMENTAÇÃO AINDA NÃO INICIADA.** B1–B4 continuam ativos. Nenhum executor,
+manifesto, migration, bootstrap, SQL ou teste executável foi criado nesta
+tarefa.

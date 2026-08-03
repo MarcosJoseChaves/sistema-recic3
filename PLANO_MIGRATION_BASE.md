@@ -514,3 +514,162 @@ foi alterada. Parecer aprovado: **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**. As
 lacunas de FKs, constraints, índices e DELETE deverão ser relacionadas
 individualmente a migration e teste. A H2C.3E é obrigatória antes de qualquer
 arquivo executável.
+
+## H2C.3E — responsabilidade física final das migrations
+
+A ordem documental definitiva é: M0000 preflight/lock; M0001 ledger; M0002
+tipos estruturais; M0003 usuários/recuperação; M0004 autorização básica; M0005
+auditoria; M0006 associações/UVRs; M0007 escopos organizacionais; M0008
+documentos privados; M0009 associados/vínculos/bancos; M0010 catálogo; M0011
+financeiro; M0012 as seis estruturas patrimoniais; M0013 as doze estruturas de
+solicitações; H001–H011 migrations FC literais; M0025 escopo contratual; M0026
+dados estruturais aprovados; M0027 validação somente leitura.
+
+O catálogo H2C.3E atribui exatamente uma migration a cada uma das 82 tabelas,
+1.103 colunas, 238 FKs, 86 UNIQUEs e 377 CHECKs. As 213 referências antigas de
+índice foram reconciliadas na H2C.3E.2 em 231 índices explícitos e 132
+implícitos, total físico 363. O plano anterior possui 2.190 verificações
+identificadas; sua recontagem executável fica para H2C.3E.3. Nenhum elemento
+fica com “migration a definir”.
+
+O manifesto futuro permanece JSON UTF-8 versionado e fechado a propriedades
+extras. Ledger e execuções são separados; preflight distingue banco novo,
+controlado e desconhecido; o advisory lock deriva de
+`sistema-recic3:baseline:public:v1` e usa espera máxima de 30 segundos.
+
+O hash correto da migration 001 é
+`a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc`;
+002–011 permanecem conforme a matriz. Arquivos históricos continuam imutáveis.
+Parecer A apenas documental; os quatro bloqueadores continuam ativos.
+
+## H2C.3E.2 — sequência global fechada das 28 operações
+
+Identificador e ordem global são campos diferentes. Os namespaces `M` e `H`
+são independentes; dependências apontam para o identificador completo, nunca
+apenas para o número. Não existem identificadores M0014–M0024: as posições
+globais 14–24 são ocupadas por H001–H011, sem buraco na execução.
+
+| Ordem | ID | Tipo | Módulo/objetivo | Dependências | Transação | Estruturas e dados | CHECKs/índices | Pré/pós-condição e teste |
+|---:|---|---|---|---|---|---|---|---|
+| 0 | M0000 | executor sem DDL | preflight e advisory lock | nenhuma | sessão | nenhuma | nenhum | URL presente sem ser exibida; banco classificado e lock obtido; T-M0000 |
+| 1 | M0001 | nova com DDL | ledger e execuções | M0000 | sim | `schema_migrations`, `schema_migration_execucoes` | CK/PK/UQ/IX M0001 | banco novo e lock; ledger criado e autorregistrado; T-M0001 |
+| 2 | M0002 | nova com DDL | referências técnicas/financeiras | M0001 | sim | módulos, ações e naturezas | CK/PK/UQ/IX M0002 | ledger íntegro; referências vazias prontas; T-M0002 |
+| 3 | M0003 | nova com DDL | usuários e recuperação | M0002 | sim | `usuarios`, recuperações | CK/PK/UQ/IX M0003 | sem usuário real; estrutura de identidade pronta; T-M0003 |
+| 4 | M0004 | nova com DDL | autorização básica | M0003 | sim | permissões, perfis e vínculos | CK/PK/UQ/IX M0004 | usuário estrutural disponível; RBAC vazio pronto; T-M0004 |
+| 5 | M0005 | nova com DDL | auditoria técnica | M0004 | sim | `auditoria_tecnica` | CK/PK/UQ/IX M0005 | ator exclusivo válido; trilha pronta; T-M0005 |
+| 6 | M0006 | nova com DDL | associações e UVRs | M0005 | sim | associações, UVRs, aliases/eventos | CK/PK/UQ/IX M0006 | auditoria pronta; cadastros vazios prontos; T-M0006 |
+| 7 | M0007 | nova com DDL | escopos organizacionais | M0006 | sim | escopos global/associação/UVR | CK/PK/UQ/IX M0007 | pais e RBAC prontos; escopos vazios prontos; T-M0007 |
+| 8 | M0008 | nova com DDL | documentos privados | M0007 | sim | `documentos_privados` | CK/PK/UQ/IX M0008 | autoria pronta; metadados vazios prontos; T-M0008 |
+| 9 | M0009 | nova com DDL | associados, vínculos e bancos | M0008 | sim | estruturas de associados | CK/PK/UQ/IX M0009 | pais/documentos prontos; núcleo vazio pronto; T-M0009 |
+| 10 | M0010 | nova com DDL | catálogo | M0009 | sim | grupos, subgrupos, itens, aliases/eventos | CK/PK/UQ/IX M0010 | auditoria pronta; catálogo vazio pronto; T-M0010 |
+| 11 | M0011 | nova com DDL | financeiro | M0010 | sim | contas, transações, itens/rateios/eventos | CK/PK/UQ/IX M0011 | catálogo/UVR prontos; financeiro vazio pronto; T-M0011 |
+| 12 | M0012 | nova com DDL | seis estruturas patrimoniais | M0011 | sim | patrimônio, identificadores, vínculos, eventos, documentos, bloqueios | CK/PK/UQ/IX M0012 | documentos/associações prontos; patrimônio vazio pronto; T-M0012 |
+| 13 | M0013 | nova com DDL | doze estruturas de solicitações | M0012 | sim | fluxo completo de solicitações | CK/PK/UQ/IX M0013 | alvos prontos; fluxo vazio pronto; T-M0013 |
+| 14 | H001 | histórica com DDL | empresas | M0013 | literal | migration 001 | CK/PK/UQ/IX H001 | pré-condições FC; equivalência literal; TH-001 |
+| 15 | H002 | histórica com DDL | servidores | H001 | literal | migration 002 | CK/PK/UQ/IX H002 | equivalência literal; TH-002 |
+| 16 | H003 | histórica com DDL | contratos | H002 | literal | migration 003 | CK/PK/UQ/IX H003 | equivalência literal; TH-003 |
+| 17 | H004 | histórica com DDL | aditivos | H003 | literal | migration 004 | CK/PK/UQ/IX H004 | equivalência literal; TH-004 |
+| 18 | H005 | histórica com DDL | documentos FC | H004 | literal | migration 005 | CK/PK/UQ/IX H005 | equivalência literal; TH-005 |
+| 19 | H006 | histórica com DDL | planilhas | H005 | literal | migration 006 | CK/PK/UQ/IX H006 | equivalência literal; TH-006 |
+| 20 | H007 | histórica com DDL | ativos contratuais | H006 | literal | migration 007 | CK/PK/UQ/IX H007 | equivalência literal; TH-007 |
+| 21 | H008 | histórica com DDL | fiscalizações/ocorrências | H007 | literal | migration 008 | CK/PK/UQ/IX H008 | equivalência literal; TH-008 |
+| 22 | H009 | histórica com DDL | eventos de fiscalização | H008 | literal | migration 009 | CK/PK/UQ/IX H009 | equivalência literal; TH-009 |
+| 23 | H010 | histórica com DDL | medições | H009 | literal | migration 010 | CK/PK/UQ/IX H010 | equivalência literal; TH-010 |
+| 24 | H011 | histórica com DDL | atestes | H010 | literal | migration 011 | CK/PK/UQ/IX H011 | equivalência literal; TH-011 |
+| 25 | M0025 | nova com DDL | escopo contratual | H011, M0007 | sim | `fc_contrato_escopos` | CK/PK/UQ/IX M0025 | FC e escopos prontos; vínculo vazio pronto; T-M0025 |
+| 26 | M0026 | dados estruturais | referências aprovadas | M0025 | sim | apenas códigos estruturais aprovados | sem novo DDL | schema íntegro; carga idempotente e sem dados reais; T-M0026 |
+| 27 | M0027 | validação somente leitura | conferência final | M0026 | não altera | nenhuma | confere todos | ledger completo, objetos/contagens conformes; T-M0027 |
+
+Classificação: 1 operação sem DDL, 14 migrations novas com DDL, 11 migrations
+históricas com DDL, 1 carga estrutural e 1 validação somente leitura: **28**.
+Cada uma cobre as tabelas, CHECKs e índices que levam seu identificador nos
+catálogos; nenhum elemento possui migration indefinida.
+
+### Ledger e falhas
+
+M0000 não cria tabela nem grava tentativa. Ele valida configuração sem revelar
+segredo, classifica o banco e obtém o advisory lock; falha anterior ao ledger é
+somente saída sanitizada do executor. M0001 é a primeira migration física: cria
+`schema_migrations` e `schema_migration_execucoes` e registra a própria
+aplicação na mesma transação. Sucesso confirma DDL e autorregistro juntos;
+falha executa rollback integral. Após o ledger existir, cada tentativa é
+registrada de modo sanitizado em transação própria e a aplicação bem-sucedida
+em transação atômica com a migration. Testes cobrem primeira instalação,
+rollback, repetição, hash divergente e concorrência.
+
+### Hashes históricos UTF-8/LF confirmados documentalmente
+
+| ID | Arquivo | SHA-256 |
+|---|---|---|
+| H001 | `001_criar_fc_empresas.sql` | `a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc` |
+| H002 | `002_criar_fc_servidores.sql` | `012af8ddd2e04cae607a93e6d09d6d2eddcd1b6cabe7ea751906c7496da72cd5` |
+| H003 | `003_criar_fc_contratos.sql` | `815313c2f03402564127ad494fffdf59baeee26e3cd4262ca7106dbaaeca273d` |
+| H004 | `004_criar_fc_aditivos.sql` | `88961a6d0cbafde065bbd598425035bef0b2a1b9002126b02cb3d006036e821d` |
+| H005 | `005_criar_fc_documentos.sql` | `b57f893eced87931922ddaa5c36f51b6ee4e5601cfc95c3616de0a225994c362` |
+| H006 | `006_criar_fc_planilhas_orcamentarias.sql` | `03c059dfdbeaff80ad8f0282956217c5b92f1b911df7de529640d2ec3f16a7ad` |
+| H007 | `007_criar_fc_ativos_contratuais.sql` | `b0d5f732b2aa9234d7cb88a5be6f467ade2a9e19bb82aac596d3e39ef1dd8d19` |
+| H008 | `008_criar_fc_fiscalizacoes_ocorrencias.sql` | `f8f88fe1fe9152cdc243db45243701f953b4367def0b3f1ac62d47526e733531` |
+| H009 | `009_criar_fc_fiscalizacao_eventos.sql` | `2e88c765b5981e8edf97616ee656bcb08982c79b953a7f612de2784e6ceffa46` |
+| H010 | `010_criar_fc_medicoes.sql` | `ac4c38b2beafa4bf7a8b0f614030898e3ac8cbb7ef2b33bcae10b067fae3d34d` |
+| H011 | `011_criar_fc_atestes.sql` | `6521ce402bd41c2520901799fa29ae12c205333c23bc65f48b0ebffc84f65089` |
+
+Os arquivos permanecem imutáveis; hashes são minúsculos e o manifesto futuro
+usará bytes UTF-8 com LF. Parecer restrito à H2C.3E.2: **A — CHECKS, ÍNDICES,
+MEDIÇÃO PATRIMONIAL E SEQUÊNCIA COMPLETADOS**. A H2C.3E integral continua
+pendente da H2C.3E.3.
+
+## H2C.3E.3 — testes e autorização futura das operações
+
+As 28 operações têm caso `TMIG` individual. M0000 cobre banco
+novo/controlado/desconhecido, lock livre/ocupado, timeout de 30 segundos e zero
+DDL. M0001 cobre ledger, autorregistro, reaplicação e rollback. M0002–M0013 e
+M0025 cobrem dependência, aplicação, reaplicação, falha, rollback, pós-condições
+e ausência de dados reais. H001–H011 cobrem hash UTF-8/LF, literalidade, ordem,
+imutabilidade, integração com `usuarios` e fonte executável única. M0026 cobre
+carga estrutural idempotente sem usuário/dado operacional; M0027 comprova
+somente leitura e falha segura.
+
+Manifesto, checksum, dependências, arquivo ausente/extra, ordem duplicada,
+concorrência e mensagem sanitizada pertencem ao modelo T-MIGRATION. Toda
+operação mutável usa transação e rollback integral; M0000 e M0027 explicitam
+ausência de mutação. A autorização futura exige encerrar os quatro bloqueadores
+e aprovar a revisão independente H2C.3F. Nenhuma migration, manifesto ou
+executor foi criado nesta etapa.
+
+Recontagem normativa: 82 tabelas, 1.103 colunas, 238 FKs, 377 CHECKs, 363
+índices, 28 operações e 2.341 identificadores em nove modelos. Números anteriores
+são históricos. Parecer integral H2C.3E: **A — ESPECIFICAÇÃO FÍSICA COMPLETA E
+APTA PARA REVISÃO FINAL DE AUTORIZAÇÃO**, sem autorização de implementação.
+
+Os ciclos de vida das 82 tabelas fecham, sem sobreposição de categoria, em 19
+A, 8 B, 15 C, 7 D, 11 E, 12 F, 7 G, 2 H e 1 I; o catálogo traz cada tabela e
+sua migration responsável.
+
+## Autorização humana para H2C.4A — 03/08/2026
+
+**DOCUMENTAÇÃO APROVADA.** H2C.3E e H2C.3F estão encerradas; a H2C.3F.2 emitiu
+**A — RECOMENDADA A AUTORIZAÇÃO HUMANA PARA INÍCIO DA IMPLEMENTAÇÃO
+CONTROLADA**.
+
+**AUTORIZAÇÃO PARA IMPLEMENTAÇÃO CONTROLADA.** O usuário autorizou
+expressamente o início posterior da **H2C.4A — Infraestrutura Controlada de
+Migrations**.
+
+O primeiro incremento autorizado limita-se a manifesto real, parser/validador,
+normalização UTF-8/LF, SHA-256, preflight, advisory lock, timeout, ledger,
+histórico de execuções, M0000, M0001, testes unitários e PostgreSQL efêmero.
+Somente `schema_migrations` e `schema_migration_execucoes` poderão ser criadas.
+
+Limites: nenhuma tabela funcional, H001–H011 não executadas neste incremento,
+nenhum banco/dado real, deploy, mudança ou merge na `main`, PR automático,
+remoção de legado, bootstrap ou alteração de `role`/`uvr_acesso`.
+
+As 28 operações globais permanecem ordenadas; M0014–M0024 não existem como
+identificadores e as ordens 14–24 pertencem a H001–H011. M0001 cria e
+autorregistra atomicamente o ledger. H001–H011 são imutáveis; H001 usa hash
+UTF-8/LF/SHA-256 minúsculo
+`a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc`.
+
+**IMPLEMENTAÇÃO AINDA NÃO INICIADA.** B1, B2, B3 e B4 continuam ativos. Nenhum
+manifesto, executor, migration, SQL, bootstrap, teste ou PostgreSQL foi criado
+ou executado nesta tarefa documental.

@@ -1286,3 +1286,82 @@ Parecer aprovado documentalmente: **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**. 
 incontornável, mas o catálogo de colunas e as matrizes precisam ser expandidos.
 Nenhum SQL, migration, código ou banco foi alterado. Nenhuma nova decisão humana
 foi identificada; a H2C.3E documental é obrigatória.
+
+## H2C.3E — catálogo físico definitivo em validação
+
+Em **31/07/2026**, a especificação foi expandida nominalmente nos documentos
+`CATALOGO_FISICO_DEFINITIVO_BASELINE_H2C3E.md` e
+`MATRIZ_INTEGRIDADE_RELACIONAL_H2C3E.md`. A baseline permanece com **82 tabelas**:
+58 novas, `usuarios` reutilizada e 23 `fc_*` históricas. São **1.103 colunas**:
+752 no núcleo não FC e 351 FC; 82 PKs; 238 FKs exatas (154 núcleo + 84 FC);
+86 estruturas UNIQUE, 32 parciais; 377 CHECKs; 213 índices explícitos; e 20
+regras transacionais.
+
+A diferença perante a estimativa de 239 FKs decorre da retirada de
+`catalogo_itens.substituto_id`: `catalogo_substituicoes` é a única fonte temporal
+do substituto. `patrimonios.medidor_atual` também é derivado, não armazenado; o
+valor legado será preservado na fotografia/evento inicial. Isso resolve as duas
+inconsistências de contagem do catálogo compacto sem perda de dado.
+
+`patrimonio_fotografias` foi incorporada a `patrimonio_documentos`.
+`solicitacao_organizacoes` foi substituída por `solicitacao_associacoes` e
+`solicitacao_uvrs`. `catalogo_eventos` usa três FKs opcionais e CHECK de
+exatamente uma referência. Todas as 238 FKs têm política RESTRICT/NO ACTION;
+não há CASCADE nem SET NULL. Há 54 estruturas com inativação/invalidação lógica;
+as demais são append-only ou protegidas por RESTRICT.
+
+Cada tabela, coluna, FK, constraint, índice, regra transacional, migration e
+teste possui localização nominal. Parecer documental: **A — ESPECIFICAÇÃO
+FÍSICA COMPLETA E APTA PARA REVISÃO FINAL DE AUTORIZAÇÃO**. Isso não autoriza
+implementação. Os quatro bloqueadores continuam ativos.
+
+## H2C.3E.3 — consolidação física final
+
+Recontagem normativa: **82 tabelas** (58 novas, `usuarios` reutilizada e 23
+`fc_*` históricas), **1.103 colunas**, 82 PKs, 238 FKs, 377 CHECKs, **363 objetos
+físicos de índice** e 28 operações globais. Menções anteriores a 1.104 colunas,
+213 índices ou 2.190 testes são marcos históricos substituídos por esta
+recontagem.
+
+As 82 tabelas foram individualizadas em nove categorias: 19 cadastros
+inativáveis, 8 fatos canceláveis/estornáveis, 15 históricos append-only, 7
+documentos com retenção, 11 vínculos temporais, 12 rascunhos descartáveis, 7
+catálogos protegidos, 2 estruturas técnicas de migration e 1 sem ciclo próprio.
+Foram relacionados 34 mecanismos de inativação/exclusão lógica, 7 cancelamentos,
+1 estorno, 9 substituições, 6 expirações, 7 revogações/encerramentos, 16
+append-only, 24 retenções e 17 tabelas participantes de descarte controlado em
+12 relações; há sobreposição intencional entre mecanismos. A relação
+nominal, coluna/estado, operação, teste e migration estão no catálogo físico.
+
+O plano final contém **2.341 identificadores**, 2.341 casos parametrizados e 9
+modelos: 1.103 colunas, 82 PKs, 238 FKs, 86 UNIQUEs, 377 CHECKs, 363 índices, 40
+transacionais, 28 de operações e 24 de segurança. Nenhum teste foi executado.
+
+Os 24 achados têm decisão, operação, modelo e situação. Permanecem quatro
+bloqueadores: `role`/`uvr_acesso`, executor, bootstrap e H001–H011 em PostgreSQL
+efêmero. Parecer integral: **A — ESPECIFICAÇÃO FÍSICA COMPLETA E APTA PARA
+REVISÃO FINAL DE AUTORIZAÇÃO**. Próxima etapa: H2C.3F, somente leitura.
+
+## Encerramento normativo H2C.3E/H2C.3F — 03/08/2026
+
+**DOCUMENTAÇÃO APROVADA.** Parecer H2C.3E: **A — ESPECIFICAÇÃO FÍSICA COMPLETA
+E APTA PARA REVISÃO FINAL DE AUTORIZAÇÃO**. Parecer independente H2C.3F.2: **A
+— RECOMENDADA A AUTORIZAÇÃO HUMANA PARA INÍCIO DA IMPLEMENTAÇÃO CONTROLADA**.
+
+Consolidam-se 82 tabelas (58 novas, `usuarios` reutilizada, 23 FC_*), 1.103
+colunas (752 + 351), 82 PKs, 238 FKs (154 RESTRICT + 84 NO ACTION), 86
+unicidades, 32 parciais, 377 CHECKs, 363 índices e 28 operações. M0014–M0024 não
+existem como IDs; as ordens 14–24 são H001–H011 imutáveis. O hash normalizado
+UTF-8/LF/SHA-256 de H001 é
+`a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc`.
+
+Permanecem consolidadas a incorporação de `patrimonio_fotografias`, a separação
+de `solicitacao_associacoes`/`solicitacao_uvrs`, as três FKs exclusivas de
+`catalogo_eventos`, a convenção `usuario_id`/`*_usuario_id`, nomes sem acento e
+até 63 bytes, ausência de FK polimórfica/incompatibilidade de tipo, as 238
+políticas de remoção e 12 relações com descarte manual transacional.
+
+**AUTORIZAÇÃO PARA IMPLEMENTAÇÃO CONTROLADA.** O usuário autorizou o início
+posterior da H2C.4A nos limites aprovados. **IMPLEMENTAÇÃO AINDA NÃO INICIADA:**
+B1–B4 seguem ativos; nenhum código, SQL, migration, banco ou teste foi criado ou
+executado neste encerramento.
