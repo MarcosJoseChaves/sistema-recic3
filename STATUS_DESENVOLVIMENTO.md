@@ -1996,3 +1996,18 @@ B1 (`role`/`uvr_acesso`), B3 (bootstrap) e B4 (H001–H011) seguem ativos.
 Dívida técnica pós-entrega: remover assert constante redundante da suíte C3 e
 considerar testes adicionais já equivalentes aos cenários cobertos, sem impacto
 no caminho operacional normal.
+
+## Etapa H2C.4B-FAST — B1 e B3 encerrados
+
+Na primeira entrega, todo o módulo Fiscalização de Contratos permanece restrito
+a administradores, inclusive rotas internas, ações POST, APIs e documentos. O
+menu segue oculto para usuários comuns. A delegação granular por `role`,
+`uvr_acesso`, fiscal, gestor ou contrato fica como dívida técnica pós-entrega.
+
+O bootstrap do controle de migrations passa a ter entrada pública explícita que
+exige uma conexão fornecida pelo chamador e delega ao runner validado. Banco novo
+recebe somente M0001; ledger válido é reconhecido sem reaplicação; estado parcial
+ou incompatível é recusado. O bootstrap não lê `DATABASE_URL` ou `.env`, não é
+acionado pelo Flask e não habilita nem executa H001–H011.
+
+Próxima etapa: **B4 — validação controlada de H001–H011**.

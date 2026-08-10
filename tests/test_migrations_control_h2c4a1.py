@@ -25,6 +25,7 @@ from migrations_control.checksum import (
     calcular_sha256_normalizado,
     normalizar_utf8_lf,
 )
+from migrations_control.bootstrap import executar_bootstrap_controlado
 from migrations_control.cli import main as cli_main
 from migrations_control.connection_state import (
     ConnectionState,
@@ -3376,6 +3377,102 @@ class RunnerTests(unittest.TestCase):
             self.assertNotIn("\r", ddl)
         finally:
             fx.close()
+
+
+class BootstrapFastTests(unittest.TestCase):
+    def test_entrada_exige_conexao_explicita_sem_consultar_database_url(self):
+        with (
+            mock.patch.dict(os.environ, {"DATABASE_URL": "nao-deve-ser-usada"}),
+            mock.patch("migrations_control.bootstrap.MigrationRunner") as runner_factory,
+            self.assertRaises(DatabaseConnectionError),
+        ):
+            executar_bootstrap_controlado(None)
+        runner_factory.assert_not_called()
+
+    def test_entrada_delega_uma_vez_ao_runner_validado(self):
+        conexao = object()
+        resultado = object()
+        runner = mock.Mock()
+        runner.executar.return_value = resultado
+        logger = mock.Mock()
+        with mock.patch(
+            "migrations_control.bootstrap.MigrationRunner", return_value=runner,
+        ) as runner_factory:
+            recebido = executar_bootstrap_controlado(
+                conexao, timeout_lock_segundos=7.5, event_logger=logger,
+            )
+        self.assertIs(resultado, recebido)
+        runner_factory.assert_called_once_with(
+            conexao, caminho_manifesto=None,
+            timeout_lock_segundos=7.5, event_logger=logger,
+        )
+        runner.executar.assert_called_once_with()
+
+    def test_banco_novo_aplica_somente_m0001_e_resulta_controlado(self):
+        conexao = FakeConnection()
+        resultado = criar_runner(conexao).executar()
+        reconhecido = classificar_preflight(snapshot_controlado(), carregar_manifesto())
+        sql = " ".join(item[0] for item in conexao.executions)
+        self.assertEqual(("M0001",), resultado.aplicadas)
+        self.assertEqual("BANCO_NOVO", resultado.classificacao_preflight)
+        self.assertEqual("BANCO_CONTROLADO", reconhecido.classificacao.value)
+        self.assertNotRegex(sql, r"H00[1-9]|H01[01]")
+
+    def test_banco_controlado_repetido_e_idempotente(self):
+        conexoes = (FakeConnection(), FakeConnection())
+        resultados = tuple(
+            criar_runner(conexao, snapshot=snapshot_controlado()).executar()
+            for conexao in conexoes
+        )
+        self.assertTrue(all(resultado.aplicadas == () for resultado in resultados))
+        self.assertTrue(all(resultado.ignoradas == ("M0001",) for resultado in resultados))
+        self.assertTrue(all(not any(
+            sql.lstrip().upper().startswith("CREATE TABLE")
+            for sql, _, _ in conexao.executions
+        ) for conexao in conexoes))
+
+    def test_estado_incompativel_e_recusado_sem_ddl(self):
+        conexao = FakeConnection()
+        with self.assertRaises(UnknownDatabaseError):
+            criar_runner(conexao, snapshot=snapshot_novo(("objeto_inesperado",))).executar()
+        self.assertFalse(any(
+            sql.lstrip().upper().startswith("CREATE TABLE")
+            for sql, _, _ in conexao.executions
+        ))
+
+    def test_falha_durante_m0001_faz_rollback_sem_seguir_adiante(self):
+        conexao = FakeConnection()
+        conexao.fail_execute_contains = "INSERT INTO public.schema_migrations"
+        with self.assertRaises(MigrationExecutionError):
+            criar_runner(conexao).executar()
+        self.assertEqual(1, conexao.rollbacks)
+        self.assertNotRegex(" ".join(item[0] for item in conexao.executions), r"H00[1-9]|H01[01]")
+
+    def test_manifesto_do_bootstrap_contem_somente_m0000_m0001(self):
+        manifesto = carregar_manifesto()
+        self.assertEqual(("M0000", "M0001"), tuple(
+            operacao.identificador for operacao in manifesto.operacoes
+        ))
+
+    def test_importar_entrada_bootstrap_nao_executa_runner(self):
+        codigo = (
+            "import os,sys\n"
+            "from unittest import mock\n"
+            "sys.path.insert(0, os.getcwd())\n"
+            "with mock.patch('migrations_control.runner.MigrationRunner.executar', "
+            "side_effect=AssertionError('bootstrap automatico')):\n"
+            " import migrations_control.bootstrap\n"
+            "print('BOOTSTRAP_IMPORT_OK')\n"
+        )
+        resultado = subprocess.run(
+            [sys.executable, "-B", "-c", codigo], cwd=ROOT,
+            capture_output=True, text=True, timeout=15, check=False,
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+        )
+        self.assertEqual(
+            (0, "BOOTSTRAP_IMPORT_OK\n", ""),
+            (resultado.returncode, resultado.stdout, resultado.stderr),
+        )
 
 
 class LedgerOperationTests(unittest.TestCase):

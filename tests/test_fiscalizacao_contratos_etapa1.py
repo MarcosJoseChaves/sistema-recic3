@@ -4,6 +4,7 @@ import importlib
 import os
 import sys
 import unittest
+from pathlib import Path
 from tests.csrf_helpers import ClienteComCSRF
 from unittest.mock import MagicMock, patch
 
@@ -21,13 +22,17 @@ def importar_app_sem_banco():
         patch.dict(os.environ, {"APP_ENV": "testing", "SECRET_KEY": "teste-ficticio", "DATABASE_URL": ""}, clear=True),
         patch("dotenv.load_dotenv", return_value=False),
         patch("psycopg2.connect", return_value=conexao_falsa) as conectar_mock,
+        patch(
+            "migrations_control.runner.MigrationRunner.executar",
+            side_effect=AssertionError("Importar o app não pode executar bootstrap"),
+        ) as bootstrap_mock,
     ):
         modulo_app = importlib.import_module("app")
 
-    return modulo_app, conectar_mock
+    return modulo_app, conectar_mock, bootstrap_mock
 
 
-APP_MODULE, CONECTAR_MOCK = importar_app_sem_banco()
+APP_MODULE, CONECTAR_MOCK, BOOTSTRAP_MOCK = importar_app_sem_banco()
 
 
 class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
@@ -71,6 +76,40 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
             resposta = self.client.get("/fiscalizacao-contratos")
 
         self.assertEqual(resposta.status_code, 403)
+
+    def test_todas_as_rotas_do_modulo_usam_guarda_admin_local(self):
+        arquivo_permissoes = (
+            Path(__file__).resolve().parents[1]
+            / "modulos" / "fiscalizacao_contratos" / "permissions.py"
+        ).resolve()
+        regras = [
+            regra for regra in self.flask_app.url_map.iter_rules()
+            if regra.endpoint.startswith("fiscalizacao_contratos.")
+            and regra.endpoint != "fiscalizacao_contratos.static"
+        ]
+
+        self.assertTrue(regras)
+        self.assertTrue(any("POST" in regra.methods for regra in regras))
+        self.assertTrue(any("/documentos/" in regra.rule for regra in regras))
+        for regra in regras:
+            with self.subTest(rota=regra.rule, endpoint=regra.endpoint):
+                view = self.flask_app.view_functions[regra.endpoint]
+                arquivos_decoradores = set()
+                while view is not None:
+                    arquivos_decoradores.add(Path(view.__code__.co_filename).resolve())
+                    view = getattr(view, "__wrapped__", None)
+                self.assertIn(arquivo_permissoes, arquivos_decoradores)
+
+    def test_menu_admin_only_preserva_area_comum(self):
+        self.autenticar_como(2)
+        resposta_comum = self.client.get("/")
+        self.assertEqual(200, resposta_comum.status_code)
+        self.assertNotIn(b"/fiscalizacao-contratos", resposta_comum.data)
+
+        self.autenticar_como(1)
+        resposta_admin = self.client.get("/")
+        self.assertEqual(200, resposta_admin.status_code)
+        self.assertIn(b"/fiscalizacao-contratos", resposta_admin.data)
 
     def test_administrador_acessa_o_modulo(self):
         self.autenticar_como(1)
@@ -135,6 +174,7 @@ class TestFiscalizacaoContratosEtapa1(unittest.TestCase):
         self.assertEqual(self.flask_app.name, "app")
         self.assertIsNotNone(self.client)
         CONECTAR_MOCK.assert_not_called()
+        BOOTSTRAP_MOCK.assert_not_called()
 
 
 if __name__ == "__main__":
