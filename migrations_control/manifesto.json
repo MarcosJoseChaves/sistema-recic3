@@ -1,0 +1,49 @@
+{
+  "versao_formato": 1,
+  "sistema": "sistema-recic3",
+  "descricao": "Manifesto inicial da baseline nuclear controlada.",
+  "normalizacao_checksum": "UTF-8/LF",
+  "algoritmo_checksum": "SHA-256",
+  "operacoes": [
+    {
+      "identificador": "M0000",
+      "ordem_global": 0,
+      "modulo": "executor",
+      "tipo": "EXECUTOR",
+      "descricao": "Executa preflight e obtém advisory lock sem aplicar DDL.",
+      "caminho": null,
+      "checksum": null,
+      "dependencias": [],
+      "transacional": false,
+      "imutavel": true,
+      "possui_ddl": false,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_preflight",
+        "unitario_advisory_lock"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0001",
+      "ordem_global": 1,
+      "modulo": "controle_migrations",
+      "tipo": "NOVA_DDL",
+      "descricao": "Cria o ledger e o histórico de execuções.",
+      "caminho": "sql/M0001_criar_ledger.sql",
+      "checksum": "1966113e8d20f4f3aaa2ebc0b6b1f312470ac99835ea97026305c732ab5e0f39",
+      "dependencias": [
+        "M0000"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_ledger",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    }
+  ]
+}

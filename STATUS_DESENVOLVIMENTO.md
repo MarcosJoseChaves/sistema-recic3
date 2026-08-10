@@ -1618,3 +1618,381 @@ duas tabelas de controle.
 
 **IMPLEMENTAÇÃO AINDA NÃO INICIADA.** Não foram criados código, SQL, migration,
 manifesto, executor, bootstrap ou teste; nenhum banco ou serviço foi acessado.
+
+## Etapa H2C.4A.1 — infraestrutura inicial em validação
+
+Em **03/08/2026**, foram implementados o manifesto inicial M0000/M0001, parser
+estrito, normalização UTF-8/LF, SHA-256, preflight, advisory lock com timeout,
+as definições do ledger, o runner transacional da M0001, autorregistro, erros
+sanitizados, CLI offline e testes unitários.
+
+A implementação está em validação técnica e permanece desconectada da
+inicialização do Flask. Foram aprovados **68 testes unitários offline**. Nenhum
+PostgreSQL foi iniciado, nenhuma migration foi aplicada, nenhum banco real,
+`.env`, dump ou serviço externo foi acessado. Nenhum commit ou push foi feito.
+
+B2 foi parcialmente tratado. B1, B3 e B4 continuam ativos. Próxima etapa
+recomendada: **H2C.4A.2 — validação em PostgreSQL efêmero**, somente após nova
+autorização.
+
+## Etapa H2C.4A.1C — bloqueadores corrigidos, nova revisão pendente
+
+Em **03/08/2026**, a revisão independente H2C.4A.1R emitiu parecer **C — não
+recomendada a execução em PostgreSQL efêmero**. Foram apontados inventário
+incompleto do `public`, validação insuficiente do ledger e protocolo inseguro
+de estado da conexão.
+
+A H2C.4A.1C ampliou o preflight, implementou assinatura física e validação do
+histórico, qualificou `public`/`pg_catalog`, passou a rejeitar conexão não
+ociosa, isolou a transação da M0001, protegeu rollback/unlock/restauração e
+endureceu o manifesto. Foram aprovados **152 testes unitários offline**.
+
+A implementação aguarda nova revisão técnica; isso ainda não autoriza a
+H2C.4A.2. B2 continua parcialmente tratado. B1, B3 e B4 permanecem ativos.
+Nenhum PostgreSQL foi iniciado, nenhuma migration ou SQL foi executado, nenhum
+banco, `.env`, dump ou serviço externo foi acessado e nenhum commit ou push foi
+realizado.
+
+## Etapa H2C.4A.1C2 — segunda correção técnica, terceira revisão pendente
+
+Em **03/08/2026**, a segunda revisão independente H2C.4A.1R2 emitiu parecer
+**C — não recomendada a execução em PostgreSQL efêmero**. Foram encontrados
+quatro bloqueadores e dois achados altos envolvendo sequências `IDENTITY`, a
+tentativa zero da M0001, assinatura dos índices, falhas do logger, janela entre
+checksum e execução e normalização insegura de expressões.
+
+A H2C.4A.1C2 corrigiu os seis pontos. As duas sequências automáticas passaram a
+integrar a assinatura física com propriedade e opções validadas; a M0001 exige
+uma única execução `APLICADA` na tentativa zero; índices e expressões receberam
+comparação conservadora; o SQL validado é preservado em memória; e logging
+secundário não mascara erros operacionais. Foram aprovados **210 testes
+unitários offline**.
+
+A implementação aguarda uma terceira revisão técnica. A H2C.4A.2 continua sem
+autorização. B2 permanece parcialmente tratado; B1, B3 e B4 continuam ativos.
+Nenhum PostgreSQL foi iniciado, nenhuma migration ou SQL foi executado, nenhum
+banco, `.env`, dump ou serviço externo foi acessado e nenhum commit ou push foi
+realizado.
+
+## Etapa H2C.4A.1C3 — terceira correção técnica, quarta revisão pendente
+
+Em **03/08/2026**, a terceira revisão independente H2C.4A.1R3 emitiu parecer
+**C — não recomendada a execução em PostgreSQL efêmero**. Permaneceram achados
+na construção de `ValidatedSql`, confinamento final do arquivo, assinatura dos
+índices, identidade de operator classes e collations, cobertura nominal e
+documentação.
+
+A H2C.4A.1C3 vinculou o SQL validado à operação, raiz, caminho canônico,
+identidade do arquivo e checksums; acrescentou revalidação independente no
+runner; ampliou a assinatura dos índices com `indimmediate`, `indisclustered`,
+`indisreplident` e `indnullsnotdistinct`; estruturou nomes físicos; e ampliou a
+cobertura para **249 testes unitários offline**, todos aprovados.
+
+A implementação aguarda uma quarta revisão técnica independente. A H2C.4A.2
+continua sem autorização. B2 permanece parcialmente tratado; B1, B3 e B4
+continuam ativos. Nenhum PostgreSQL foi iniciado, nenhuma migration ou SQL foi
+executado, nenhum banco, `.env`, dump ou serviço externo foi acessado e nenhum
+commit ou push foi realizado.
+
+## Etapa H2C.4A.1C4 — ajustes finais, quinta revisão pendente
+
+Em **04/08/2026**, a revisão independente H2C.4A.1R4 emitiu parecer **B —
+recomendada após ajustes menores no código ou nos testes**. Permaneceram dois
+pontos: o construtor público de `ValidatedSql` aceitava identidade declarada
+pelo chamador e a assinatura física dos índices não incluía `indcheckxmin`.
+
+A H2C.4A.1C4 fechou o construtor público e manteve como API suportada somente a
+fábrica que lê o arquivo, deriva internamente bytes, texto, checksum e identidade
+física. O runner continua revalidando o artefato de modo independente e rejeita
+objetos artificiais antes do cursor de DDL. A assinatura dos seis índices passou
+a exigir `indcheckxmin = false`, e a verificação de capacidade do catálogo agora
+exige cinco campos de `pg_index`, sem fallback permissivo.
+
+Foram aprovados **262 testes unitários offline**, preservando os 249 anteriores
+e acrescentando cenários nominais de construção, bypass, arquivo inexistente,
+confinamento, symlink simulado, `indcheckxmin` e `QualifiedName`. A futura
+H2C.4A.2 exige PostgreSQL 15 ou superior e continua bloqueada até a revisão
+H2C.4A.1R5 e posterior autorização humana expressa.
+
+B2 permanece parcialmente tratado. B1 (`role`/`uvr_acesso`), B3 (bootstrap) e
+B4 (H001–H011) continuam ativos. Nenhum PostgreSQL foi iniciado, nenhum SQL ou
+migration foi executado, nenhum banco, `.env`, dump ou serviço externo foi
+acessado e nenhum commit ou push foi realizado.
+
+## Etapa H2C.4A.2 — validação PostgreSQL efêmera não aprovada
+
+Em **04/08/2026**, a infraestrutura foi exercitada em PostgreSQL **15.18**
+efêmero e descartável, usando a imagem oficial `postgres:15`, porta aleatória
+somente em `127.0.0.1` e credenciais mantidas apenas em memória. Todos os
+containers foram destruídos, nenhuma porta ou volume permaneceu e nenhum banco
+real, `.env`, `DATABASE_URL`, Neon, Cloudinary ou dado real foi acessado.
+
+Os **262 testes offline** permaneceram aprovados. A primeira suíte de integração
+executou 24 cenários: 9 passaram, 1 falhou e 14 tiveram erro. A M0001 executou o
+DDL dentro da transação, mas o validador rejeitou diferenças entre a assinatura
+normativa e o catálogo real do PostgreSQL 15.18, relacionadas às colunas e à
+forma textual dos `CHECKs` e à qualificação textual das definições dos índices.
+O rollback integral funcionou e nenhum ledger ou autorregistro permaneceu.
+
+Parecer: **C — H2C.4A.2 não validada em PostgreSQL efêmero**. A revisão
+independente H2C.4A.2R permanece pendente após futura correção separada da
+infraestrutura. B2 continua em validação; B1, B3 e B4 permanecem ativos. Nenhum
+commit ou push foi realizado nesta etapa.
+
+## Etapa H2C.4A.2C1 — primeira correção pós-integração concluída
+
+Em **04/08/2026**, foi concluída offline a correção do modelo físico que havia
+bloqueado a primeira execução em PostgreSQL 15.18. O registro histórico da
+H2C.4A.2 não validada foi preservado, inclusive o rollback integral e suas três
+divergências: colunas dos `CHECKs`, parênteses externos dos `CHECKs` e omissão
+textual opcional de `public.` em `pg_get_indexdef`.
+
+Os oito `CHECKs` agora possuem colunas reais e propriedades físicas explícitas;
+`conkey` e `attnums` são validados sem fallback. A normalização remove somente
+parênteses externos redundantes e balanceados. Nos índices, somente a
+qualificação textual opcional de `public` é normalizada quando schema do índice
+e da tabela já foram comprovados estruturalmente como `public`. Diferenças de
+schema, nome ou estrutura continuam bloqueadas.
+
+Foram aprovados **277 testes unitários offline**, sem falhas ou erros. O teste
+PostgreSQL foi carregado sem DSN e pulou com segurança, sem abrir conexão. Não
+foram executados Docker, PostgreSQL, SQL, M0001 nem H001–H011; nenhum banco real,
+`.env`, Neon, Cloudinary ou serviço externo foi acessado. M0001, manifesto e o
+relatório da primeira execução permaneceram inalterados.
+
+B2 continua parcialmente tratado e aguarda revisão técnica offline da correção.
+B1 (`role`/`uvr_acesso`), B3 (bootstrap) e B4 (H001–H011) continuam ativos.
+Próxima etapa recomendada: **H2C.4A.2C1R — revisão técnica offline**. Nenhum
+commit ou push foi realizado.
+
+## Etapa H2C.4A.2C2 — segunda correção pós-integração concluída offline
+
+Em **04/08/2026**, foi registrado o parecer **C — não recomendada nova execução
+PostgreSQL** da revisão H2C.4A.2C1R. A revisão encontrou remoção genérica de
+`pg_catalog.` no canonicalizador e classificação incorreta de uma fixture
+derivada como se fosse fotografia real integral.
+
+A H2C.4A.2C2 removeu a equivalência global e manteve uma única exceção fechada:
+`pg_catalog.btrim(...)` pode equivaler a `btrim(...)` somente dentro de
+constraints `CHECK`. Todas as demais funções, schemas, defaults, expressões de
+índice e predicados preservam seus qualificadores. `conkey` nulo e vazio também
+passaram a permanecer distintos no modelo físico.
+
+A fixture anterior foi reclassificada como sintética. A fotografia bruta do
+PostgreSQL 15.18 continua ausente. Foi preparado apenas o contrato, o coletor
+direto, o serializador independente e o controle desabilitado por padrão para
+uma coleta futura autorizada; nenhum arquivo de fotografia foi criado.
+
+Foram aprovados **290 testes unitários offline**, além das 24 reproduções
+nominais da correção, sem falhas ou erros. O teste PostgreSQL sem DSN pulou com
+segurança e não abriu conexão. Sintaxe, manifesto, checksums e plano offline
+foram aprovados.
+
+B2 foi parcialmente tratado e ainda depende de revisão offline independente e
+de futura evidência bruta controlada. B1 (`role`/`uvr_acesso`), B3 (bootstrap) e
+B4 (H001–H011) permanecem ativos. Uma nova H2C.4A.2 completa continua bloqueada.
+Nenhum Docker, PostgreSQL, SQL, migration, banco, `.env` ou serviço externo foi
+acessado. Nenhum commit ou push foi realizado.
+
+Próxima etapa recomendada: **H2C.4A.2C2R — revisão técnica offline
+independente**. Essa revisão deverá decidir se autoriza somente a futura
+H2C.4A.2E1 para coleta bruta controlada ou se exige nova correção offline.
+
+## Etapa H2C.4A.2C3 — captura bruta endurecida offline
+
+Em **04/08/2026**, a H2C.4A.2C2R recebeu parecer **C — não recomendada a
+coleta controlada de evidência**. A revisão aprovou a canonicalização, mas
+encontrou gravação não atômica, filtro de segredos incompleto, inventário do
+`public` incompleto, sobrescrita sem validação integral, destino implícito e
+ausência de serialização de tuplas.
+
+A H2C.4A.2C3 implementou destino explícito, temporário exclusivo no mesmo
+diretório, escrita completa, flush/fsync, releitura, validação e substituição
+atômica. Falhas anteriores ao replace limpam o temporário; evidência existente
+exige autorização separada, hash esperado e validação integral. Filtros de
+chaves e valores bloqueiam credenciais, Authorization, hostnames e caminhos
+pessoais. Os metadados são fechados e a imagem aceita é somente `postgres:15`.
+
+O inventário do schema `public` passou a abranger categorias explícitas de
+relações, rotinas, tipos, enums, domínios, triggers, políticas, regras,
+extensões, collations, conversões, operadores, operator classes/families e text
+search, com cobertura obrigatória. Tuplas são serializadas deterministicamente
+como listas JSON.
+
+A C3 registrou **983 testes**, mas a revisão C3R demonstrou que essa soma não
+representava testes distintos: ela misturava execuções repetidas, testes focados
+e reproduções já contidas na suíte. A afirmação foi invalidada.
+
+A fotografia bruta real continua ausente. A H2C.4A.2E1 permanece bloqueada até
+parecer posterior. B2 continua parcialmente tratado; B1 (`role`/`uvr_acesso`),
+B3 (bootstrap) e B4 (H001–H011) permanecem ativos. Nenhum Docker, PostgreSQL,
+SQL, migration, banco, `.env` ou serviço externo foi acessado. Nenhum commit ou
+push foi realizado.
+
+Próxima etapa recomendada: **H2C.4A.2C3R — revisão técnica offline independente
+da captura segura**.
+
+## Etapa H2C.4A.2C4 — ambiente reparado e captura endurecida
+
+Em **10/08/2026**, a H2C.4A.2C3R recebeu parecer **C — não recomendada a
+coleta controlada de evidência**. A revisão confirmou que o venv oficial
+apontava para uma instalação Python 3.12.10 ausente, invalidou a contagem de 983
+testes e identificou lacunas na escrita parcial, no tratamento de fechamento,
+no filtro de segredos e na descrição do inventário.
+
+A instalação Python 3.12.10 registrada no Windows foi restaurada com seu
+instalador oficial assinado. O venv `C:\dev\recic4\.venv` foi preservado como
+backup do estado quebrado e recriado fora do repositório, com as versões exatas
+de `requirements.txt`. Python 3.12.10, psycopg2 2.9.10, Flask 3.1.2 e `pip
+check` foram confirmados.
+
+O mecanismo agora rejeita qualquer retorno inválido de `write`, testa fragmentos
+reais pelo double de escrita e conserva a exceção principal quando close ou
+limpeza também falham. O filtro utiliza NFKC apenas para detecção, preserva os
+bytes brutos, rejeita credenciais Unicode e aceita SQL legítimo com nomes como
+`password`, `token`, `host_id` e `username_type`. Hashes anteriores, adulteração
+do temporário e reparse point simulado receberam cobertura adicional.
+
+O contrato documenta uma matriz de cobertura: 19 categorias de `pg_catalog`
+são cobertas explicitamente, enquanto extended statistics, atributos/defaults
+gerais, ACLs, comentários, security labels, opções de foreign tables e objetos
+globais permanecem fora do escopo atual. A fotografia serve à prova da M0001 e
+não é apresentada como dump universal.
+
+A contagem AST final é de **326 métodos offline + 24 PostgreSQL = 350 métodos
+declarados**. A suíte offline executou 326 testes uma única vez, sem falhas ou
+erros. O módulo PostgreSQL sem DSN abriu zero conexões e registrou um skip de
+classe. O conjunto focado executou 44 testes e o pacote de reproduções executou
+46 testes com um skip; esses números não são somados.
+
+A fotografia bruta permanece ausente e a H2C.4A.2E1 continua não autorizada.
+B2 permanece parcialmente tratado; B1 (`role`/`uvr_acesso`), B3 (bootstrap) e
+B4 (H001–H011) continuam ativos. Nenhum Docker, PostgreSQL, SQL, migration,
+`.env`, Neon ou Cloudinary foi acessado. Nenhum commit ou push foi realizado.
+
+Próxima etapa: **H2C.4A.2C4R — revisão técnica offline final antes da coleta
+bruta**.
+
+## Etapa H2C.4A.2E1C1 — telemetria segura implementada offline
+
+Em **10/08/2026**, foi preservado o parecer **C — H2C.4A.2E1 não concluída
+com segurança**. Na primeira e única tentativa, o container chegou a `healthy`,
+mas o wrapper temporário transformou a falha posterior somente em `controlled
+E1 failure`. O estágio exato continua historicamente desconhecido. O cleanup
+foi concluído e nenhuma fotografia foi produzida.
+
+A E1C1 acrescentou estágios e categorias fechados, atualização imediatamente
+antes de cada operação, exceção externa sanitizada e estados explícitos de
+cleanup. O resultado seguro preserva somente código fixo, estágio, categoria,
+classe, SQLSTATE válido e `errno`/`winerror` numéricos. Mensagens, argumentos,
+DSNs, credenciais e caminhos da exceção original não são apresentados. Erro
+principal e falha secundária de cleanup permanecem separados; resultado de
+cleanup negativo ou não verificável impede sucesso.
+
+A contagem AST encontrou **326 métodos** em `test_migrations_control_h2c4a1.py`
+e **41 métodos** no módulo PostgreSQL: 17 novos testes offline e os 24 TPGs já
+existentes. Não há geração dinâmica. A suíte offline aprovou 326 testes. Sem
+DSN, o módulo PostgreSQL aprovou os 17 testes de telemetria e registrou um skip
+de classe antes dos 24 TPGs. Os subtests percorrem todos os 22 estágios de
+execução e 6 de cleanup sem serem somados como métodos independentes.
+
+Nenhum Docker, PostgreSQL, SQL, M0001, H001–H011, banco, `.env`, Neon,
+Cloudinary ou Flask foi acessado ou iniciado. Nenhuma fotografia foi criada.
+M0001, manifesto e relatório histórico permaneceram inalterados. B2 continua
+parcialmente tratado; B1 (`role`/`uvr_acesso`), B3 (bootstrap) e B4
+(H001–H011) permanecem ativos. Uma segunda E1 continua **não autorizada**.
+
+Próxima etapa exclusiva: **H2C.4A.2E1C1R — revisão técnica offline
+independente da telemetria segura**.
+
+## Etapa H2C.4A.2E1C2 — vinculação concreta concluída offline
+
+A revisão E1C1R recebeu **C — não recomendada nova tentativa da E1**. A
+telemetria de falha era segura, mas o orquestrador aceitava callbacks genéricos,
+operações vazias podiam declarar sucesso sem fotografia e o resultado positivo
+podia expor retornos arbitrários.
+
+A C2 criou `E1RealAdapter` e a entrada única `executar_e1_controlada()`, sem
+callbacks ou parâmetros externos. Um mapa interno imutável liga 22 estágios de
+execução e 6 de cleanup a métodos reais para Docker, psycopg2, versões, M0001,
+coleta, serialização, gravação, validação, hash e limpeza. Estado e configuração
+possuem representação redigida.
+
+O sucesso exige fotografia regular, JSON/metadados válidos, SHA-256 confirmado
+sobre o arquivo final, exatamente 19 categorias e cleanup completo. O receipt
+positivo é fechado e não guarda retornos brutos. Operação vazia, ausente,
+trocada ou não implementada, versão diferente de 15.18/150018, fotografia
+ausente/inválida e cleanup `FALSE`/`UNKNOWN` produzem falha sanitizada.
+
+A AST encontrou **326 + 47 métodos declarados**: 326 no C4A1, 23 C2 offline e
+24 TPGs. Os 23 substituem os 17 testes C1, resultando em seis métodos líquidos
+novos. Não há geração dinâmica. As suítes de 326 e 23 testes passaram; sem DSN,
+os 23 executaram e a classe TPG registrou um skip seguro.
+
+Nenhum Docker, PostgreSQL, SQL, M0001, H001–H011, Flask, Neon ou Cloudinary foi
+executado. A fotografia real continua ausente. B2 permanece parcial; B1
+(`role`/`uvr_acesso`), B3 (bootstrap) e B4 (H001–H011) continuam ativos. Uma
+segunda E1 permanece **não autorizada**.
+
+Próxima etapa exclusiva: **H2C.4A.2E1C2R — revisão técnica offline independente
+da vinculação concreta da E1**.
+
+## Etapa H2C.4A.2E1C3 — perímetro operacional fechado offline
+
+A E1C2R emitiu **C — não recomendada nova tentativa da E1**. Permaneciam três
+bloqueadores: o runner genérico aceitava Fake e emitia receipt oficial,
+credenciais temporárias apareciam no argv do Docker e a tag `postgres:15` podia
+mudar entre inspeção e criação, sem contexto local ou confirmação do image ID.
+Além disso, uma fotografia canônica podia permanecer depois de falha posterior.
+
+A C3 separou o resultado interno `E1FlowOutcome` do `E1SuccessReceipt`. O runner
+compartilhado não emite mais evidência operacional. O receipt exige configuração
+canônica, `E1RealAdapter` exato e a entrada pública sem argumentos
+`executar_e1_controlada()`. Testes usam configuração distinta e confinada a
+tempdir.
+
+Docker passou a usar referência imutável pelo digest aprovado, contexto explícito
+`desktop-linux`, validação do endpoint npipe local, linux/amd64 e confirmação do
+image ID no container. `DOCKER_HOST` e `DOCKER_CONTEXT` herdados bloqueiam o
+precheck real. O argv contém somente os nomes POSTGRES_USER, POSTGRES_PASSWORD e
+POSTGRES_DB; seus valores sintéticos são fornecidos exclusivamente ao ambiente
+filho do `docker run`. Não há `shell=True`, env-file ou arquivo persistente.
+
+Mounts inesperados são recusados. Erro Docker não representa container ausente:
+somente comando bem-sucedido, filtro de nome exato e stdout vazio confirmam a
+ausência. A fotografia criada pela tentativa é identificada internamente e
+removida se validação, hash ou qualquer cleanup falhar; arquivo preexistente é
+preservado. Evidências tipadas críticas rejeitam valores inválidos ao construir.
+
+Foram acrescentados **22 métodos C3 offline**, inclusive fluxo completo pelos
+métodos reais de `E1RealAdapter` com mocks somente nas fronteiras externas.
+Nenhum Docker, PostgreSQL, SQL, M0001, H001–H011, Flask, Neon ou Cloudinary foi
+executado; a fotografia real continua ausente. B2 permanece parcial; B1
+(`role`/`uvr_acesso`), B3 (bootstrap) e B4 (H001–H011) continuam ativos. Uma
+segunda E1 permanece **não autorizada**.
+
+Próxima etapa exclusiva: **H2C.4A.2E1C3R — revisão técnica offline independente
+final do perímetro operacional da segunda E1**.
+
+## Etapa H2C.4A.2E1C4-FAST — bloqueadores operacionais corrigidos
+
+A C3R recebeu C ao reproduzir falso sucesso sem fotografia usando outcome
+sintético e a fábrica separada. Também confirmou adapter/config desencontrados,
+Fake com configuração operacional e duplicatas em categorias/cleanup.
+
+A correção FAST removeu a fábrica emissora: somente `executar_e1_controlada()`
+constrói `E1SuccessReceipt`. A validação final relê o arquivo canônico e comprova
+arquivo regular, JSON, hash, tamanho, metadados, 19 categorias únicas, cleanup e
+estado do mesmo `E1RealAdapter`/`E1Config`. Fake exige `E1TestConfig`, e estruturas
+duplicadas são rejeitadas antes do receipt.
+
+Foram adicionados nove testes FAST. A suíte C4A1 aprovou 326 testes e o módulo
+PostgreSQL aprovou 54 testes offline, com a classe dos 24 TPGs em skip seguro.
+Nenhum Docker, PostgreSQL, SQL, M0001, H001–H011 ou fotografia real foi
+executado/criado. Não haverá C4R. A segunda E1 permanece sem execução e depende
+agora exclusivamente de nova autorização humana expressa. B2 continua parcial;
+B1 (`role`/`uvr_acesso`), B3 (bootstrap) e B4 (H001–H011) seguem ativos.
+
+Dívida técnica pós-entrega: remover assert constante redundante da suíte C3 e
+considerar testes adicionais já equivalentes aos cenários cobertos, sem impacto
+no caminho operacional normal.
