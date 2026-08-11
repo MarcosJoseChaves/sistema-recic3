@@ -27,6 +27,7 @@ from migrations_control.checksum import (
 )
 from migrations_control.bootstrap import executar_bootstrap_controlado
 from migrations_control.cli import main as cli_main
+from migrations_control.historical_sql import adaptar_wrapper_historico
 from migrations_control.connection_state import (
     ConnectionState,
     TRANSACTION_STATUS_IDLE,
@@ -333,6 +334,7 @@ class ManifestFixture:
         self.sql = self.base / "sql" / "M0001_criar_ledger.sql"
         self.sql.write_bytes(SQL.read_bytes())
         self.data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.data["operacoes"] = self.data["operacoes"][:2]
         self.manifest = self.base / "manifesto.json"
 
     def save(self) -> Path:
@@ -355,7 +357,10 @@ class ManifestTests(unittest.TestCase):
         self.fx.close()
 
     def test_manifesto_real_valido(self):
-        self.assertEqual(["M0000", "M0001"], [x.identificador for x in carregar_manifesto().operacoes])
+        esperadas = ["M0000", "M0001"] + [f"M{n:04d}" for n in range(2, 14)] + [
+            f"H{n:03d}" for n in range(1, 12)
+        ]
+        self.assertEqual(esperadas, [x.identificador for x in carregar_manifesto().operacoes])
 
     def test_json_invalido(self):
         with self.assertRaises(InvalidManifestJsonError):
@@ -2784,7 +2789,7 @@ class LedgerHistoryTests(unittest.TestCase):
         self.assertFalse(self.validar(execucoes=(replace(self.execucoes[0], request_id="texto"),)))
 
     def test_dependencia_nao_aplicada(self):
-        m0, m1 = self.manifesto.operacoes
+        m0, m1 = self.manifesto.operacoes[:2]
         m2 = replace(m1, identificador="M0002", ordem_global=2, dependencias=("M0001",))
         manifesto = replace(self.manifesto, operacoes=(m0, m1, m2))
         aplicada = replace(
@@ -3009,6 +3014,61 @@ class ConnectionStateTests(unittest.TestCase):
         estado.reverter_migration(); self.assertEqual(TRANSACTION_STATUS_IDLE, estado.status())
 
 
+class Fix1FastPreflightOrchestrationTests(unittest.TestCase):
+    def test_preflight_readonly_faz_rollback_e_entrega_idle_ao_bootstrap(self):
+        conexao = FakeConnection(status=TRANSACTION_STATUS_IDLE)
+        eventos = []
+        resultado_bootstrap = object()
+
+        def consultas_preflight(recebida):
+            self.assertIs(conexao, recebida)
+            self.assertEqual(TRANSACTION_STATUS_IDLE, recebida.get_transaction_status())
+            eventos.append("preflight")
+            recebida.transaction_status = TRANSACTION_STATUS_INTRANS
+            return "evidencia"
+
+        def bootstrap(recebida):
+            eventos.append("bootstrap")
+            self.assertIs(conexao, recebida)
+            self.assertEqual(TRANSACTION_STATUS_IDLE, recebida.get_transaction_status())
+            self.assertEqual(1, recebida.rollbacks)
+            return resultado_bootstrap
+
+        evidencia, resultado = pg_capture_module.executar_bootstrap_apos_preflight_readonly(
+            conexao, consultas_preflight, bootstrap=bootstrap,
+        )
+
+        self.assertEqual("evidencia", evidencia)
+        self.assertIs(resultado_bootstrap, resultado)
+        self.assertEqual(["preflight", "bootstrap"], eventos)
+        self.assertEqual(TRANSACTION_STATUS_IDLE, conexao.get_transaction_status())
+        self.assertEqual((0, 1), (conexao.commits, conexao.rollbacks))
+
+    def test_orquestracao_rejeita_caller_intrans_sem_rollback_silencioso(self):
+        conexao = FakeConnection(status=TRANSACTION_STATUS_INTRANS)
+        consultas = mock.Mock()
+        bootstrap = mock.Mock()
+
+        with self.assertRaises(ConnectionNotIdleError):
+            pg_capture_module.executar_bootstrap_apos_preflight_readonly(
+                conexao, consultas, bootstrap=bootstrap,
+            )
+
+        consultas.assert_not_called()
+        bootstrap.assert_not_called()
+        self.assertEqual((0, 0), (conexao.commits, conexao.rollbacks))
+
+    def test_bootstrap_preserva_connection_not_idle_sem_rollback(self):
+        conexao = FakeConnection(status=TRANSACTION_STATUS_INTRANS)
+
+        with self.assertRaises(ConnectionNotIdleError):
+            executar_bootstrap_controlado(conexao)
+
+        self.assertEqual((0, 0, 0), (
+            conexao.cursor_calls, conexao.commits, conexao.rollbacks,
+        ))
+
+
 class LockTests(unittest.TestCase):
     def test_chave_deterministica(self):
         self.assertEqual(-8482190501243477735, derivar_chave_lock())
@@ -3048,8 +3108,10 @@ class LockTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
-    def test_plano_m0000_m0001(self):
-        self.assertEqual(["EXECUTOR", "PENDENTE"], [x.estado for x in MigrationRunner().mostrar_plano()])
+    def test_plano_cadeia_completa(self):
+        estados = [x.estado for x in MigrationRunner().mostrar_plano()]
+        self.assertEqual("EXECUTOR", estados[0])
+        self.assertEqual(["PENDENTE"] * 24, estados[1:])
 
     def test_operacao_desabilitada_no_plano(self):
         runner = MigrationRunner()
@@ -3448,11 +3510,11 @@ class BootstrapFastTests(unittest.TestCase):
         self.assertEqual(1, conexao.rollbacks)
         self.assertNotRegex(" ".join(item[0] for item in conexao.executions), r"H00[1-9]|H01[01]")
 
-    def test_manifesto_do_bootstrap_contem_somente_m0000_m0001(self):
+    def test_manifesto_do_bootstrap_contem_cadeia_completa(self):
         manifesto = carregar_manifesto()
-        self.assertEqual(("M0000", "M0001"), tuple(
-            operacao.identificador for operacao in manifesto.operacoes
-        ))
+        self.assertEqual(25, len(manifesto.operacoes))
+        self.assertEqual("M0000", manifesto.operacoes[0].identificador)
+        self.assertEqual("H011", manifesto.operacoes[-1].identificador)
 
     def test_importar_entrada_bootstrap_nao_executa_runner(self):
         codigo = (
@@ -3527,11 +3589,11 @@ class CliAndSecurityTests(unittest.TestCase):
 
     def test_cli_checksum(self):
         codigo, saida = self.cli("verificar-checksums")
-        self.assertEqual(0, codigo); self.assertEqual(1, json.loads(saida)["checksums_verificados"])
+        self.assertEqual(0, codigo); self.assertEqual(24, json.loads(saida)["checksums_verificados"])
 
     def test_cli_plano(self):
         codigo, saida = self.cli("mostrar-plano")
-        self.assertEqual(0, codigo); self.assertEqual(2, len(json.loads(saida)["operacoes"]))
+        self.assertEqual(0, codigo); self.assertEqual(25, len(json.loads(saida)["operacoes"]))
 
     def test_cli_preflight_bloqueado(self):
         self.assertEqual(2, self.cli("preflight")[0])
@@ -3592,8 +3654,177 @@ class CliAndSecurityTests(unittest.TestCase):
         self.assertNotIn("FROM schema_migration_execucoes", fontes)
         self.assertNotIn("INTO schema_migration_execucoes", fontes)
 
-    def test_manifesto_sem_historicas(self):
-        self.assertNotRegex(MANIFEST.read_text(encoding="utf-8"), r"H00[1-9]|H01[01]")
+    def test_manifesto_contem_historicas(self):
+        operacoes = carregar_manifesto().operacoes
+        historicas = [op for op in operacoes if op.identificador.startswith("H")]
+        self.assertEqual([f"H{n:03d}" for n in range(1, 12)], [op.identificador for op in historicas])
+
+
+class MaterializacaoC2FastTests(unittest.TestCase):
+    def test_m0002_a_m0013_existem_e_nao_controlam_transacao(self):
+        for numero in range(2, 14):
+            operacao = carregar_manifesto().operacoes[numero]
+            self.assertTrue(operacao.arquivo_resolvido.is_file())
+            sql = operacao.arquivo_resolvido.read_text(encoding="utf-8")
+            self.assertNotRegex(sql, r"(?im)^\s*(?:BEGIN|COMMIT)\b")
+
+    def test_cadeia_sequencial_e_h001_depende_de_m0013(self):
+        operacoes = carregar_manifesto().operacoes
+        for anterior, atual in zip(operacoes, operacoes[1:]):
+            self.assertEqual((anterior.identificador,), atual.dependencias)
+        self.assertEqual(("M0013",), operacoes[14].dependencias)
+
+    def test_quatro_decisoes_normativas_materializadas(self):
+        m3 = (ROOT / "migrations_control/sql/M0003_usuarios.sql").read_text(encoding="utf-8")
+        m4 = (ROOT / "migrations_control/sql/M0004_autorizacao.sql").read_text(encoding="utf-8")
+        m5 = (ROOT / "migrations_control/sql/M0005_auditoria.sql").read_text(encoding="utf-8")
+        m6 = (ROOT / "migrations_control/sql/M0006_organizacoes.sql").read_text(encoding="utf-8")
+        m9 = (ROOT / "migrations_control/sql/M0009_associados.sql").read_text(encoding="utf-8")
+        self.assertIn("estado TEXT NOT NULL DEFAULT 'PENDENTE'", m3)
+        self.assertIn("estado IN ('ATIVO', 'INATIVO', 'BLOQUEADO', 'PENDENTE')", m3)
+        self.assertIn("estado TEXT NOT NULL DEFAULT 'ATIVA'", m4)
+        self.assertIn("estado IN ('ATIVA', 'REVOGADA', 'EXPIRADA')", m4)
+        self.assertIn("WHERE estado = 'ATIVA' AND fim_em IS NULL", m4)
+        self.assertNotIn("fk_auditoria_tecnica__assoc_id", m5)
+        self.assertNotIn("fk_auditoria_tecnica__uvr_id", m5)
+        self.assertIn("fk_auditoria_tecnica__assoc_id", m6)
+        self.assertIn("fk_auditoria_tecnica__uvr_id", m6)
+        self.assertRegex(m9, r"(?m)^\s*cpf VARCHAR\(11\),$")
+        self.assertIn("WHERE cpf IS NOT NULL", m9)
+
+    def test_adaptador_remove_somente_wrapper_externo(self):
+        corpo = adaptar_wrapper_historico("BEGIN;\nSELECT 'COMMIT;';\nCOMMIT;\n")
+        self.assertEqual("SELECT 'COMMIT;';", corpo.strip())
+
+    def test_adaptador_rejeita_controle_intermediario(self):
+        for controle in ("COMMIT;", "ROLLBACK;"):
+            with self.subTest(controle=controle), self.assertRaises(MigrationExecutionError):
+                adaptar_wrapper_historico(f"BEGIN; SELECT 1; {controle} SELECT 2; COMMIT;")
+
+    def test_runner_controlado_aplica_m0002_ate_h011_uma_vez(self):
+        conexao = FakeConnection()
+        resultado = MigrationRunner(
+            conexao,
+            snapshot_factory=lambda _: snapshot_controlado(),
+            event_logger=lambda *_args, **_kwargs: None,
+        ).executar_cadeia_controlada()
+        esperadas = tuple([f"M{n:04d}" for n in range(2, 14)] + [f"H{n:03d}" for n in range(1, 12)])
+        self.assertEqual(esperadas, resultado.aplicadas)
+        self.assertEqual(23, conexao.commits)
+        self.assertFalse(any("CREATE TABLE public.schema_migrations" in sql for sql, _, _ in conexao.executions))
+
+    def test_runner_controlado_reverte_e_registra_falha_sanitizada(self):
+        conexao = FakeConnection()
+        conexao.fail_execute_contains = "CREATE TABLE auth_modulos"
+        runner = MigrationRunner(
+            conexao,
+            snapshot_factory=lambda _: snapshot_controlado(),
+            event_logger=lambda *_args, **_kwargs: None,
+        )
+        with self.assertRaises(MigrationExecutionError):
+            runner.executar_cadeia_controlada()
+        falhas = [
+            params for sql, params, _ in conexao.executions
+            if sql.startswith("INSERT INTO public.schema_migration_execucoes")
+        ]
+        self.assertEqual(1, conexao.rollbacks)
+        self.assertEqual(1, conexao.commits)
+        self.assertEqual(("M0002", 1, "FALHOU"), falhas[0][:3])
+        self.assertNotIn("segredo", " ".join(str(valor) for valor in falhas[0]))
+
+
+class Norm5FastTests(unittest.TestCase):
+    OUTROS_22_CHECKSUMS_SHA256 = (
+        "9a6033fb69de3022d6a09f45b358181537a721c15bd2ff141ad906e73be57f3c"
+    )
+
+    def test_auditoria_preserva_22_colunas_sem_regra_273(self):
+        sql = (ROOT / "migrations_control/sql/M0005_auditoria.sql").read_text(
+            encoding="utf-8"
+        )
+        corpo = sql.split("CREATE TABLE auditoria_tecnica (", 1)[1].split("\n);", 1)[0]
+        colunas = [linha for linha in corpo.splitlines() if linha.strip()]
+        self.assertEqual(22, len(colunas))
+        self.assertNotIn("componente_sistema", sql)
+        self.assertNotIn("ck_auditoria_tecnica__regra_273", sql)
+        self.assertIn("associacao_id BIGINT", sql)
+        self.assertIn("uvr_id BIGINT", sql)
+
+    def test_matriz_remove_referencia_normativa_residual(self):
+        matriz = (ROOT / "MATRIZ_INTEGRIDADE_RELACIONAL_H2C3E.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("componente_sistema", matriz)
+        self.assertNotIn("ck_auditoria_tecnica__regra_273", matriz)
+        self.assertNotIn("ck_auditoria_tecnica__ator_exclusivo", matriz)
+
+    def test_checksum_m0005_atual_e_outros_22_inalterados(self):
+        manifesto = carregar_manifesto()
+        m0005 = manifesto.por_id()["M0005"]
+        self.assertEqual(calcular_sha256_arquivo(m0005.arquivo_resolvido), m0005.checksum)
+        pares = [
+            (op.identificador, op.checksum)
+            for op in manifesto.operacoes
+            if op.checksum is not None
+            and op.identificador not in {"M0005", "M0013"}
+        ]
+        resumo = "\n".join(f"{identificador}:{checksum}" for identificador, checksum in pares)
+        self.assertEqual(22, len(pares))
+        self.assertEqual(
+            self.OUTROS_22_CHECKSUMS_SHA256,
+            hashlib.sha256(resumo.encode("utf-8")).hexdigest(),
+        )
+
+
+class Norm6FastTests(unittest.TestCase):
+    OUTROS_23_CHECKSUMS_SHA256 = (
+        "99dccc1a312111bbdbb0f5e07917049aaf9cc76ac00eeab6495541263fa2b220"
+    )
+
+    def test_solicitacoes_preserva_24_colunas_sem_fotografias_generica(self):
+        sql = (ROOT / "migrations_control/sql/M0013_solicitacoes.sql").read_text(
+            encoding="utf-8"
+        )
+        corpo = sql.split("CREATE TABLE solicitacoes_alteracao (", 1)[1].split(
+            "\n);", 1
+        )[0]
+        colunas = [linha.strip().split()[0] for linha in corpo.splitlines() if linha.strip()]
+        self.assertEqual(24, len(colunas))
+        self.assertNotIn("fotografias", colunas)
+        self.assertTrue({
+            "fotografia_original", "fotografia_proposta",
+            "fotografia_aprovada", "fotografia_aplicada",
+        }.issubset(colunas))
+        self.assertNotIn("ck_solicitacoes_alteracao__regra_272", sql)
+
+    def test_matriz_remove_ck_n_272_residual(self):
+        matriz = (ROOT / "MATRIZ_INTEGRIDADE_RELACIONAL_H2C3E.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("CK-N-272", matriz)
+        self.assertNotIn("ck_solicitacoes_alteracao__regra_272", matriz)
+
+    def test_checksum_m0013_e_outros_23_preservados(self):
+        manifesto = carregar_manifesto()
+        m0013 = manifesto.por_id()["M0013"]
+        self.assertEqual(calcular_sha256_arquivo(m0013.arquivo_resolvido), m0013.checksum)
+        pares = [
+            (op.identificador, op.checksum)
+            for op in manifesto.operacoes
+            if op.checksum is not None and op.identificador != "M0013"
+        ]
+        resumo = "\n".join(f"{identificador}:{checksum}" for identificador, checksum in pares)
+        self.assertEqual(23, len(pares))
+        self.assertEqual(
+            self.OUTROS_23_CHECKSUMS_SHA256,
+            hashlib.sha256(resumo.encode("utf-8")).hexdigest(),
+        )
+        self.assertEqual(
+            "005f76de3d0f963fdf4020ed32d3a794b21acb91171a2bfa940e95e639e56218",
+            manifesto.por_id()["M0005"].checksum,
+        )
+        self.assertEqual(("M0012",), m0013.dependencias)
+        self.assertEqual(("M0013",), manifesto.por_id()["H001"].dependencias)
 
 
 if __name__ == "__main__":

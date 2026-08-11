@@ -50,7 +50,7 @@ OPERATION_FIELDS = frozenset({
     "testes_exigidos",
     "habilitada",
 })
-IDENTIFIER_PATTERN = re.compile(r"^M\d{4}$")
+IDENTIFIER_PATTERN = re.compile(r"^(?:M\d{4}|H\d{3})$")
 CHECKSUM_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -98,12 +98,17 @@ def _resolver_sql(base: Path, caminho: Any) -> tuple[str, Path]:
         or ".." in posix.parts
         or "\\" in caminho
         or not posix.parts
-        or posix.parts[0] != "sql"
         or posix.suffix.lower() != ".sql"
     ):
         raise UnsafeMigrationPathError()
-    raiz_sql = (base / "sql").resolve()
-    arquivo = (base / Path(*posix.parts)).resolve()
+    if posix.parts[0] == "sql":
+        raiz_sql = (base / "sql").resolve()
+        arquivo = (base / Path(*posix.parts)).resolve()
+    elif posix.parts[:3] == ("modulos", "fiscalizacao_contratos", "migrations"):
+        raiz_sql = (base.parent / "modulos" / "fiscalizacao_contratos" / "migrations").resolve()
+        arquivo = (base.parent / Path(*posix.parts)).resolve()
+    else:
+        raise UnsafeMigrationPathError()
     try:
         arquivo.relative_to(raiz_sql)
     except ValueError as erro:
@@ -161,7 +166,9 @@ def _ler_operacao(dados: Any, base: Path) -> ManifestOperation:
     )
     if operacao.tipo is OperationType.EXECUTOR and (arquivo is not None or possui_ddl):
         raise ManifestError("Operação do executor não pode conter DDL.")
-    if operacao.tipo is OperationType.NOVA_DDL and (arquivo is None or not possui_ddl):
+    if operacao.tipo in {OperationType.NOVA_DDL, OperationType.HISTORICA_DDL} and (
+        arquivo is None or not possui_ddl
+    ):
         raise ManifestError("Migration física deve declarar seu arquivo e DDL.")
     return operacao
 
@@ -198,8 +205,13 @@ def _validar_dependencias(operacoes: tuple[ManifestOperation, ...]) -> None:
 
 def _validar_contrato_inicial(operacoes: tuple[ManifestOperation, ...]) -> None:
     por_id = {op.identificador: op for op in operacoes}
-    if set(por_id) != {"M0000", "M0001"}:
-        raise ManifestError("Esta versão aceita somente M0000 e M0001.")
+    ids_recebidos = tuple(op.identificador for op in operacoes)
+    ids_esperados = (
+        "M0000", "M0001", *(f"M{numero:04d}" for numero in range(2, 14)),
+        *(f"H{numero:03d}" for numero in range(1, 12)),
+    )
+    if ids_recebidos not in {ids_esperados[:2], ids_esperados}:
+        raise ManifestError("A cadeia física M0000–H011 está incompleta ou fora de ordem.")
     m0000, m0001 = por_id["M0000"], por_id["M0001"]
     if not (
         m0000.ordem_global == 0
@@ -221,6 +233,25 @@ def _validar_contrato_inicial(operacoes: tuple[ManifestOperation, ...]) -> None:
         and m0001.caminho == "sql/M0001_criar_ledger.sql"
     ):
         raise ManifestError("Definição inválida da M0001.")
+    if ids_recebidos == ids_esperados[:2]:
+        return
+    anterior = "M0001"
+    for identificador in ids_esperados[2:]:
+        operacao = por_id[identificador]
+        tipo_esperado = (
+            OperationType.NOVA_DDL if identificador.startswith("M")
+            else OperationType.HISTORICA_DDL
+        )
+        if not (
+            operacao.tipo is tipo_esperado
+            and operacao.dependencias == (anterior,)
+            and operacao.transacional
+            and operacao.imutavel
+            and operacao.possui_ddl
+            and operacao.habilitada
+        ):
+            raise ManifestError(f"Definição inválida da {identificador}.")
+        anterior = identificador
 
 
 def carregar_manifesto(caminho: Path | str | None = None) -> MigrationManifest:

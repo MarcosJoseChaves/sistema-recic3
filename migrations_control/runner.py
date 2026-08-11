@@ -17,10 +17,22 @@ from .errors import (
     UnknownDatabaseError,
     sanitizar_erro,
 )
-from .ledger import agora_utc, registrar_m0001_aplicada
+from .historical_sql import adaptar_wrapper_historico
+from .ledger import (
+    agora_utc,
+    registrar_m0001_aplicada,
+    registrar_migration_aplicada,
+    registrar_migration_falhou,
+)
 from .locking import AdvisoryLock
 from .manifest import carregar_manifesto
-from .models import DatabaseClassification, PlanItem, PreflightSnapshot, RunnerResult
+from .models import (
+    DatabaseClassification,
+    OperationType,
+    PlanItem,
+    PreflightSnapshot,
+    RunnerResult,
+)
 from .preflight import (
     classificar_preflight,
     coletar_conteudo_ledger,
@@ -150,14 +162,12 @@ class MigrationRunner:
             plano = self.mostrar_plano(snapshot)
             pendentes = [item for item in plano if item.estado == "PENDENTE"]
             if preflight.classificacao is DatabaseClassification.BANCO_CONTROLADO:
-                if pendentes:
-                    raise UnknownDatabaseError()
                 resultado = RunnerResult(
                     True, preflight.classificacao.value, (), ("M0001",), 0,
                     "Nenhuma migration pendente.", request_id_texto,
                 )
             else:
-                if [item.identificador for item in pendentes] != ["M0001"]:
+                if "M0001" not in {item.identificador for item in pendentes}:
                     raise UnknownDatabaseError()
                 estado.iniciar_migration()
                 migration_iniciada = True
@@ -308,3 +318,183 @@ class MigrationRunner:
         ):
             raise InvalidLedgerError()
         return duracao_ms
+
+    def _raiz_autorizada(self, operacao):
+        if operacao.caminho.startswith("sql/"):
+            return (self.manifesto.caminho.parent / "sql").resolve(strict=True)
+        return (
+            self.manifesto.caminho.parent.parent
+            / "modulos" / "fiscalizacao_contratos" / "migrations"
+        ).resolve(strict=True)
+
+    def _carregar_texto_operacao(self, operacao) -> str:
+        raiz = self._raiz_autorizada(operacao)
+        artefato = self.sql_loader(
+            operacao_id=operacao.identificador,
+            raiz_autorizada=raiz,
+            caminho_autorizado=operacao.arquivo_resolvido,
+            checksum_esperado=operacao.checksum,
+        )
+        artefato = validar_artefato_sql(
+            artefato,
+            operacao_id=operacao.identificador,
+            raiz_autorizada=raiz,
+            caminho_autorizado=operacao.arquivo_resolvido,
+            checksum_esperado=operacao.checksum,
+        )
+        if operacao.tipo is OperationType.HISTORICA_DDL:
+            return adaptar_wrapper_historico(artefato.texto_sql)
+        return artefato.texto_sql
+
+    def executar_cadeia_controlada(self) -> RunnerResult:
+        """Aplica explicitamente M0002–H011; nunca executa o bootstrap M0001."""
+        if self.conexao is None:
+            raise DatabaseConnectionError()
+        request_id = uuid4()
+        request_id_texto = str(request_id)
+        estado = ConnectionState(self.conexao)
+        estado.validar_entrada()
+        lock = self.lock_factory(self.conexao, timeout_segundos=self.timeout_lock_segundos)
+        aplicadas: list[str] = []
+        erro_principal: MigrationControlError | None = None
+        erro_limpeza: MigrationControlError | None = None
+        resultado: RunnerResult | None = None
+        migration_iniciada = False
+        operacao_atual = None
+        iniciada_em_atual = None
+        inicio_atual = None
+        try:
+            estado.preparar_operacoes_sem_transacao()
+            lock.adquirir()
+            snapshot = self.snapshot_factory(self.conexao)
+            preflight = classificar_preflight(snapshot, self.manifesto)
+            ids_aplicados = {item.migration_id for item in snapshot.migrations_aplicadas}
+            if (
+                not preflight.pode_prosseguir
+                or preflight.classificacao is not DatabaseClassification.BANCO_CONTROLADO
+                or ids_aplicados != {"M0001"}
+            ):
+                raise UnknownDatabaseError()
+            pendentes = [
+                operacao for operacao in self.manifesto.operacoes
+                if operacao.identificador not in {"M0000", "M0001"}
+                and operacao.habilitada
+                and operacao.identificador not in ids_aplicados
+            ]
+            anterior_aplicada = "M0001"
+            for operacao in pendentes:
+                operacao_atual = operacao
+                if operacao.dependencias != (anterior_aplicada,):
+                    raise InvalidLedgerError()
+                iniciada_em = agora_utc()
+                inicio = self.clock()
+                iniciada_em_atual = iniciada_em
+                inicio_atual = inicio
+                estado.iniciar_migration()
+                migration_iniciada = True
+                cursor = None
+                try:
+                    texto_sql = self._carregar_texto_operacao(operacao)
+                    cursor = self.conexao.cursor()
+                    cursor.execute(texto_sql)
+                    concluida_em = agora_utc()
+                    duracao_ms = max(0, round((self.clock() - inicio) * 1000))
+                    registrar_migration_aplicada(
+                        cursor, operacao, tentativa=1, request_id=request_id,
+                        iniciada_em=iniciada_em, concluida_em=concluida_em,
+                        duracao_ms=duracao_ms,
+                        manifesto_versao=self.manifesto.versao_formato,
+                    )
+                finally:
+                    if cursor is not None:
+                        cursor.close()
+                estado.confirmar_migration()
+                migration_iniciada = False
+                estado.preparar_operacoes_sem_transacao()
+                aplicadas.append(operacao.identificador)
+                anterior_aplicada = operacao.identificador
+                operacao_atual = None
+                iniciada_em_atual = None
+                inicio_atual = None
+            resultado = RunnerResult(
+                True, preflight.classificacao.value, tuple(aplicadas), (), 0,
+                "Cadeia controlada aplicada com sucesso.", request_id_texto,
+            )
+        except Exception as erro:
+            erro_principal = _erro_controlado(erro)
+            if migration_iniciada:
+                try:
+                    if estado.status() != TRANSACTION_STATUS_IDLE:
+                        estado.reverter_migration()
+                except Exception as erro_rollback:
+                    self._log_secundario(
+                        "migration_rollback_falhou", erro_rollback, request_id_texto
+                    )
+            if operacao_atual is not None and iniciada_em_atual is not None and inicio_atual is not None:
+                cursor = None
+                try:
+                    estado.preparar_operacoes_sem_transacao()
+                    estado.iniciar_migration()
+                    cursor = self.conexao.cursor()
+                    concluida_em = agora_utc()
+                    duracao_ms = max(0, round((self.clock() - inicio_atual) * 1000))
+                    erro_seguro = sanitizar_erro(erro_principal)
+                    registrar_migration_falhou(
+                        cursor, operacao_atual, tentativa=1, request_id=request_id,
+                        iniciada_em=iniciada_em_atual, concluida_em=concluida_em,
+                        duracao_ms=duracao_ms, erro_codigo=erro_seguro["codigo"],
+                        erro_sanitizado=erro_seguro["mensagem"],
+                    )
+                    cursor.close()
+                    cursor = None
+                    estado.confirmar_migration()
+                    estado.preparar_operacoes_sem_transacao()
+                except Exception as erro_registro:
+                    if cursor is not None:
+                        try:
+                            cursor.close()
+                        except Exception:
+                            pass
+                    try:
+                        if estado.status() != TRANSACTION_STATUS_IDLE:
+                            estado.reverter_migration()
+                    except Exception:
+                        pass
+                    self._log_secundario(
+                        "migration_falha_registro_falhou", erro_registro, request_id_texto
+                    )
+        finally:
+            if lock.adquirido:
+                try:
+                    if estado.status() != TRANSACTION_STATUS_IDLE:
+                        raise LockError()
+                    estado.preparar_operacoes_sem_transacao()
+                    lock.liberar()
+                except Exception as erro_unlock:
+                    convertido = _erro_controlado(erro_unlock)
+                    self._log_secundario(
+                        "migration_lock_liberacao_falhou", convertido, request_id_texto
+                    )
+                    if erro_principal is None:
+                        erro_limpeza = convertido
+            try:
+                estado.restaurar()
+            except Exception as erro_restauracao:
+                convertido = _erro_controlado(erro_restauracao)
+                self._log_secundario(
+                    "migration_conexao_restauracao_falhou", convertido, request_id_texto
+                )
+                if erro_principal is None and erro_limpeza is None:
+                    erro_limpeza = convertido
+
+        erro_final = erro_principal or erro_limpeza
+        if erro_final is not None:
+            raise erro_final
+        if resultado is None:
+            raise MigrationExecutionError()
+        return resultado
+
+
+def executar_cadeia_controlada(conexao, **kwargs) -> RunnerResult:
+    """Entrada explícita para a cadeia posterior; exige conexão fornecida."""
+    return MigrationRunner(conexao, **kwargs).executar_cadeia_controlada()

@@ -46,6 +46,7 @@ from migrations_control.errors import (
     MigrationExecutionError,
     UnknownDatabaseError,
 )
+from migrations_control.bootstrap import executar_bootstrap_controlado
 from migrations_control.locking import AdvisoryLock, derivar_chave_lock
 from migrations_control.manifest import carregar_manifesto
 from migrations_control.models import DatabaseClassification
@@ -484,6 +485,21 @@ def validar_versao_postgresql_tpg(server_version, server_version_num):
     ):
         raise TPGStorageContractError("Versão PostgreSQL TPG fora do contrato aprovado.")
     return normalized_version
+
+
+def executar_bootstrap_apos_preflight_readonly(
+    conexao, consultas_preflight, *, bootstrap=executar_bootstrap_controlado,
+):
+    """Encerra a transacao de leitura do harness antes do bootstrap controlado."""
+    if conexao.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+        raise ConnectionNotIdleError()
+    evidencia = consultas_preflight(conexao)
+    if conexao.get_transaction_status() != TRANSACTION_STATUS_INTRANS:
+        raise ConnectionNotIdleError()
+    conexao.rollback()
+    if conexao.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+        raise ConnectionNotIdleError()
+    return evidencia, bootstrap(conexao)
 
 
 E1_SUCCESS_CATEGORIES = (

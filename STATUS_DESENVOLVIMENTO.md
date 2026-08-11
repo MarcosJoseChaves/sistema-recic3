@@ -2011,3 +2011,14 @@ ou incompatível é recusado. O bootstrap não lê `DATABASE_URL` ou `.env`, nã
 acionado pelo Flask e não habilita nem executa H001–H011.
 
 Próxima etapa: **B4 — validação controlada de H001–H011**.
+
+## Checkpoint H2C.4C4 — B4 encerrada no FAST-TRACK
+
+B1, B2 e B3 estão **ENCERRADAS**. B4 está **ENCERRADA NO FAST-TRACK**.
+A cadeia controlada M0001→M0013→H011 concluiu 24/24 migrations em PostgreSQL
+15.18 efêmero, com ledger íntegro, H001–H011 preservadas e cleanup completo.
+Nenhum banco persistente foi utilizado.
+
+Permanecem como dívidas técnicas não bloqueantes o falso positivo do parser do
+pós-check para `CREATE TABLE IF NOT EXISTS` e a indisponibilidade ambiental do
+caminho do Python oficial usado por um teste da suíte.

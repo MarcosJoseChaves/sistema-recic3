@@ -362,7 +362,7 @@ Cada linha é uma coluna física. `Migration/teste` identifica um único respons
 | `associados` | 2 | `numero` | TEXT | não | sem default | não | não | numero | domínio/formato | não | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-02 | cadastro funcional sem associação direta | OBRIGATÓRIA |
 | `associados` | 3 | `nome` | TEXT | não | sem default | não | não | não | domínio/formato | não | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-03 | cadastro funcional sem associação direta | OBRIGATÓRIA |
 | `associados` | 4 | `nome_normalizado` | TEXT | não | sem default | não | não | não | domínio/formato | não | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-04 | cadastro funcional sem associação direta | OBRIGATÓRIA |
-| `associados` | 5 | `cpf` | VARCHAR(11) | não | sem default | não | não | parcial cpf | domínio/formato | sim | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-05 | cadastro funcional sem associação direta | SENSÍVEL |
+| `associados` | 5 | `cpf` | VARCHAR(11) | sim | sem default | não | não | parcial cpf | domínio/formato | sim | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-05 | cadastro funcional sem associação direta | SENSÍVEL |
 | `associados` | 6 | `documento_alternativo` | TEXT | sim | sem default | não | não | não | não | sim | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-06 | cadastro funcional sem associação direta | SENSÍVEL |
 | `associados` | 7 | `justificativa_sem_cpf` | TEXT | sim | sem default | não | não | não | não | não | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-07 | cadastro funcional sem associação direta | OPCIONAL JUSTIFICADA |
 | `associados` | 8 | `data_nascimento` | DATE | sim | sem default | não | não | não | não | sim | não | não | não | `PK/UQ/composto ou sem índice isolado` | M0009/TC-associados-08 | cadastro funcional sem associação direta | SENSÍVEL |
@@ -1302,7 +1302,7 @@ maiúsculos ASCII e a aplicação não poderá inserir valor fora do conjunto.
 
 | Tabelas | Default | Valores permitidos |
 |---|---|---|
-| `usuarios` | `PENDENTE_ATIVACAO` | `PENDENTE_ATIVACAO`, `ATIVO`, `BLOQUEADO`, `INATIVO` |
+| `usuarios` | `PENDENTE` | `PENDENTE`, `ATIVO`, `BLOQUEADO`, `INATIVO` |
 | `auth_modulos`, `auth_acoes`, `auth_permissoes`, `auth_perfis` | `ATIVO` | `ATIVO`, `INATIVO` |
 | `auth_usuario_perfis` | `ATIVA` | `ATIVA`, `REVOGADA`, `EXPIRADA` |
 | `associacoes`, `uvrs` | `EM_IMPLANTACAO` | `EM_IMPLANTACAO`, `ATIVA`, `INATIVA` |
@@ -1490,7 +1490,7 @@ As categorias são exclusivas e somam 82 tabelas. Exclusão física refere-se ao
 | `auth_permissoes` | sim | G — CATÁLOGO ESTRUTURAL PROTEGIDO | ATIVO | ATIVO | INATIVO | inativar sem reutilizar código | apagar protegido/reutilizar código | não | sim | não | não | código sucessor | não | referências existentes | inativar e criar sucessor | `TLV-auth_permissoes` | M0004 |
 | `auth_perfis` | sim | G — CATÁLOGO ESTRUTURAL PROTEGIDO | ATIVO | ATIVO | INATIVO | inativar sem reutilizar código | apagar protegido/reutilizar código | não | sim | não | não | código sucessor | não | referências existentes | inativar e criar sucessor | `TLV-auth_perfis` | M0004 |
 | `auth_perfil_permissoes` | sim | G — CATÁLOGO ESTRUTURAL PROTEGIDO | ATIVO | ATIVO | INATIVO | inativar sem reutilizar código | apagar protegido/reutilizar código | não | sim | não | não | código sucessor | não | referências existentes | inativar e criar sucessor | `TLV-auth_perfil_permissoes` | M0004 |
-| `auth_usuario_perfis` | sim | E — VÍNCULO TEMPORAL | ATIVO | ATIVO | REVOGADO | conceder/ativar e encerrar com fim | sobrepor ou apagar histórico | não | encerramento temporal | não | não | novo vínculo | histórico preservado | integral | encerrar e criar sucessor | `TLV-auth_usuario_perfis` | M0004 |
+| `auth_usuario_perfis` | sim | E — VÍNCULO TEMPORAL | ATIVA | ATIVA | REVOGADA/EXPIRADA | conceder/ativar e encerrar com fim | sobrepor ou apagar histórico | não | encerramento temporal | não | não | novo vínculo | histórico preservado | integral | encerrar e criar sucessor | `TLV-auth_usuario_perfis` | M0004 |
 | `auth_escopos_globais` | sim | E — VÍNCULO TEMPORAL | ATIVO | ATIVO | ENCERRADO/INATIVO | conceder/ativar e encerrar com fim | sobrepor ou apagar histórico | não | encerramento temporal | não | não | novo vínculo | histórico preservado | integral | encerrar e criar sucessor | `TLV-auth_escopos_globais` | M0007 |
 | `auth_escopos_associacao` | sim | E — VÍNCULO TEMPORAL | ATIVO | ATIVO | ENCERRADO/INATIVO | conceder/ativar e encerrar com fim | sobrepor ou apagar histórico | não | encerramento temporal | não | não | novo vínculo | histórico preservado | integral | encerrar e criar sucessor | `TLV-auth_escopos_associacao` | M0007 |
 | `auth_escopos_uvr` | sim | E — VÍNCULO TEMPORAL | ATIVO | ATIVO | ENCERRADO/INATIVO | conceder/ativar e encerrar com fim | sobrepor ou apagar histórico | não | encerramento temporal | não | não | novo vínculo | histórico preservado | integral | encerrar e criar sucessor | `TLV-auth_escopos_uvr` | M0007 |

@@ -11,6 +11,7 @@ from typing import Any
 class OperationType(str, Enum):
     EXECUTOR = "EXECUTOR"
     NOVA_DDL = "NOVA_DDL"
+    HISTORICA_DDL = "HISTORICA_DDL"
 
 
 class DatabaseClassification(str, Enum):

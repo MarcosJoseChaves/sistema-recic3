@@ -1,7 +1,7 @@
 {
   "versao_formato": 1,
   "sistema": "sistema-recic3",
-  "descricao": "Manifesto inicial da baseline nuclear controlada.",
+  "descricao": "Manifesto da baseline nuclear e da cadeia hist?rica de Fiscaliza??o.",
   "normalizacao_checksum": "UTF-8/LF",
   "algoritmo_checksum": "SHA-256",
   "operacoes": [
@@ -41,6 +41,489 @@
       "dados_estruturais": false,
       "testes_exigidos": [
         "unitario_ledger",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0002",
+      "ordem_global": 2,
+      "modulo": "referencias",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa tipos conforme baseline H2C.3E.",
+      "caminho": "sql/M0002_tipos.sql",
+      "checksum": "a075d0f428c972a6724a919e38b10a8ec2d9d9c6a708e243a251ec33f08ea449",
+      "dependencias": [
+        "M0001"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0003",
+      "ordem_global": 3,
+      "modulo": "usuarios",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa usuarios conforme baseline H2C.3E.",
+      "caminho": "sql/M0003_usuarios.sql",
+      "checksum": "665450be04a3ac64e241a034ea50e4e58efe9c439c44354dc8c5d89605cbe6a4",
+      "dependencias": [
+        "M0002"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0004",
+      "ordem_global": 4,
+      "modulo": "autorizacao",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa autorizacao conforme baseline H2C.3E.",
+      "caminho": "sql/M0004_autorizacao.sql",
+      "checksum": "1d8e5af877572af6655801acd9d3fb5b0f19f3325315dfee218f31b27309da49",
+      "dependencias": [
+        "M0003"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0005",
+      "ordem_global": 5,
+      "modulo": "auditoria",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa auditoria conforme baseline H2C.3E.",
+      "caminho": "sql/M0005_auditoria.sql",
+      "checksum": "005f76de3d0f963fdf4020ed32d3a794b21acb91171a2bfa940e95e639e56218",
+      "dependencias": [
+        "M0004"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0006",
+      "ordem_global": 6,
+      "modulo": "organizacoes",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa organizacoes conforme baseline H2C.3E.",
+      "caminho": "sql/M0006_organizacoes.sql",
+      "checksum": "130bb6850c64381038c657203400556c2c8f56fcbbc1963043378a433ee1b3d4",
+      "dependencias": [
+        "M0005"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0007",
+      "ordem_global": 7,
+      "modulo": "escopos",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa escopos conforme baseline H2C.3E.",
+      "caminho": "sql/M0007_escopos.sql",
+      "checksum": "78f98187b30e94c8c0785a409d34e269874fabea756b510aa31ea559c59c2933",
+      "dependencias": [
+        "M0006"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0008",
+      "ordem_global": 8,
+      "modulo": "documentos",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa documentos conforme baseline H2C.3E.",
+      "caminho": "sql/M0008_documentos.sql",
+      "checksum": "0af4406a3f792e1671eb8d6f57cb3068c60f84744e6b551dd0f51f1d0610efe4",
+      "dependencias": [
+        "M0007"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0009",
+      "ordem_global": 9,
+      "modulo": "associados",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa associados conforme baseline H2C.3E.",
+      "caminho": "sql/M0009_associados.sql",
+      "checksum": "b326a67c1b5704b51e30e60e9714cc1e16e8316fd7f0530d2ad95ac90c05602d",
+      "dependencias": [
+        "M0008"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0010",
+      "ordem_global": 10,
+      "modulo": "catalogo",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa catalogo conforme baseline H2C.3E.",
+      "caminho": "sql/M0010_catalogo.sql",
+      "checksum": "949dd9b4356d5c1b10d5c77bfaf85f6de6f5ade8a3bbcb60cc8f9f86f7a09618",
+      "dependencias": [
+        "M0009"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0011",
+      "ordem_global": 11,
+      "modulo": "financeiro",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa financeiro conforme baseline H2C.3E.",
+      "caminho": "sql/M0011_financeiro.sql",
+      "checksum": "ef148a3278b33aa020f4839afb560d7ca21c5e5287005c7179e45624220bf5b8",
+      "dependencias": [
+        "M0010"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0012",
+      "ordem_global": 12,
+      "modulo": "patrimonio",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa patrimonio conforme baseline H2C.3E.",
+      "caminho": "sql/M0012_patrimonio.sql",
+      "checksum": "fe082367ca390a445729bcb640e8e3f9e970cc0fa766deb9cd0aeb446ae7a307",
+      "dependencias": [
+        "M0011"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0013",
+      "ordem_global": 13,
+      "modulo": "solicitacoes",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa solicitacoes conforme baseline H2C.3E.",
+      "caminho": "sql/M0013_solicitacoes.sql",
+      "checksum": "1d2173c9d5dd2cd7a62aa42ef655a7c50e3e08002053d8aa9d9a73630905e9da",
+      "dependencias": [
+        "M0012"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H001",
+      "ordem_global": 14,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 001 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/001_criar_fc_empresas.sql",
+      "checksum": "a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc",
+      "dependencias": [
+        "M0013"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H002",
+      "ordem_global": 15,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 002 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/002_criar_fc_servidores.sql",
+      "checksum": "012af8ddd2e04cae607a93e6d09d6d2eddcd1b6cabe7ea751906c7496da72cd5",
+      "dependencias": [
+        "H001"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H003",
+      "ordem_global": 16,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 003 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/003_criar_fc_contratos.sql",
+      "checksum": "815313c2f03402564127ad494fffdf59baeee26e3cd4262ca7106dbaaeca273d",
+      "dependencias": [
+        "H002"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H004",
+      "ordem_global": 17,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 004 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/004_criar_fc_aditivos.sql",
+      "checksum": "88961a6d0cbafde065bbd598425035bef0b2a1b9002126b02cb3d006036e821d",
+      "dependencias": [
+        "H003"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H005",
+      "ordem_global": 18,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 005 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/005_criar_fc_documentos.sql",
+      "checksum": "b57f893eced87931922ddaa5c36f51b6ee4e5601cfc95c3616de0a225994c362",
+      "dependencias": [
+        "H004"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H006",
+      "ordem_global": 19,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 006 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/006_criar_fc_planilhas_orcamentarias.sql",
+      "checksum": "03c059dfdbeaff80ad8f0282956217c5b92f1b911df7de529640d2ec3f16a7ad",
+      "dependencias": [
+        "H005"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H007",
+      "ordem_global": 20,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 007 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/007_criar_fc_ativos_contratuais.sql",
+      "checksum": "b0d5f732b2aa9234d7cb88a5be6f467ade2a9e19bb82aac596d3e39ef1dd8d19",
+      "dependencias": [
+        "H006"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H008",
+      "ordem_global": 21,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 008 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/008_criar_fc_fiscalizacoes_ocorrencias.sql",
+      "checksum": "f8f88fe1fe9152cdc243db45243701f953b4367def0b3f1ac62d47526e733531",
+      "dependencias": [
+        "H007"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H009",
+      "ordem_global": 22,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 009 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/009_criar_fc_fiscalizacao_eventos.sql",
+      "checksum": "2e88c765b5981e8edf97616ee656bcb08982c79b953a7f612de2784e6ceffa46",
+      "dependencias": [
+        "H008"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H010",
+      "ordem_global": 23,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 010 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/010_criar_fc_medicoes.sql",
+      "checksum": "ac4c38b2beafa4bf7a8b0f614030898e3ac8cbb7ef2b33bcae10b067fae3d34d",
+      "dependencias": [
+        "H009"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "H011",
+      "ordem_global": 24,
+      "modulo": "fiscalizacao_contratos",
+      "tipo": "HISTORICA_DDL",
+      "descricao": "Executa literalmente a migration hist?rica 011 com wrapper adaptado em mem?ria.",
+      "caminho": "modulos/fiscalizacao_contratos/migrations/011_criar_fc_atestes.sql",
+      "checksum": "6521ce402bd41c2520901799fa29ae12c205333c23bc65f48b0ebffc84f65089",
+      "dependencias": [
+        "H010"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "checksum_historico",
         "integracao_postgresql_efemero"
       ],
       "habilitada": true

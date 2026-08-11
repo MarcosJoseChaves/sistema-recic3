@@ -60,6 +60,75 @@ def registrar_m0001_aplicada(
     )
 
 
+def registrar_migration_aplicada(
+    cursor,
+    operacao: ManifestOperation,
+    *,
+    tentativa: int,
+    request_id: UUID,
+    iniciada_em: datetime,
+    concluida_em: datetime,
+    duracao_ms: int,
+    manifesto_versao: int,
+) -> None:
+    """Registra atomicamente uma migration posterior e sua execução."""
+    if tentativa <= 0 or duracao_ms < 0:
+        raise ImpossibleLedgerStateError()
+    cursor.execute(
+        "INSERT INTO public.schema_migrations "
+        "(migration_id, modulo, versao, ordem, checksum_sha256, aplicada_em, "
+        "duracao_ms, versao_aplicativo, manifesto_versao) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            operacao.identificador, operacao.modulo, 1, operacao.ordem_global,
+            operacao.checksum, concluida_em, duracao_ms, VERSAO_APLICATIVO,
+            manifesto_versao,
+        ),
+    )
+    cursor.execute(
+        "INSERT INTO public.schema_migration_execucoes "
+        "(migration_id, tentativa, situacao, iniciada_em, concluida_em, duracao_ms, "
+        "checksum_sha256, erro_codigo, erro_sanitizado, request_id, "
+        "host_identificador, processo_id, versao_aplicativo) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            operacao.identificador, tentativa, "APLICADA", iniciada_em, concluida_em,
+            duracao_ms, operacao.checksum, None, None, str(request_id),
+            identificador_host_seguro(), os.getpid(), VERSAO_APLICATIVO,
+        ),
+    )
+
+
+def registrar_migration_falhou(
+    cursor,
+    operacao: ManifestOperation,
+    *,
+    tentativa: int,
+    request_id: UUID,
+    iniciada_em: datetime,
+    concluida_em: datetime,
+    duracao_ms: int,
+    erro_codigo: str,
+    erro_sanitizado: str,
+) -> None:
+    """Registra falha sanitizada após o rollback da migration."""
+    if tentativa <= 0 or duracao_ms < 0 or not erro_codigo or not erro_sanitizado:
+        raise ImpossibleLedgerStateError()
+    cursor.execute(
+        "INSERT INTO public.schema_migration_execucoes "
+        "(migration_id, tentativa, situacao, iniciada_em, concluida_em, duracao_ms, "
+        "checksum_sha256, erro_codigo, erro_sanitizado, request_id, "
+        "host_identificador, processo_id, versao_aplicativo) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            operacao.identificador, tentativa, "FALHOU", iniciada_em, concluida_em,
+            duracao_ms, operacao.checksum, erro_codigo, erro_sanitizado,
+            str(request_id), identificador_host_seguro(), os.getpid(),
+            VERSAO_APLICATIVO,
+        ),
+    )
+
+
 def iniciar_tentativa(
     cursor,
     operacao: ManifestOperation,
