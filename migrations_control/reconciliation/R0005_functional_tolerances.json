@@ -1,0 +1,20 @@
+{
+  "context": "legacy_to_baseline",
+  "migration": "M0009",
+  "tolerances": [
+    {
+      "key": "column|associados|id",
+      "path": "public.associados.id",
+      "baseline_type": "bigint",
+      "legacy_type": "integer",
+      "class": "C"
+    },
+    {
+      "key": "sequence|associados_id_seq",
+      "path": "public.associados_id_seq",
+      "baseline_type": "bigint",
+      "legacy_type": "integer",
+      "class": "C"
+    }
+  ]
+}

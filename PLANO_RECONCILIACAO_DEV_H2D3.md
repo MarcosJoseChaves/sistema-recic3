@@ -144,6 +144,130 @@ Somente após validar individualmente 40/40, 169/169, 54/54, 44/44 e o total
 307/307, além da preservação de M0002-M0004, dados, `fc_*` e extras, é permitido
 COMMIT; qualquer falha exige ROLLBACK integral, sem commit intermediário.
 
+## R0005 agrupada / M0009-M0010
+
+R0005 agrupa M0009 e M0010, nesta ordem, para uma futura transação única. A
+fonte catalogal aprovada registra M0009 como 196 objetos: 1 equivalente, 181
+ausentes e 14 divergentes. Duas diferenças são formalizadas como Classe C
+funcional tolerada, exclusivamente no contexto legado para baseline:
+
+- `public.associados.id`: `INTEGER` serial legado versus `BIGINT` identity;
+- `public.associados_id_seq`: diferença de capacidade e ownership correlata.
+
+Os IDs observados estão entre 2 e 154, a PK/default/sequence permanecem
+funcionais e a aplicação não exige faixa superior a INTEGER. Não existe regra
+global `INTEGER = BIGINT`: somente os dois paths declarados em
+`R0005_functional_tolerances.json` são tolerados. A capacidade INTEGER é uma
+limitação futura conhecida e aceita para esta reconciliação.
+
+EXTRA_LEGADO PRESERVADO POR DECISÃO NORMATIVA. Permanecem sem DROP, ALTER TYPE,
+rename ou rebuild as cinco FKs de `auditoria_associados.id_associado`,
+`auditoria_rateios.id_associado`,
+`auditoria_rateios_transacoes.id_associado`, `epi_entregas.id_associado` e
+`epi_entregas.id_responsavel`.
+
+As 12 divergências Classe B de M0009 são:
+
+| Coluna | Legado | Baseline | ALTER | Risco protegido | Precheck | Pós-condição |
+|---|---|---|---|---|---|---|
+| `numero` | `VARCHAR(20) NOT NULL` | `TEXT NOT NULL` | `TYPE TEXT` | vazio/duplicidade antes de CHECK/UQ | P401 | texto preservado, preenchido e único |
+| `nome` | `VARCHAR(255) NOT NULL` | `TEXT NOT NULL` | `TYPE TEXT` | vazio e origem inválida da normalização | P401/P406 | texto preservado e normalizável |
+| `cpf` | `VARCHAR(11) NOT NULL` | `VARCHAR(11) NULL` | `DROP NOT NULL` | formato e duplicidade | P402 | nullable, valores existentes válidos |
+| `data_nascimento` | `DATE NOT NULL` | `DATE NULL` | `DROP NOT NULL` | coerência das datas existentes | P403 | nullable sem conversão |
+| `telefone` | `VARCHAR(20) NOT NULL` | `TEXT NULL` | `TYPE TEXT`, `DROP NOT NULL` | perda/truncamento | P401 | texto nullable preservado |
+| `cep` | `VARCHAR(8) NOT NULL` | `VARCHAR(8) NULL` | `DROP NOT NULL` | comprimento | P403 | nullable sem conversão |
+| `logradouro` | `VARCHAR(255)` | `TEXT` | `TYPE TEXT` | perda/truncamento | P401 | texto preservado |
+| `endereco_numero` | `VARCHAR(20)` | `TEXT` | `TYPE TEXT` | perda/truncamento | P401 | texto preservado |
+| `bairro` | `VARCHAR(100)` | `TEXT` | `TYPE TEXT` | perda/truncamento | P401 | texto preservado |
+| `cidade` | `VARCHAR(100)` | `TEXT` | `TYPE TEXT` | perda/truncamento | P401 | texto preservado |
+| `uf` | `VARCHAR(2)` | `CHAR(2)` | `TYPE CHAR(2)` | truncamento/formato | P404 | valores com dois caracteres |
+| `data_admissao` | `DATE NOT NULL` | `DATE NULL` | `DROP NOT NULL` | coerência das datas existentes | P403 | nullable sem conversão |
+
+As 12 colunas ausentes de `associados` ficam classificadas assim:
+
+| Coluna | Classificação | Tratamento |
+|---|---|---|
+| `nome_normalizado` | C, E | adicionada nullable, backfill determinístico, depois NOT NULL |
+| `documento_alternativo` | A | nullable, sem backfill |
+| `justificativa_sem_cpf` | A | nullable; CPF legado válido mantém a regra 265 |
+| `email` | A | nullable, sem backfill |
+| `estado` | B | NOT NULL com default seguro `RASCUNHO` |
+| `condicao_regularizacao` | A | nullable, sem backfill |
+| `data_desligamento` | A | nullable, sem backfill |
+| `criado_em` | B, F | NOT NULL com `CURRENT_TIMESTAMP` |
+| `atualizado_em` | B, F | NOT NULL com `CURRENT_TIMESTAMP` |
+| `criado_por_usuario_id` | C, D, F | backfill com o usuário técnico, depois NOT NULL/FK |
+| `atualizado_por_usuario_id` | C, D, F | backfill com o mesmo usuário, depois NOT NULL/FK |
+| `versao_registro` | B | NOT NULL com default seguro `1` |
+
+Somente `nome_normalizado`, `criado_por_usuario_id` e
+`atualizado_por_usuario_id` recebem UPDATE. A expressão normativa exata é
+`lower(unaccent(btrim(nome)))`; não é permitido substituí-la por `translate`,
+regex, função própria, Python ou remoção manual de acentos.
+
+### Dependência `unaccent`
+
+`unaccent` é infraestrutura explícita e controlada da reconciliação. P405 é
+somente leitura e classifica o catálogo, resolução, ownership e privilégios:
+
+- E1 — extensão instalada em `public`, `public.unaccent(text)` pertencente à
+  extensão, executável e resolvida sem colisão pelo `search_path`: reutilizar;
+- E2 — extensão ausente, mas versão disponível, schema `public`, privilégios
+  de banco/schema e requisito trusted/superuser atendidos, sem objeto homônimo
+  estranho: instalar exatamente uma vez;
+- E3 — indisponibilidade, privilégio insuficiente, schema incompatível,
+  colisão, estado parcial ou função instalada inválida: bloquear.
+
+O futuro executor H2D.12 é a única camada responsável pela instalação E2 e
+deve executar exatamente `CREATE EXTENSION unaccent WITH SCHEMA public;`, sem
+`IF NOT EXISTS`. R0005 não contém nem duplica `CREATE EXTENSION`; ela assume que
+a função já está operacional quando o backfill é alcançado.
+
+O fluxo futuro executa P400-P405 em transação read-only e a encerra. E3 para.
+E1 abre a transação principal sem instalar nada. E2 abre a mesma transação
+principal da R0005, instala a extensão e valida imediatamente ownership,
+resolução e a expressão normativa. Depois executa P406-P416 e P450-P454, R0005
+e toda a pós-validação 417/417. Qualquer falha após `BEGIN` causa ROLLBACK
+integral, inclusive da extensão no E2; é proibido commit intermediário.
+
+Objetos pertencentes exclusivamente à extensão não integram M0009/M0010, não
+contam nos 417 e são registrados como `INFRAESTRUTURA AUTORIZADA DA
+RECONCILIAÇÃO — EXTENSÃO unaccent`, não como EXTRA_LEGADO ou divergência.
+
+A identidade técnica canônica é `migracao_dados_legados`, nome
+`Migração de dados legados`, sem e-mail, UVR ou perfil, `estado=BLOQUEADO`,
+`ativo=FALSE`, `role=migracao` e hash válido criado a partir de segredo aleatório
+descartado. O fluxo atual de login seleciona somente `ativo=TRUE`, portanto essa
+conta não autentica. U1 reutiliza exatamente um candidato que satisfaça todos
+esses critérios; U2 insere exatamente um quando não há candidato; U3 rejeita
+colisão insegura; U4 rejeita múltiplos candidatos. O ID nunca é fixado: vem do
+candidato U1 ou de `INSERT ... RETURNING` no U2. Lock de `usuarios` e a UNIQUE
+normalizada impedem criação concorrente duplicada, sem `ON CONFLICT` tolerante.
+
+O DML autorizado limita-se a no máximo um INSERT condicional em `usuarios` e
+um UPDATE de `associados` nas três colunas novas. No futuro teste, o row count de
+`associados` não muda e todas as colunas preexistentes permanecem idênticas.
+Em U1, `usuarios` mantém o row count; em U2, cresce exatamente um e somente
+`usuarios_id_seq` pode avançar. Usuários preexistentes, demais tabelas, `fc_*` e
+extras preservam row count e fingerprint.
+
+P400-P405 cobrem dependências, as 12 B iniciais e classificação E1/E2/E3 sem
+invocar a função ausente. P406-P416 cobrem normalização, inventário de colunas,
+U1/U2/U3/U4, ausência de perfil, as cinco FKs legadas, PK/sequence e integridade
+dos associados e colisões. P450-P454 cobrem ausência, dependências e colisões de M0010. M0010 possui
+221 objetos ausentes — 7 tabelas, 90 colunas, 7 sequences, 82 constraints e 35
+índices — sem DML próprio, destrutivos ou dependência M0011+.
+
+O alvo H2D.12 é: restore original → R0001 → R0002 → R0003 → R0004 → validar
+M0002-M0008 → executar P400-P405 read-only → classificar E1/E2/E3 → encerrar a
+transação read-only → abrir a transação principal → em E2 instalar/validar
+`unaccent` → executar P406-P416 e P450-P454 → executar R0005 → validar M0009
+196/196 funcional, com as duas tolerâncias declaradas, e
+M0010 221/221 → validar total 417/417, cinco FKs, dados e fingerprints → COMMIT.
+Qualquer falha exige ROLLBACK integral. O harness deve preservar as colunas
+antigas de `associados`, admitir somente as três novas preenchidas, admitir
+delta 0/+1 em `usuarios` conforme U1/U2 e manter todos os usuários originais.
+
 ## Ledger e adoção
 
 O ledger atual só representa `INICIADA`, `APLICADA` e `FALHOU`; portanto não
