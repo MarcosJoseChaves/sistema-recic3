@@ -286,6 +286,141 @@ A mudança mínima futura precisa:
 
 H001–H011 ficam candidatas à adoção somente após equivalência global das M.
 
+## R0006 agrupada / M0011-M0012
+
+R0006 materializa offline M0011 e M0012 para futura validação atômica. M0011
+parte da fotografia 184 objetos: 2 equivalentes, 179 ausentes e 3 divergentes.
+`public.transacoes_financeiras.id` e
+`public.transacoes_financeiras_id_seq` permanecem INTEGER/SERIAL como Classe C
+path-specific; a ampliação `numero_documento` VARCHAR(100) para TEXT é física e
+não altera valores. As quatro FKs EXTRA_LEGADO continuam intocadas.
+
+As nove colunas novas obrigatórias de `transacoes_financeiras` recebem somente
+as fontes autorizadas: `pg_catalog.gen_random_uuid()` nativo do PostgreSQL 17;
+associação canônica por `lower(btrim(associacao))` com cardinalidade estrita
+igual a 1; natureza RECEITA ou DESPESA; conta técnica da associação; competência
+igual a `data_documento` como convenção de migração; valor igual a
+`valor_total_documento`; fotografia JSONB versão 1, origem MIGRACAO_LEGADO e
+whitelist dos seis campos legados; e o mesmo usuário `migracao_dados_legados`
+nos dois campos de auditoria.
+
+`contas_financeiras` possui 17 campos. `instituicao`, `agencia` e `conta` são
+dados bancários; `abertura_data` e `encerramento_data` são fatos de negócio;
+`criado_em`, `atualizado_em`, `criado_por_usuario_id` e
+`atualizado_por_usuario_id` são auditoria técnica; `associacao_id` é FK;
+`id`, `codigo`, `nome`, `tipo` e `versao_registro` são estruturais; `estado` é
+controle operacional e `observacoes` registra proveniência técnica.
+
+A modalidade MIGRACAO_LEGADO representa exclusivamente o vínculo de transações
+históricas sem conta financeira identificável. Existe no máximo uma por
+associação necessária, com `codigo=tipo=MIGRACAO_LEGADO`, estado `INATIVA`,
+campos bancários e datas de negócio obrigatoriamente NULL, e observação técnica
+fixa. Não representa banco, agência, conta, saldo ou datas históricas. As cinco
+colunas ficam fisicamente nullable somente porque NOT NULL não é condicional;
+CHECKs compensatórios exigem banco preenchido e ambas as datas para qualquer
+conta normal, enquanto exigem NULL na modalidade técnica. As nove diferenças
+físicas correspondentes são declaradas individualmente em
+`R0006_functional_tolerances.json`; não há wildcard nem tolerância da tabela.
+
+Os seeds estruturais usam todos os campos obrigatórios reais de
+`naturezas_financeiras`: `codigo`, `nome` e `nome_normalizado`; `descricao`
+permanece NULL e `estado`, `protegido`, timestamps e versão usam os defaults
+normativos. N1 reutiliza uma correspondência canônica, N2 cria quando ausente,
+e N3/N4 bloqueiam colisão ou ambiguidade. Nenhuma terceira natureza é criada.
+
+O DML planejado limita-se a INSERT condicional dos dois seeds, materialização
+condicional das associações canônicas ausentes, INSERT condicional de contas
+técnicas necessárias e um UPDATE das nove colunas novas. Não há DML em
+usuários, aliases, fc_*, EXTRA_LEGADO ou M0012. P500-P520 cobrem todas as
+fontes, schemas, colisões, UUID nativo, int4/sequence, FKs, plano determinístico
+de associação, seeds, conta técnica, datas, valor, fotografia e estado parcial.
+P550-P553 cobrem apenas colisões e dependências úteis de M0012.
+
+### Evidência H2D.15 e decisão P506
+
+O diagnóstico real H2D.15 foi registrado no relatório
+`h2d15_p506_associacao_diag_v3_real_20260814_103818.json`, SHA-256
+`4349de8b518a13b3e58b1b664ef258a96b12e6e29783696c9c0990a8f7bcb83e`.
+No legado bruto, as 756 transações possuem associação preenchida: ACAN aparece
+em 135 e aponta exclusivamente para UVR 02; ASCAMAR aparece em 621 e aponta
+exclusivamente para UVR 01. As cardinalidades token→UVR são 0/2/0 para
+0/1/>1 candidato, cobrindo 756/756 (100%). A evidência foi classificada como
+A — FONTE LEGADA INEQUÍVOCA.
+
+P506 passa a validar um plano REUSE/CREATE antes da escrita. A identidade
+`LEGACY_ASSOCIATION_IDENTITY` deriva token normalizado, sigla histórica, UVR
+legada e quantidade de transações diretamente de `transacoes_financeiras`. A
+busca canônica preserva nome e alias e acrescenta `associacoes.codigo`; o mesmo
+`associacao_id` encontrado por mais de uma chave é deduplicado. Ausência de
+candidato com identidade 1:1 autoriza CREATE; um único ID autoriza REUSE; zero
+sem identidade materializável ou mais de um ID bloqueiam. Código divergente,
+grafia histórica indeterminável e token→UVR ou UVR→token não 1:1 também
+bloqueiam.
+
+Na criação, `associacoes.codigo` e `associacoes.nome` preservam a própria sigla
+histórica, sem expansão inferida; `nome_normalizado` recebe o token. ACAN e
+ASCAMAR não são regras hardcoded e não geram aliases no snapshot aprovado. A
+associação nasce em `EM_IMPLANTACAO` e `inicio_data=CURRENT_DATE` registra
+somente o início operacional da materialização canônica; não representa nem
+infere a fundação histórica da instituição. Os campos de auditoria reutilizam o
+único usuário técnico `migracao_dados_legados` já criado por R0005.
+
+A R0006 removeu `min(associacao_id)` e usa somente o conjunto deduplicado cuja
+cardinalidade foi comprovada igual a 1, repetindo defensivamente essa prova na
+DML. As metas permanecem M0011 184/184, M0012 193/193 e total 377/377, sem
+alterar contagens ou tolerâncias.
+
+À época da revisão H2D.16, a atividade era somente materialização offline: a
+R0006 ainda não havia sido validada em PostgreSQL e 377/377 permanecia como
+meta, situação posteriormente encerrada pela H2D.17-RETRY2 descrita abaixo.
+
+M0012 é agrupada integralmente, sem M0013 e sem DML: 193 objetos distribuídos
+em `patrimonio_bloqueios` 28, `patrimonio_documentos` 28,
+`patrimonio_eventos` 25, `patrimonio_identificadores` 29,
+`patrimonio_vinculos` 34 e `patrimonios` 49. À época do planejamento, o alvo
+futuro era M0011 184/184, M0012 193/193 e total 377/377.
+
+O protocolo aprovado exigia uma única transação depois de R0001-R0005 e dos
+prechecks, mantendo-a aberta durante a comparação de M0011/M0012 e a regressão
+M0002-M0010; qualquer falha exigia ROLLBACK integral. O COMMIT no clone somente
+poderia ocorrer depois de 377/377 e da preservação de dados, extras e `fc_*`.
+
+### Encerramento H2D.17-RETRY2 — R0006 validada
+
+A H2D.17-RETRY2 validou a R0006 em clone efêmero local PostgreSQL 17.10
+(`server_version_num=170010`). A evidência normativa aprovada é o relatório
+`h2d17_r0006_377_real_20260814_121234.json`, SHA-256
+`2ad055a51b2760ae434e891b947c27d14efc80c98e328b6adbfda519de718dc4`.
+
+A cadeia precedente encerrou R0005 em 417/417 PASS: M0009 196/196 funcional e
+M0010 221/221. Os prechecks P500-P520 e P550-P553 passaram integralmente. P506
+registrou `sem_plano=0`, `ambíguas=0`, `CREATE=2`, `REUSE=0` e cobertura
+planejada 756/756.
+
+O teste negativo da conta normal com `instituicao=NULL` passou com erro
+PostgreSQL estruturado SQLSTATE 23514, tabela `contas_financeiras` e constraint
+`ck_contas_financeiras__instituicao_preenchido`. A materialização efetiva teve
+2 CREATE e 0 REUSE. A cardinalidade final 0/1/>1 foi 0/2/0 tokens; 756/756
+transações foram resolvidas, sem não resolvidas, aliases criados ou códigos
+divergentes.
+
+O comparador funcional confirmou M0011 184/184 e M0012 193/193, total R0006
+377/377. O COMMIT atômico ocorreu somente no clone após todas as validações, e
+a confirmação read-only pós-COMMIT passou. A aprovação comprova também a Classe
+C path-specific: `public.transacoes_financeiras.id` permaneceu INTEGER/SERIAL e
+`public.transacoes_financeiras_id_seq` permaneceu no caminho legado autorizado.
+As quatro FKs EXTRA_LEGADO — `auditoria_rateios_transacoes.id_transacao`,
+`documentos.id_transacao_origem`,
+`fluxo_caixa_transacoes_link.id_transacao_financeira` e
+`itens_transacao.id_transacao` — permaneceram 4/4 preservadas. Nenhuma
+equivalência global INTEGER/BIGINT ou int4/int8 foi introduzida.
+
+A execução permaneceu isolada: Neon e DEV não foram acessados. O cleanup passou,
+com container removido, volumes persistentes 0→0, zero bind mounts e zero portas
+persistentes. Esta aprovação vale exclusivamente para a validação efêmera da
+R0006; não declara execução em DEV/Neon, adoção de ledger, validação de M0013,
+homologação global do projeto ou deploy.
+
 ## Segurança, retorno e autorizações pendentes
 
 O backup validado da H2D.1 é o ponto de retorno. Nenhum SQL deste plano deve ser
