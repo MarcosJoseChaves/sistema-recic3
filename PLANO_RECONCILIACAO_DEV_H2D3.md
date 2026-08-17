@@ -423,6 +423,45 @@ homologação global do projeto ou deploy.
 
 ## Segurança, retorno e autorizações pendentes
 
+## H2D.21 — R0007 / M0013 materializada offline
+
+A H2D.21 confirma o universo M0013 em 272 objetos: 1 tabela equivalente,
+269 objetos ausentes e 2 divergências. R0007 trata individualmente os 269:
+267 são materializados e a PK/índice backing já funcionais são preservados com
+equivalência nominal path-specific. As 11 tabelas filhas permanecem normativas,
+inclusive com `solicitacao_id BIGINT`.
+
+`public.solicitacoes_alteracao.id` e
+`public.solicitacoes_alteracao_id_seq` são as únicas tolerâncias Classe C:
+INTEGER/SERIAL, PK, default e ownership são preservados. Não existe equivalência
+global int4/int8. A constraint/índice `solicitacoes_alteracao_pkey` permanece a
+única PK, sem rename, segunda PK ou rebuild.
+
+Os oito campos EXTRA_LEGADO permanecem integralmente preservados. O backfill usa
+`tipo_solicitacao` e `tabela_alvo` literalmente após `btrim`, mapeia apenas
+APROVADO→APLICADA e REJEITADO→REJEITADA e bloqueia qualquer domínio diferente.
+`LEGADO` é sentinela técnica, não módulo histórico conhecido;
+`LEGADO_NAO_CLASSIFICADO` não atribui risco real; `versao_esperada=0` significa
+“versão histórica do objeto não registrada”. `fotografia_proposta` preserva
+`dados_novos`; nenhuma fotografia histórica ausente é inventada.
+
+`criada_em` usa a convenção técnica UTC sobre o `TIMESTAMP` legado, sem afirmar
+o timezone histórico e sem alterar `data_solicitacao`. `atualizado_em` recebe um
+timestamp técnico único da transação e não é data histórica da solicitação.
+UUIDs são identificadores técnicos novos.
+
+O solicitante é resolvido em três níveis estritos: igualdade exata, identidade
+canônica M0003/R0002 `lower(btrim)` somente na ausência do exato, e ator histórico
+bloqueado somente quando ambos são zero. O ator não representa pessoa civil,
+fica `BLOQUEADO`, `ativo=FALSE`, sem e-mail, perfil, permissão, escopo, UVR ou
+associação. Cada solicitação deve terminar com cardinalidade real 1:1.
+
+P700–P713 cobrem estrutura legado, PK/sequence, faixa int4, FKs, colisões,
+domínios, fontes NOT NULL, resolução de usuários, ator bloqueado, pais e UUID.
+A meta funcional da futura H2D.22 é M0013 272/272, preservação dos 358 registros
+do backup aprovado e COMMIT somente após todas as provas. Nesta etapa R0007 está
+somente materializada/validada offline; não foi executada em DEV ou Neon.
+
 O backup validado da H2D.1 é o ponto de retorno. Nenhum SQL deste plano deve ser
 executado no desenvolvimento antes de passar no clone. Exigem nova autorização:
 execução de prechecks, aplicação de R0001 no clone, materialização dos ALTERs
