@@ -11,22 +11,34 @@ from .runner import MigrationRunner
 
 
 COMANDOS_OFFLINE = ("validar-manifesto", "verificar-checksums", "mostrar-plano")
+COMANDO_ADOCAO = "adotar-legado-reconciliado"
 
 
 def criar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="migrations-control")
     parser.add_argument(
         "comando",
-        choices=COMANDOS_OFFLINE + ("preflight", "aplicar"),
+        choices=COMANDOS_OFFLINE + ("preflight", "aplicar", COMANDO_ADOCAO),
     )
     parser.add_argument("--manifesto", help="Caminho local opcional do manifesto.")
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, conexao=None) -> int:
     args = criar_parser().parse_args(argv)
     try:
-        if args.comando in {"preflight", "aplicar"}:
+        if args.comando == COMANDO_ADOCAO and conexao is not None:
+            resultado_adocao = MigrationRunner(
+                conexao, caminho_manifesto=args.manifesto
+            ).adotar_legado_reconciliado()
+            print(json.dumps({
+                "sucesso": resultado_adocao.sucesso,
+                "classificacao": resultado_adocao.classificacao_preflight,
+                "aplicadas": resultado_adocao.aplicadas,
+                "adotadas": resultado_adocao.ignoradas,
+            }, ensure_ascii=False))
+            return resultado_adocao.codigo_saida
+        if args.comando in {"preflight", "aplicar", COMANDO_ADOCAO}:
             print(json.dumps({
                 "sucesso": False,
                 "codigo": "CONEXAO_EXPLICITA_NAO_DISPONIVEL",

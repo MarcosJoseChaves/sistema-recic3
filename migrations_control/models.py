@@ -23,6 +23,7 @@ class DatabaseClassification(str, Enum):
 class ExecutionState(str, Enum):
     INICIADA = "INICIADA"
     APLICADA = "APLICADA"
+    ADOTADA = "ADOTADA"
     FALHOU = "FALHOU"
 
 

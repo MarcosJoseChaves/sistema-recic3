@@ -99,6 +99,42 @@ def registrar_migration_aplicada(
     )
 
 
+def registrar_migration_adotada(
+    cursor,
+    operacao: ManifestOperation,
+    *,
+    request_id: UUID,
+    adotada_em: datetime,
+    manifesto_versao: int,
+) -> None:
+    """Registra uma migration reconciliada sem executar seu SQL histórico."""
+    if operacao.identificador == "M0001" or operacao.checksum is None:
+        raise ImpossibleLedgerStateError()
+    cursor.execute(
+        "INSERT INTO public.schema_migrations "
+        "(migration_id, modulo, versao, ordem, checksum_sha256, aplicada_em, "
+        "duracao_ms, versao_aplicativo, manifesto_versao) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            operacao.identificador, operacao.modulo, 1, operacao.ordem_global,
+            operacao.checksum, adotada_em, 0, VERSAO_APLICATIVO,
+            manifesto_versao,
+        ),
+    )
+    cursor.execute(
+        "INSERT INTO public.schema_migration_execucoes "
+        "(migration_id, tentativa, situacao, iniciada_em, concluida_em, duracao_ms, "
+        "checksum_sha256, erro_codigo, erro_sanitizado, request_id, "
+        "host_identificador, processo_id, versao_aplicativo) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            operacao.identificador, 0, "ADOTADA", adotada_em, adotada_em, 0,
+            operacao.checksum, None, None, str(request_id),
+            identificador_host_seguro(), os.getpid(), VERSAO_APLICATIVO,
+        ),
+    )
+
+
 def registrar_migration_falhou(
     cursor,
     operacao: ManifestOperation,

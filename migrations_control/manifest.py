@@ -203,15 +203,26 @@ def _validar_dependencias(operacoes: tuple[ManifestOperation, ...]) -> None:
             raise ManifestError("Operação habilitada depende de operação desabilitada.")
 
 
+def _validar_continuidade_ids(operacoes: tuple[ManifestOperation, ...]) -> None:
+    ids = tuple(op.identificador for op in operacoes)
+    ids_m = tuple(item for item in ids if item.startswith("M"))
+    ids_h = tuple(item for item in ids if item.startswith("H"))
+    if not ids_m or ids_m[0] != "M0000":
+        raise ManifestError("A cadeia física deve iniciar em M0000.")
+    maior_m = int(ids_m[-1][1:])
+    maior_h = int(ids_h[-1][1:]) if ids_h else 0
+    esperados_m = tuple(f"M{numero:04d}" for numero in range(maior_m + 1))
+    esperados_h = tuple(f"H{numero:03d}" for numero in range(1, maior_h + 1))
+    if ids_m != esperados_m or ids_h != esperados_h or ids != esperados_m + esperados_h:
+        raise ManifestError("IDs físicos possuem gap, namespace inválido ou ordem incorreta.")
+
+
 def _validar_contrato_inicial(operacoes: tuple[ManifestOperation, ...]) -> None:
+    _validar_continuidade_ids(operacoes)
     por_id = {op.identificador: op for op in operacoes}
     ids_recebidos = tuple(op.identificador for op in operacoes)
-    ids_esperados = (
-        "M0000", "M0001", *(f"M{numero:04d}" for numero in range(2, 14)),
-        *(f"H{numero:03d}" for numero in range(1, 12)),
-    )
-    if ids_recebidos not in {ids_esperados[:2], ids_esperados}:
-        raise ManifestError("A cadeia física M0000–H011 está incompleta ou fora de ordem.")
+    if len(ids_recebidos) < 2:
+        raise ManifestError("A cadeia física deve conter M0000 e M0001.")
     m0000, m0001 = por_id["M0000"], por_id["M0001"]
     if not (
         m0000.ordem_global == 0
@@ -233,10 +244,10 @@ def _validar_contrato_inicial(operacoes: tuple[ManifestOperation, ...]) -> None:
         and m0001.caminho == "sql/M0001_criar_ledger.sql"
     ):
         raise ManifestError("Definição inválida da M0001.")
-    if ids_recebidos == ids_esperados[:2]:
+    if ids_recebidos == ("M0000", "M0001"):
         return
     anterior = "M0001"
-    for identificador in ids_esperados[2:]:
+    for identificador in ids_recebidos[2:]:
         operacao = por_id[identificador]
         tipo_esperado = (
             OperationType.NOVA_DDL if identificador.startswith("M")

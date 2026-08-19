@@ -21,6 +21,7 @@ from .historical_sql import adaptar_wrapper_historico
 from .ledger import (
     agora_utc,
     registrar_m0001_aplicada,
+    registrar_migration_adotada,
     registrar_migration_aplicada,
     registrar_migration_falhou,
 )
@@ -28,12 +29,18 @@ from .locking import AdvisoryLock
 from .manifest import carregar_manifesto
 from .models import (
     DatabaseClassification,
+    ExecutionState,
     OperationType,
     PlanItem,
     PreflightSnapshot,
     RunnerResult,
 )
+from .reconciliation_proof import (
+    provar_catalogo_normativo_completo,
+    provar_legado_reconciliado_para_adocao,
+)
 from .preflight import (
+    LEDGER_OBJECTS,
     classificar_preflight,
     coletar_conteudo_ledger,
     coletar_snapshot,
@@ -99,6 +106,11 @@ class MigrationRunner:
         aplicadas = {
             item.migration_id: item for item in (snapshot.migrations_aplicadas if snapshot else ())
         }
+        estados_sucesso = {
+            item.migration_id: ExecutionState(item.situacao)
+            for item in (snapshot.execucoes if snapshot else ())
+            if item.situacao in {ExecutionState.APLICADA, ExecutionState.ADOTADA}
+        }
         itens: list[PlanItem] = []
         for op in self.manifesto.operacoes:
             if not op.habilitada:
@@ -108,7 +120,9 @@ class MigrationRunner:
             elif op.identificador in aplicadas:
                 if aplicadas[op.identificador].checksum_sha256 != op.checksum:
                     raise AppliedMigrationHashMismatchError()
-                estado = "APLICADA"
+                if op.identificador not in estados_sucesso:
+                    raise InvalidLedgerError()
+                estado = estados_sucesso[op.identificador].value
             else:
                 estado = "PENDENTE"
             itens.append(PlanItem(op.identificador, op.ordem_global, op.tipo.value, estado, op.caminho))
@@ -162,8 +176,12 @@ class MigrationRunner:
             plano = self.mostrar_plano(snapshot)
             pendentes = [item for item in plano if item.estado == "PENDENTE"]
             if preflight.classificacao is DatabaseClassification.BANCO_CONTROLADO:
+                satisfeitas = tuple(
+                    item.identificador for item in plano
+                    if item.estado in {"APLICADA", "ADOTADA"}
+                )
                 resultado = RunnerResult(
-                    True, preflight.classificacao.value, (), ("M0001",), 0,
+                    True, preflight.classificacao.value, (), satisfeitas, 0,
                     "Nenhuma migration pendente.", request_id_texto,
                 )
             else:
@@ -318,6 +336,144 @@ class MigrationRunner:
         ):
             raise InvalidLedgerError()
         return duracao_ms
+
+    @staticmethod
+    def _validar_prova_adocao(prova, *, pre: bool) -> None:
+        total = 23 if pre else 24
+        estado_m0001 = "AUSENTE" if pre else "PRESENTE_COMPLETO"
+        if not (
+            prova.global_result is True
+            and prova.candidate_total == total
+            and prova.candidate_functional == total
+            and prova.m0001_state == estado_m0001
+        ):
+            raise UnknownDatabaseError()
+
+    def _registrar_adocoes(self, request_id) -> None:
+        adotada_em = agora_utc()
+        cursor = None
+        erro_principal: BaseException | None = None
+        try:
+            cursor = self.conexao.cursor()
+            for operacao in self.manifesto.operacoes:
+                if operacao.identificador in {"M0000", "M0001"} or not operacao.habilitada:
+                    continue
+                registrar_migration_adotada(
+                    cursor, operacao, request_id=request_id, adotada_em=adotada_em,
+                    manifesto_versao=self.manifesto.versao_formato,
+                )
+        except Exception as erro:
+            erro_principal = erro
+            raise MigrationExecutionError() from erro
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except Exception as erro_close:
+                    if erro_principal is None:
+                        raise MigrationExecutionError() from erro_close
+                    erro_principal.add_note("Falha secundária ao fechar cursor da adoção.")
+
+    def adotar_legado_reconciliado(self) -> RunnerResult:
+        """Adota explicitamente um legado reconciliado em uma transação única."""
+        if self.conexao is None:
+            raise DatabaseConnectionError()
+        request_id = uuid4()
+        request_id_texto = str(request_id)
+        estado = ConnectionState(self.conexao)
+        estado.validar_entrada()
+        lock = self.lock_factory(self.conexao, timeout_segundos=self.timeout_lock_segundos)
+        erro_principal: MigrationControlError | None = None
+        erro_limpeza: MigrationControlError | None = None
+        resultado: RunnerResult | None = None
+        transacao_iniciada = False
+        try:
+            estado.preparar_operacoes_sem_transacao()
+            lock.adquirir()
+            snapshot_inicial = self.snapshot_factory(self.conexao)
+            objetos = snapshot_inicial.objetos_encontrados - snapshot_inicial.objetos_ignorados
+            if (
+                not snapshot_inicial.public_existe
+                or not objetos
+                or objetos & LEDGER_OBJECTS
+                or snapshot_inicial.erro_ledger
+                or snapshot_inicial.migrations_aplicadas
+                or snapshot_inicial.execucoes
+            ):
+                raise UnknownDatabaseError()
+
+            estado.iniciar_migration()
+            transacao_iniciada = True
+            prova_pre = provar_legado_reconciliado_para_adocao(self.conexao)
+            self._validar_prova_adocao(prova_pre, pre=True)
+            self._aplicar_m0001(request_id)
+            self._registrar_adocoes(request_id)
+            prova_post = provar_catalogo_normativo_completo(self.conexao)
+            self._validar_prova_adocao(prova_post, pre=False)
+
+            assinatura = self.schema_factory(self.conexao)
+            estrutura_valida, _ = validar_assinatura_ledger(assinatura)
+            if not estrutura_valida:
+                raise InvalidLedgerError()
+            aplicadas, execucoes = self.content_factory(self.conexao)
+            snapshot_final = PreflightSnapshot(
+                True, snapshot_inicial.objetos_encontrados | frozenset({
+                    "schema_migrations", "schema_migration_execucoes",
+                }),
+                assinatura_ledger=assinatura,
+                migrations_aplicadas=aplicadas,
+                execucoes=execucoes,
+            )
+            conteudo_valido, _ = validar_conteudo_ledger(snapshot_final, self.manifesto)
+            if not conteudo_valido:
+                raise InvalidLedgerError()
+            plano = self.mostrar_plano(snapshot_final)
+            if any(item.estado == "PENDENTE" for item in plano):
+                raise InvalidLedgerError()
+            if sum(item.estado == "ADOTADA" for item in plano) != 23:
+                raise InvalidLedgerError()
+            estado.confirmar_migration()
+            transacao_iniciada = False
+            estado.preparar_operacoes_sem_transacao()
+            resultado = RunnerResult(
+                True, DatabaseClassification.BANCO_CONTROLADO.value,
+                ("M0001",), tuple(
+                    item.identificador for item in plano if item.estado == "ADOTADA"
+                ), 0, "Legado reconciliado adotado com sucesso.", request_id_texto,
+            )
+        except Exception as erro:
+            erro_principal = _erro_controlado(erro)
+            if transacao_iniciada:
+                try:
+                    estado.reverter_migration()
+                except Exception as erro_rollback:
+                    self._log_secundario(
+                        "migration_adocao_rollback_falhou", erro_rollback, request_id_texto
+                    )
+        finally:
+            if lock.adquirido:
+                try:
+                    if estado.status() != TRANSACTION_STATUS_IDLE:
+                        raise LockError()
+                    estado.preparar_operacoes_sem_transacao()
+                    lock.liberar()
+                except Exception as erro_unlock:
+                    convertido = _erro_controlado(erro_unlock)
+                    if erro_principal is None:
+                        erro_limpeza = convertido
+            try:
+                estado.restaurar()
+            except Exception as erro_restauracao:
+                convertido = _erro_controlado(erro_restauracao)
+                if erro_principal is None and erro_limpeza is None:
+                    erro_limpeza = convertido
+
+        erro_final = erro_principal or erro_limpeza
+        if erro_final is not None:
+            raise erro_final
+        if resultado is None:
+            raise MigrationExecutionError()
+        return resultado
 
     def _raiz_autorizada(self, operacao):
         if operacao.caminho.startswith("sql/"):
@@ -498,3 +654,8 @@ class MigrationRunner:
 def executar_cadeia_controlada(conexao, **kwargs) -> RunnerResult:
     """Entrada explícita para a cadeia posterior; exige conexão fornecida."""
     return MigrationRunner(conexao, **kwargs).executar_cadeia_controlada()
+
+
+def adotar_legado_reconciliado(conexao, **kwargs) -> RunnerResult:
+    """Entrada explícita; nunca é chamada pelo fluxo normal de migrations."""
+    return MigrationRunner(conexao, **kwargs).adotar_legado_reconciliado()

@@ -124,15 +124,26 @@ def validar_conteudo_ledger(
                 or execucao.concluida_em < execucao.iniciada_em
             ):
                 return False, "Execução concluída sem término ou duração válida."
-            if estado is ExecutionState.APLICADA:
+            if estado in {ExecutionState.APLICADA, ExecutionState.ADOTADA}:
                 if execucao.erro_codigo is not None or execucao.erro_sanitizado is not None:
-                    return False, "Execução APLICADA contém erro."
+                    return False, "Execução terminal de sucesso contém erro."
+                if estado is ExecutionState.ADOTADA and (
+                    execucao.migration_id == "M0001"
+                    or execucao.tentativa != 0
+                    or execucao.duracao_ms != 0
+                ):
+                    return False, "Execução ADOTADA incompatível."
+                if estado is ExecutionState.APLICADA and (
+                    (execucao.migration_id == "M0001" and execucao.tentativa != 0)
+                    or (execucao.migration_id != "M0001" and execucao.tentativa <= 0)
+                ):
+                    return False, "Tentativa APLICADA incompatível."
                 sucessos.setdefault(execucao.migration_id, []).append(execucao)
             elif not execucao.erro_codigo or not execucao.erro_sanitizado:
                 return False, "Execução FALHOU sem erro sanitizado."
 
     if any(len(itens) != 1 for itens in sucessos.values()):
-        return False, "Existe mais de uma execução APLICADA para a mesma migration."
+        return False, "Existe mais de um sucesso terminal para a mesma migration."
     if set(sucessos) != set(aplicadas_por_id):
         return False, "Sucessos e registros aplicados não correspondem."
     for migration_id, aplicada in aplicadas_por_id.items():
@@ -142,8 +153,18 @@ def validar_conteudo_ledger(
             or sucesso.duracao_ms != aplicada.duracao_ms
         ):
             return False, "Fotografia de sucesso diverge do registro aplicado."
-    if set(aplicadas_por_id) != {"M0001"}:
-        return False, "O ledger inicial não comprova exclusivamente a M0001."
+    persistiveis = tuple(
+        op.identificador for op in manifesto.operacoes
+        if op.habilitada and op.tipo is not OperationType.EXECUTOR
+    )
+    ids_aplicados = tuple(
+        op.identificador for op in manifesto.operacoes
+        if op.identificador in aplicadas_por_id
+    )
+    if ids_aplicados != persistiveis[:len(ids_aplicados)]:
+        return False, "O ledger não representa prefixo dependency-closed da cadeia."
+    if not ids_aplicados or ids_aplicados[0] != "M0001":
+        return False, "O ledger não comprova a M0001 inicial."
     execucoes_m0001 = [item for item in snapshot.execucoes if item.migration_id == "M0001"]
     if not (
         len(execucoes_m0001) == 1
@@ -188,7 +209,14 @@ def classificar_preflight(
             snapshot, DatabaseClassification.BANCO_DESCONHECIDO,
             "As sequências IDENTITY do ledger estão ausentes ou incompletas.", 26, False,
         )
-    if encontrados - LEDGER_OBJECTS:
+    total_persistivel = sum(
+        op.habilitada and op.tipo is not OperationType.EXECUTOR
+        for op in manifesto.operacoes
+    )
+    if (
+        encontrados - LEDGER_OBJECTS
+        and len(snapshot.migrations_aplicadas) != total_persistivel
+    ):
         return _resultado(
             snapshot, DatabaseClassification.BANCO_DESCONHECIDO,
             "Existem objetos não reconhecidos além do ledger inicial.", 23, False,

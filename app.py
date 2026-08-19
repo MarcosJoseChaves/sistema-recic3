@@ -517,7 +517,19 @@ def _inserir_solicitacao_escopada(
     }
     tabela_sql = tabelas_permitidas.get(tabela)
     uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
-    if not tabela_sql or not uvr_usuario:
+    usuario_solicitante = str(getattr(current_user, "username", None) or "").strip()
+    tipo_normalizado = str(tipo_solicitacao or "").strip()
+    try:
+        solicitante_usuario_id = int(getattr(current_user, "id", None))
+    except (TypeError, ValueError):
+        return False
+    if (
+        not tabela_sql
+        or not uvr_usuario
+        or not usuario_solicitante
+        or not tipo_normalizado
+        or solicitante_usuario_id <= 0
+    ):
         return False
     filtro_relacionado = ""
     parametros_relacionados = ()
@@ -535,8 +547,14 @@ def _inserir_solicitacao_escopada(
         f"""
         INSERT INTO solicitacoes_alteracao
             (tabela_alvo, id_registro, tipo_solicitacao, dados_novos,
-             usuario_solicitante)
-        SELECT %s, alvo.id, %s, %s, %s
+             usuario_solicitante, identificador_publico, tipo, modulo,
+             objeto_tipo_logico, objeto_identificador_logico,
+             solicitante_usuario_id, estado, risco, versao_esperada,
+             fotografia_proposta, request_id)
+        SELECT %s, alvo.id, %s, %s, %s,
+               pg_catalog.gen_random_uuid(), %s, 'LEGADO', %s, alvo.id::text,
+               %s, 'ENVIADA', 'LEGADO_NAO_CLASSIFICADO', 0,
+               %s, pg_catalog.gen_random_uuid()
         FROM {tabela_sql} alvo
         WHERE alvo.id = %s
           AND LOWER(TRIM(alvo.uvr)) = LOWER(TRIM(%s))
@@ -545,9 +563,13 @@ def _inserir_solicitacao_escopada(
         """,
         (
             tabela,
-            tipo_solicitacao,
+            tipo_normalizado,
             dados_novos,
-            current_user.username,
+            usuario_solicitante,
+            tipo_normalizado,
+            tabela,
+            solicitante_usuario_id,
+            dados_novos,
             int(identificador),
             uvr_usuario,
         ) + parametros_relacionados,
