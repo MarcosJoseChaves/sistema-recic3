@@ -1,0 +1,28 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% block title %}Anexar Documento{% endblock %}
+{% block page_title %}Anexar Documento{% endblock %}
+
+{% block header_actions %}<a href="{{ url_for('fiscalizacao_contratos.documentos_lista') }}" class="btn btn-outline-secondary"><i class="fas fa-list me-2"></i>Lista de documentos</a>{% endblock %}
+
+{% block content %}
+<form method="POST" enctype="multipart/form-data" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card-body">
+        <div class="alert alert-info"><i class="fas fa-shield-halved me-2"></i>O documento será armazenado de forma privada. Limite: {{ limite_mb }} MB.</div>
+        <div class="row g-3">
+            <div class="col-lg-7"><label for="contrato_id" class="form-label">Contrato <span class="text-danger">*</span></label><select class="form-select" id="contrato_id" name="contrato_id" required><option value="">Selecione</option>{% for contrato in contratos %}<option value="{{ contrato.id }}" {% if documento.contrato_id == contrato.id %}selected{% endif %}>{{ contrato.numero_contrato }} — {{ contrato.empresa_nome }}{% if not contrato.ativo %} (inativo){% endif %}</option>{% endfor %}</select></div>
+            <div class="col-lg-5"><label for="aditivo_id" class="form-label">Aditivo, se aplicável</label><select class="form-select" id="aditivo_id" name="aditivo_id"><option value="">Documento do contrato</option>{% for aditivo in aditivos %}<option value="{{ aditivo.id }}" data-contrato="{{ aditivo.contrato_id }}" {% if documento.aditivo_id == aditivo.id %}selected{% endif %}>{{ aditivo.numero_termo }} — contrato {{ aditivo.numero_contrato }}{% if not aditivo.ativo %} (inativo){% endif %}</option>{% endfor %}</select></div>
+            <div class="col-md-5"><label for="categoria" class="form-label">Categoria <span class="text-danger">*</span></label><select class="form-select" id="categoria" name="categoria" required><option value="">Selecione</option>{% for item in categorias %}<option value="{{ item }}" {% if documento.categoria == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></div>
+            <div class="col-md-7"><label for="titulo" class="form-label">Título <span class="text-danger">*</span></label><input class="form-control" id="titulo" name="titulo" maxlength="200" required value="{{ documento.titulo or '' }}"></div>
+            <div class="col-12"><label for="descricao" class="form-label">Descrição</label><textarea class="form-control" id="descricao" name="descricao" rows="3">{{ documento.descricao or '' }}</textarea></div>
+            <div class="col-12"><label for="arquivo" class="form-label">Arquivo <span class="text-danger">*</span></label><input type="file" class="form-control" id="arquivo" name="arquivo" required accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.odt,.ods"><div class="form-text">PDF, Word, Excel, CSV, JPG, PNG, ODT ou ODS.</div></div>
+        </div>
+    </div>
+    <div class="card-footer d-flex flex-column flex-sm-row justify-content-end gap-2"><a href="{{ url_for('fiscalizacao_contratos.documentos_lista') }}" class="btn btn-outline-secondary">Cancelar</a><button class="btn btn-primary" type="submit"><i class="fas fa-cloud-arrow-up me-2"></i>Enviar documento</button></div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('fiscalizacao_contratos.static', filename='js/documentos_form.js') }}"></script>
+{% endblock %}

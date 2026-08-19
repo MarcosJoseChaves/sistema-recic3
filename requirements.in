@@ -1,0 +1,12 @@
+# Dependências diretas. requirements.txt contém também as transitivas fixadas.
+Flask==3.1.2
+Flask-Login==0.6.3
+Flask-Limiter[redis]==4.1.1
+Flask-WTF==1.2.1
+cloudinary==1.42.2
+gunicorn==26.0.0
+psycopg2-binary==2.9.10
+python-dotenv==0.21.0
+reportlab==4.4.4
+requests==2.34.2
+Werkzeug==3.1.4

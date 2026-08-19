@@ -5,14 +5,25 @@ import io
 import csv
 import requests
 import os
+import secrets
 import psycopg2
+from functools import wraps
+from html import unescape
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
+from xml.sax.saxutils import escape
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
+from flask import Flask, abort, render_template, request, redirect, url_for, jsonify, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.exceptions import HTTPException
+from configuracao_ambiente import configurar_aplicacao
+from logging_operacional import registrar_evento, resposta_erro_interno
+from seguranca_rate_limit import aplicar_limites_rotas
+from seguranca_csrf import configurar_csrf
+from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
+from modulos.fiscalizacao_contratos.permissions import admin_json_required, admin_required
 
 # ReportLab Imports (Para PDF)
 from reportlab.lib.pagesizes import letter, A4, landscape
@@ -43,29 +54,558 @@ GRUPOS_FIXOS_SISTEMA = [
 load_dotenv()
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Limite aumentado para 64MB
-app.secret_key = os.getenv('SECRET_KEY', 'chave_secreta_padrao_dev')
+configurar_aplicacao(app)
+configurar_csrf(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Usado somente para aproximar o custo da verificação quando o usuário não existe.
+# O valor aleatório é criado uma única vez por processo e não corresponde a uma conta real.
+HASH_SENHA_FICTICIO = generate_password_hash(secrets.token_urlsafe(32))
+
 # --- CONFIGURAÇÃO DO BANCO DE DADOS ---
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = app.config.get('DATABASE_URL')
 
 def conectar_banco():
     """Estabelece conexão com o banco de dados."""
-    if DATABASE_URL:
-        # Removido o sslmode='require' para funcionar localmente
-        return psycopg2.connect(DATABASE_URL)
-    else:
-        return psycopg2.connect(
-            host="localhost",
-            database="recic3",
-            user="postgres",
-            password="postgres", 
-            port="5432"
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL não está configurada.")
+    return psycopg2.connect(DATABASE_URL)
+
+
+def desativada_online(view_function):
+    """Oculta uma operação nos ambientes online, sem criar chave de reativação."""
+
+    @wraps(view_function)
+    def protected_view(*args, **kwargs):
+        if app.config.get("APP_ENV") in {"homologation", "production"}:
+            abort(404)
+        return view_function(*args, **kwargs)
+
+    return protected_view
+
+
+def login_json_required(view_function):
+    """Mantem respostas JSON para APIs chamadas sem uma sessao interna."""
+
+    @wraps(view_function)
+    def protected_view(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return jsonify({"error": "Autenticação necessária."}), 401
+        return view_function(*args, **kwargs)
+
+    return protected_view
+
+
+JSON_MAX_BYTES = 64 * 1024
+JSON_MAX_LIST_ITEMS = 200
+JSON_MAX_STRING_LENGTH = 5000
+JSON_MAX_DEPTH = 2
+JSON_ENDPOINTS = frozenset({
+    "api_produtos_crud",
+    "api_subgrupos",
+    "buscar_associados",
+    "buscar_cadastros",
+    "buscar_cep",
+    "buscar_cnpj",
+    "buscar_contas_correntes_gestao",
+    "buscar_patrimonio",
+    "buscar_transacoes_gestao",
+    "excluir_associado",
+    "excluir_cadastro",
+    "excluir_conta_corrente",
+    "excluir_movimentacao",
+    "excluir_patrimonio",
+    "excluir_transacao",
+    "fiscalizacao_contratos.empresas_consultar_cep",
+    "fiscalizacao_contratos.empresas_consultar_cnpj",
+    "gerar_extrato_bancario_json",
+    "gerar_relatorio",
+    "get_associado",
+    "get_associados_ativos",
+    "get_cadastro",
+    "get_cadastros_ativos",
+    "get_clientes_fornecedores_com_pendencias",
+    "get_conta_corrente_detalhe",
+    "get_contas_correntes_fluxo_caixa",
+    "get_detalhes_solicitacao",
+    "get_distinct_grupos",
+    "get_distinct_subgrupos",
+    "get_items_for_filters",
+    "get_movimentacao_detalhes",
+    "get_notas_em_aberto",
+    "get_patrimonio_detalhes",
+    "get_produtos_servicos",
+    "get_relatorio_catalog_options",
+    "get_relatorio_entidades_para_filtro",
+    "get_relatorio_tipos_atividade_transacao",
+    "get_relatorio_uvrs",
+    "get_resumo_fluxo_caixa",
+    "get_solicitacoes_pendentes",
+    "get_transacao_detalhes",
+    "health",
+    "registrar_fluxo_caixa",
+    "responder_solicitacao",
+})
+JSON_CAMPOS_RELATORIO = {
+    "data_inicial", "data_final", "uvr", "tipo_transacao_rel",
+    "tipo_entidade", "id_entidade", "nome_entidade_display",
+    "tipo_atividade_transacao_rel", "grupo_rel", "subgrupo_rel",
+    "item_rel", "status_pagamento_rel", "listar_por",
+}
+JSON_CAMPOS_EXTRATO = {
+    "id_conta_corrente_extrato", "data_inicial_extrato", "data_final_extrato",
+}
+
+
+def _requisicao_endpoint_json():
+    """Reconhece somente os endpoints JSON inventariados, sem confiar no cliente."""
+
+    if request.endpoint in JSON_ENDPOINTS:
+        return True
+    adaptador = app.url_map.bind_to_environ(request.environ)
+    for metodo in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+        try:
+            endpoint, _valores = adaptador.match(method=metodo)
+        except HTTPException:
+            continue
+        if endpoint in JSON_ENDPOINTS:
+            return True
+    return False
+
+
+app.config["JSON_ENDPOINT_CLASSIFIER"] = _requisicao_endpoint_json
+
+
+def _resposta_erro_http_json(codigo, mensagem, erro_original):
+    if _requisicao_endpoint_json():
+        return jsonify({"error": mensagem}), codigo
+    return erro_original
+
+
+@app.errorhandler(404)
+def _tratar_nao_encontrado(erro):
+    return _resposta_erro_http_json(404, "Recurso não encontrado.", erro)
+
+
+@app.errorhandler(405)
+def _tratar_metodo_incorreto(erro):
+    return _resposta_erro_http_json(405, "Método não permitido.", erro)
+
+
+@app.errorhandler(500)
+def _tratar_erro_interno(erro):
+    return resposta_erro_interno(erro)
+
+
+def _validar_limites_estrutura_json(dados):
+    """Limita profundidade, textos e a soma de itens das listas aceitas."""
+
+    total_itens = 0
+
+    def validar(valor, profundidade):
+        nonlocal total_itens
+        if profundidade > JSON_MAX_DEPTH:
+            return "O conteúdo JSON possui estrutura inválida."
+        if isinstance(valor, str):
+            if len(valor) > JSON_MAX_STRING_LENGTH:
+                return "Um dos textos enviados é muito longo."
+            return None
+        if isinstance(valor, list):
+            total_itens += len(valor)
+            if total_itens > JSON_MAX_LIST_ITEMS:
+                return "A lista enviada possui itens demais."
+            for item in valor:
+                if isinstance(item, (dict, list)):
+                    return "A lista enviada possui formato inválido."
+                erro = validar(item, profundidade + 1)
+                if erro:
+                    return erro
+            return None
+        if isinstance(valor, dict):
+            return "O conteúdo JSON possui estrutura inválida."
+        return None
+
+    for valor in dados.values():
+        erro = validar(valor, 1)
+        if erro:
+            return erro
+    return None
+
+
+def _obter_json_objeto(campos_permitidos, *, campos_obrigatorios=()):
+    """Valida uma entrada JSON pequena antes de executar a regra de negócio."""
+
+    if not request.is_json:
+        return None, (
+            jsonify({"error": "O conteúdo deve ser enviado no formato JSON."}),
+            415,
         )
+    if request.content_length and request.content_length > JSON_MAX_BYTES:
+        return None, (jsonify({"error": "Conteúdo JSON muito grande."}), 413)
+
+    codificacao = str(request.headers.get("Content-Encoding") or "identity").casefold()
+    if codificacao not in {"", "identity"}:
+        return None, (
+            jsonify({"error": "Codificação de conteúdo não suportada."}),
+            415,
+        )
+
+    corpo = request.stream.read(JSON_MAX_BYTES + 1)
+    if len(corpo) > JSON_MAX_BYTES:
+        return None, (jsonify({"error": "Conteúdo JSON muito grande."}), 413)
+    try:
+        dados = json.loads(corpo)
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        dados = None
+    if not isinstance(dados, dict):
+        return None, (jsonify({"error": "Conteúdo JSON inválido."}), 400)
+
+    campos_extras = set(dados) - set(campos_permitidos)
+    if campos_extras:
+        return None, (jsonify({"error": "O conteúdo possui campos não permitidos."}), 400)
+
+    erro_estrutura = _validar_limites_estrutura_json(dados)
+    if erro_estrutura:
+        return None, (jsonify({"error": erro_estrutura}), 400)
+
+    ausentes = [
+        campo
+        for campo in campos_obrigatorios
+        if campo not in dados or dados[campo] is None
+    ]
+    if ausentes:
+        return None, (jsonify({"error": "Campos obrigatórios não informados."}), 400)
+
+    return dados, None
+
+
+def _resposta_acesso_negado_json():
+    return jsonify({"error": "Acesso não autorizado para este recurso."}), 403
+
+
+def _resposta_acesso_negado_html():
+    return "Acesso nao autorizado para este recurso.", 403
+
+
+def _uvr_normalizada(valor):
+    return str(valor or "").strip().casefold()
+
+
+def _aplicar_escopo_uvr(dados, campo, *, resposta_json):
+    """Substitui a UVR do navegador pela UVR da sessão e rejeita divergências."""
+    if getattr(current_user, "role", None) == "admin":
+        return None
+
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    uvr_recebida = str(dados.get(campo) or "").strip()
+    if not uvr_usuario or (
+        uvr_recebida and _uvr_normalizada(uvr_recebida) != _uvr_normalizada(uvr_usuario)
+    ):
+        if resposta_json:
+            return _resposta_acesso_negado_json()
+        return _resposta_acesso_negado_html()
+
+    dados[campo] = uvr_usuario
+    return None
+
+
+def _autorizar_objetos_da_uvr(verificacoes, *, resposta_json=True):
+    """Confere IDs financeiros no servidor antes de qualquer alteração ou relatório."""
+    if getattr(current_user, "role", None) == "admin":
+        return None
+
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    if not uvr_usuario:
+        if resposta_json:
+            return _resposta_acesso_negado_json()
+        return _resposta_acesso_negado_html()
+
+    if not verificacoes:
+        return None
+
+    consultas = {
+        "contas_correntes": "SELECT uvr FROM contas_correntes WHERE id = %s",
+        "transacoes_financeiras": "SELECT uvr FROM transacoes_financeiras WHERE id = %s",
+        "cadastros": "SELECT uvr FROM cadastros WHERE id = %s",
+        "associados": "SELECT uvr FROM associados WHERE id = %s",
+    }
+    conexao = None
+    cursor = None
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+        for tabela, identificador in verificacoes:
+            if tabela not in consultas:
+                if resposta_json:
+                    return _resposta_acesso_negado_json()
+                return _resposta_acesso_negado_html()
+            try:
+                identificador = int(identificador)
+            except (TypeError, ValueError):
+                if resposta_json:
+                    return _resposta_acesso_negado_json()
+                return _resposta_acesso_negado_html()
+            cursor.execute(consultas[tabela], (identificador,))
+            registro = cursor.fetchone()
+            if not registro or _uvr_normalizada(registro[0]) != _uvr_normalizada(uvr_usuario):
+                if resposta_json:
+                    return _resposta_acesso_negado_json()
+                return _resposta_acesso_negado_html()
+        return None
+    except Exception as erro:
+        app.logger.error(
+            "Falha ao validar autorização por UVR. erro_tipo=%s",
+            type(erro).__name__,
+        )
+        if resposta_json:
+            return _resposta_acesso_negado_json()
+        return _resposta_acesso_negado_html()
+    finally:
+        if cursor:
+            cursor.close()
+        if conexao:
+            conexao.close()
+
+
+def _autorizar_relatorio_financeiro(filtros):
+    negado = _aplicar_escopo_uvr(filtros, "uvr", resposta_json=True)
+    if negado:
+        return negado
+
+    identificador = filtros.get("id_entidade")
+    if not identificador:
+        return None
+
+    tipo_entidade = filtros.get("tipo_entidade")
+    if tipo_entidade == "Associado":
+        tabela = "associados"
+    elif tipo_entidade in {"Cliente", "Fornecedor/Prestador"}:
+        tabela = "cadastros"
+    else:
+        return _resposta_acesso_negado_json()
+    return _autorizar_objetos_da_uvr([(tabela, identificador)])
+
+
+def _autorizar_extrato_financeiro(filtros):
+    identificador = filtros.get("id_conta_corrente_extrato")
+    verificacoes = [("contas_correntes", identificador)] if identificador else []
+    negado = _autorizar_objetos_da_uvr(verificacoes)
+    if negado:
+        return negado
+
+    filtros["_uvr_autorizada"] = (
+        None
+        if getattr(current_user, "role", None) == "admin"
+        else str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    )
+    return None
+
+
+def _nome_arquivo_seguro(valor, padrao):
+    nome = re.sub(r"[^A-Za-z0-9._-]+", "_", str(valor or "").strip())
+    return nome.strip("._-")[:80] or padrao
+
+
+def _escopo_uvr_consulta(valor_recebido=None):
+    """Obtém a UVR autorizada sem confiar no filtro enviado pelo navegador."""
+    valor = str(valor_recebido or "").strip()
+    if getattr(current_user, "role", None) == "admin":
+        if _uvr_normalizada(valor) in {"todos", "todas"}:
+            valor = ""
+        return valor or None, None
+
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    if not uvr_usuario:
+        return None, _resposta_acesso_negado_json()
+    if valor and _uvr_normalizada(valor) not in {
+        "todos",
+        "todas",
+        _uvr_normalizada(uvr_usuario),
+    }:
+        return None, _resposta_acesso_negado_json()
+    return uvr_usuario, None
+
+
+def _escopo_uvr_objeto(*, resposta_json):
+    """Retorna o escopo do objeto sem confiar em UVR recebida do navegador."""
+    if getattr(current_user, "role", None) == "admin":
+        return None, None
+
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    if uvr_usuario:
+        return uvr_usuario, None
+
+    if resposta_json:
+        return None, (jsonify({"error": "Recurso não encontrado."}), 404)
+    return None, ("Recurso não encontrado.", 404)
+
+
+def _consulta_objeto_por_uvr(cursor, sql_base, identificador, uvr_autorizada):
+    """Executa a consulta final por ID e, para usuário comum, também por UVR."""
+    if uvr_autorizada is None:
+        cursor.execute(sql_base, (identificador,))
+    else:
+        cursor.execute(
+            sql_base + " AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+            (identificador, uvr_autorizada),
+        )
+    return cursor.fetchone()
+
+
+def _autorizar_objeto_por_uvr(tabela, identificador, *, resposta_json):
+    """Falha fechada quando o objeto não pertence à UVR do usuário comum."""
+    if getattr(current_user, "role", None) == "admin":
+        return None
+
+    consultas = {
+        "associados": "SELECT id FROM associados WHERE id = %s AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+        "cadastros": "SELECT id FROM cadastros WHERE id = %s AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+        "contas_correntes": "SELECT id FROM contas_correntes WHERE id = %s AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+        "transacoes_financeiras": "SELECT id FROM transacoes_financeiras WHERE id = %s AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+        "patrimonio": "SELECT id FROM patrimonio WHERE id = %s AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+        "fluxo_caixa": "SELECT id FROM fluxo_caixa WHERE id = %s AND LOWER(TRIM(uvr)) = LOWER(TRIM(%s))",
+    }
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    consulta = consultas.get(tabela)
+    conexao = None
+    cursor = None
+    try:
+        identificador = int(identificador)
+        if not consulta or not uvr_usuario:
+            raise ValueError("escopo ausente")
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+        cursor.execute(consulta, (identificador, uvr_usuario))
+        if cursor.fetchone():
+            return None
+    except Exception as erro:
+        app.logger.warning(
+            "Autorização de objeto recusada. tabela=%s erro_tipo=%s",
+            tabela,
+            type(erro).__name__,
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if conexao:
+            conexao.close()
+
+    if resposta_json:
+        return jsonify({"error": "Recurso não encontrado."}), 404
+    return "Recurso não encontrado.", 404
+
+
+def _inserir_solicitacao_escopada(
+    cursor,
+    tabela,
+    identificador,
+    tipo_solicitacao,
+    dados_novos,
+    *,
+    cadastro_relacionado_id=None,
+):
+    """Cria a solicitação somente se o objeto ainda pertencer à UVR da sessão."""
+    tabelas_permitidas = {
+        "associados": "associados",
+        "cadastros": "cadastros",
+        "contas_correntes": "contas_correntes",
+        "transacoes_financeiras": "transacoes_financeiras",
+        "patrimonio": "patrimonio",
+    }
+    tabela_sql = tabelas_permitidas.get(tabela)
+    uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+    usuario_solicitante = str(getattr(current_user, "username", None) or "").strip()
+    tipo_normalizado = str(tipo_solicitacao or "").strip()
+    try:
+        solicitante_usuario_id = int(getattr(current_user, "id", None))
+    except (TypeError, ValueError):
+        return False
+    if (
+        not tabela_sql
+        or not uvr_usuario
+        or not usuario_solicitante
+        or not tipo_normalizado
+        or solicitante_usuario_id <= 0
+    ):
+        return False
+    filtro_relacionado = ""
+    parametros_relacionados = ()
+    if cadastro_relacionado_id is not None:
+        filtro_relacionado = """
+          AND EXISTS (
+              SELECT 1
+              FROM cadastros relacionado
+              WHERE relacionado.id = %s
+                AND LOWER(TRIM(relacionado.uvr)) = LOWER(TRIM(%s))
+          )
+        """
+        parametros_relacionados = (int(cadastro_relacionado_id), uvr_usuario)
+    cursor.execute(
+        f"""
+        INSERT INTO solicitacoes_alteracao
+            (tabela_alvo, id_registro, tipo_solicitacao, dados_novos,
+             usuario_solicitante, identificador_publico, tipo, modulo,
+             objeto_tipo_logico, objeto_identificador_logico,
+             solicitante_usuario_id, estado, risco, versao_esperada,
+             fotografia_proposta, request_id)
+        SELECT %s, alvo.id, %s, %s, %s,
+               pg_catalog.gen_random_uuid(), %s, 'LEGADO', %s, alvo.id::text,
+               %s, 'ENVIADA', 'LEGADO_NAO_CLASSIFICADO', 0,
+               %s, pg_catalog.gen_random_uuid()
+        FROM {tabela_sql} alvo
+        WHERE alvo.id = %s
+          AND LOWER(TRIM(alvo.uvr)) = LOWER(TRIM(%s))
+        {filtro_relacionado}
+        RETURNING id
+        """,
+        (
+            tabela,
+            tipo_normalizado,
+            dados_novos,
+            usuario_solicitante,
+            tipo_normalizado,
+            tabela,
+            solicitante_usuario_id,
+            dados_novos,
+            int(identificador),
+            uvr_usuario,
+        ) + parametros_relacionados,
+    )
+    return cursor.fetchone() is not None
+
+
+def _texto_csv_seguro(valor):
+    """Neutraliza fórmulas em campos textuais exportados para CSV."""
+    if isinstance(valor, (int, float, Decimal)) and not isinstance(valor, bool):
+        return valor
+    texto = str(valor or "")
+    inicio = texto.lstrip(" \t\r\n\v\f\u200b\ufeff")
+    if inicio.startswith("'"):
+        restante = inicio[1:].lstrip(" \t\r\n\v\f\u200b\ufeff")
+        if restante.startswith(("=", "+", "-", "@")):
+            return texto if texto.startswith("'") else "'" + texto
+    if inicio.startswith(("=", "+", "-", "@")):
+        return "'" + texto
+    return texto
+
+
+def _texto_pdf_seguro(valor):
+    """Escapa texto externo antes de entregá-lo ao parser XML do ReportLab."""
+    return escape(unescape(str(valor or "")))
+
+app.register_blueprint(
+    criar_blueprint_fiscalizacao(conectar_banco),
+    url_prefix="/fiscalizacao-contratos"
+)
+
+
+@app.get('/health')
+def health():
+    """Health check mínimo, sem dependência de banco ou serviço externo."""
+    return jsonify({"status": "ok"})
 
 # --- VALIDAÇÕES ---
 def validar_cnpj(cnpj):
@@ -255,8 +795,13 @@ def criar_tabelas_se_nao_existir():
         """)
 
         conn.commit()
-    except psycopg2.Error as e:
-        app.logger.error(f"Erro tabelas: {e}")
+    except psycopg2.Error:
+        registrar_evento(
+            "internal_error",
+            nivel="ERROR",
+            mensagem="Falha na preparação das estruturas locais.",
+            error_type="DatabaseError",
+        )
         if conn: conn.rollback()
     finally:
         if conn: conn.close()
@@ -299,16 +844,22 @@ def migrar_dados_antigos_produtos():
             
         conn.commit()
         if migrados > 0:
-            app.logger.info(f"--- MIGRAÇÃO: {migrados} novos subgrupos foram criados e vinculados. ---")
+            registrar_evento(
+                "maintenance_completed",
+                mensagem="Atualização interna concluída.",
+                affected_count=migrados,
+            )
             
-    except Exception as e:
+    except Exception:
         if conn: conn.rollback()
-        app.logger.error(f"Erro na migração de produtos: {e}")
+        registrar_evento(
+            "internal_error",
+            nivel="ERROR",
+            mensagem="Falha em atualização interna.",
+            error_type="MaintenanceError",
+        )
     finally:
         if conn: conn.close()
-
-# CHAMADA DA MIGRAÇÃO (Cole isso logo após a definição da função acima)
-migrar_dados_antigos_produtos()
 
 class User(UserMixin):
     def __init__(self, id, username, role, uvr_acesso):
@@ -321,12 +872,22 @@ class User(UserMixin):
 def load_user(user_id):
     conn = conectar_banco()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, role, uvr_acesso FROM usuarios WHERE id = %s", (user_id,))
+    cur.execute("""
+        SELECT id, username, role, uvr_acesso
+        FROM usuarios
+        WHERE id = %s AND ativo = TRUE
+    """, (user_id,))
     data = cur.fetchone()
     cur.close()
     conn.close()
     if data:
         return User(id=data[0], username=data[1], role=data[2], uvr_acesso=data[3])
+    registrar_evento(
+        "inactive_session_rejected",
+        nivel="WARNING",
+        mensagem="Sessão interna não reconhecida.",
+        categoria_seguranca="authentication",
+    )
     return None
 
 
@@ -344,22 +905,34 @@ def login():
         cur.close()
         conn.close()
 
-        if user_data:
-            # user_data[2] é o hash da senha
-            # check_password_hash verifica se a senha digitada bate com o hash
-            if check_password_hash(user_data[2], password):
-                user_obj = User(id=user_data[0], username=user_data[1], role=user_data[3], uvr_acesso=user_data[4])
-                login_user(user_obj)
-                app.logger.info(f"Usuário {username} logado com sucesso.")
-                return redirect(url_for('index'))
-            else:
-                return render_template('login.html', erro="Senha incorreta.")
-        else:
-            return render_template('login.html', erro="Usuário não encontrado.")
+        # A verificação de hash também ocorre quando a conta não existe ou está
+        # inativa. Isso reduz a diferença temporal sem expor a existência da conta.
+        hash_para_validar = user_data[2] if user_data else HASH_SENHA_FICTICIO
+        senha_valida = check_password_hash(hash_para_validar, password)
+
+        if not user_data or not senha_valida:
+            registrar_evento(
+                "authentication_failed",
+                nivel="WARNING",
+                mensagem="Falha de autenticação.",
+                categoria_seguranca="authentication",
+            )
+            return render_template('login.html', erro="Usuário ou senha inválidos.")
+
+        user_obj = User(id=user_data[0], username=user_data[1], role=user_data[3], uvr_acesso=user_data[4])
+        login_user(user_obj)
+        registrar_evento(
+            "authentication_succeeded",
+            mensagem="Autenticação concluída.",
+            categoria_seguranca="authentication",
+            actor_id=str(user_data[0]),
+            actor_type="internal_user",
+        )
+        return redirect(url_for('index'))
             
     return render_template('login.html')
 
-@app.route('/logout')
+@app.post('/logout')
 @login_required
 def logout():
     logout_user()
@@ -396,13 +969,22 @@ def alterar_senha():
                 novo_hash = generate_password_hash(nova_senha)
                 cur.execute("UPDATE usuarios SET password_hash = %s WHERE id = %s", (novo_hash, current_user.id))
                 conn.commit()
-                app.logger.info(f"Senha alterada com sucesso para o usuário: {current_user.username}")
+                registrar_evento(
+                    "credential_updated",
+                    mensagem="Credencial interna atualizada.",
+                    categoria_seguranca="authentication",
+                )
                 return render_template('alterar_senha.html', sucesso="Senha alterada com sucesso!")
             else:
                 return render_template('alterar_senha.html', erro="Senha atual incorreta.")
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            app.logger.error(f"Erro ao alterar senha: {e}")
+            registrar_evento(
+                "internal_error",
+                nivel="ERROR",
+                mensagem="Falha interna ao atualizar credencial.",
+                error_type="CredentialUpdateError",
+            )
             return render_template('alterar_senha.html', erro="Erro interno ao alterar senha.")
         finally:
             cur.close()
@@ -419,6 +1001,8 @@ def index():
 
 # Substitua sua função buscar_cep por esta
 @app.route("/buscar_cep/<string:cep_numeros>", methods=["GET"])
+@login_json_required
+@login_required
 def buscar_cep(cep_numeros):
     if not cep_numeros or not cep_numeros.isdigit() or len(cep_numeros) != 8:
         return jsonify({"erro": "CEP inválido. Forneça 8 dígitos numéricos."}), 400
@@ -449,22 +1033,28 @@ def buscar_cep(cep_numeros):
         })
 
     except requests.exceptions.Timeout:
-        app.logger.error(f"Timeout ao buscar CEP {cep_numeros} na BrasilAPI.")
+        app.logger.warning("Consulta de CEP excedeu o tempo limite.")
         return jsonify({"erro": "O serviço de CEP demorou muito para responder."}), 504
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
-            app.logger.warning(f"CEP {cep_numeros} não encontrado na BrasilAPI.")
+            app.logger.info("Consulta de CEP não encontrou resultado.")
             return jsonify({"erro": "CEP não encontrado."}), 404
-        app.logger.error(f"Erro HTTP ao buscar CEP {cep_numeros} na BrasilAPI: {e}")
+        app.logger.warning(
+            "Consulta de CEP falhou. erro_tipo=%s", type(e).__name__
+        )
         return jsonify({"erro": "Erro de comunicação ao contatar o serviço de CEP."}), 503
 
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Erro de rede ao buscar CEP {cep_numeros} na BrasilAPI: {e}")
+        app.logger.warning(
+            "Consulta de CEP falhou. erro_tipo=%s", type(e).__name__
+        )
         return jsonify({"erro": "Erro de comunicação ao contatar o serviço de CEP."}), 503
 
     except Exception as e:
-        app.logger.error(f"Erro inesperado ao processar CEP {cep_numeros}: {e}")
+        app.logger.error(
+            "Falha interna na consulta de CEP. erro_tipo=%s", type(e).__name__
+        )
         return jsonify({"erro": "Erro interno ao processar CEP."}), 500
 
 @app.route("/cadastrar", methods=["POST"])
@@ -520,10 +1110,10 @@ def cadastrar():
         if conn: conn.rollback()
         if 'uq_cadastros_cnpj_tipo_uvr' in str(e): 
             return "Este CNPJ já está cadastrado para o Tipo de Cadastro e UVR selecionados.", 400
-        return f"Erro de integridade: {e}", 400
-    except Exception as e:
+        return "Não foi possível concluir o cadastro por conflito nos dados.", 400
+    except Exception:
         if conn: conn.rollback()
-        return f"Erro ao cadastrar: {e}", 500
+        raise
     finally:
         if conn: conn.close()
 
@@ -557,8 +1147,8 @@ def cadastrar_associado():
             data_nascimento = datetime.strptime(dados["data_nascimento"], '%Y-%m-%d').date()
             data_admissao = datetime.strptime(dados["data_admissao"], '%Y-%m-%d').date()
             data_hora = datetime.strptime(dados["data_hora_cadastro"], '%d/%m/%Y %H:%M:%S')
-        except ValueError as e:
-            return f"Formato de data inválido: {e}", 400
+        except ValueError:
+            return "Formato de data inválido.", 400
 
         # --- LÓGICA DE FOTO INTELIGENTE (CORREÇÃO) ---
         foto_final = ""
@@ -604,14 +1194,14 @@ def cadastrar_associado():
         conn.commit()
         return redirect(url_for("sucesso_associado"))
 
-    except Exception as e:
+    except Exception:
         if conn: conn.rollback()
-        app.logger.error(f"Erro cadastro associado: {e}")
-        return f"Erro: {e}", 500
+        raise
     finally:
         if conn: conn.close()
 
 @app.route("/buscar_associados", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_associados():
     # Coleta os parâmetros da URL
@@ -622,6 +1212,10 @@ def buscar_associados():
     
     # Novo: Filtro de UVR vindo da tela (apenas Admin usa isso)
     uvr_filtro_tela = request.args.get("uvr", "")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_filtro_tela)
+    if negado:
+        return negado
+    uvr_filtro_tela = uvr_autorizada or ""
 
     conn = None
     try:
@@ -690,18 +1284,24 @@ def buscar_associados():
         return jsonify(lista_associados)
 
     except Exception as e:
-        app.logger.error(f"Erro na busca: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar associados. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
         
 @app.route("/get_associado/<int:id>", methods=["GET"])
+@login_json_required
 @login_required
 def get_associado(id):
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
         
         # Busca todos os dados do associado pelo ID
         # Nota: Ajuste os nomes das colunas se seu banco estiver diferente
@@ -711,17 +1311,10 @@ def get_associado(id):
                    uf, cep, telefone, foto_base64
             FROM associados WHERE id = %s
         """
-        cur.execute(sql, (id,))
-        row = cur.fetchone()
+        row = _consulta_objeto_por_uvr(cur, sql, id, uvr)
         
         if not row:
             return jsonify({"error": "Associado não encontrado"}), 404
-
-        # Segurança: Se não for admin, verifica se a UVR bate
-        if current_user.uvr_acesso and current_user.role != 'admin':
-            # row[7] é a coluna UVR
-            if row[7] != current_user.uvr_acesso:
-                return jsonify({"error": "Acesso não autorizado para esta UVR"}), 403
 
         # Formatar datas para string (JSON não aceita objeto date direto)
         def format_date(d):
@@ -741,8 +1334,10 @@ def get_associado(id):
         return jsonify(associado)
 
     except Exception as e:
-        app.logger.error(f"Erro ao buscar ficha do associado: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar associado. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         if conn: conn.close()
         
@@ -754,6 +1349,13 @@ def editar_associado():
         dados = request.form.to_dict()
         id_associado = dados.get("id_associado")
         if not id_associado: return "ID não encontrado.", 400
+        negado = _autorizar_objeto_por_uvr(
+            "associados", id_associado, resposta_json=False
+        )
+        if negado:
+            return negado
+        if current_user.role != "admin":
+            dados["uvr"] = current_user.uvr_acesso
 
         # Tratamento básico de dados
         cpf_num = re.sub(r'[^0-9]', '', dados.get("cpf", ""))
@@ -807,22 +1409,30 @@ def editar_associado():
                 dados.get("bairro", ""), dados.get("cidade", ""), dados.get("uf"),
                 dados["telefone"], foto_final, int(id_associado)
             ))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             conn.commit()
             msg = "Alterações salvas com sucesso!"
         else:
             # Para usuário comum, salva na solicitação
             import json
-            dados_json = dados.copy()
+            campos_permitidos = {
+                "nome", "cpf", "rg", "data_nascimento", "data_admissao",
+                "status", "uvr", "associacao", "cep", "logradouro",
+                "endereco_numero", "bairro", "cidade", "uf", "telefone",
+            }
+            dados_json = {campo: dados.get(campo, "") for campo in campos_permitidos}
             dados_json['foto_base64'] = foto_final # Garante que a foto vai no JSON
             # Converte datas para string para não quebrar o JSON
             if data_nasc: dados_json['data_nascimento'] = str(data_nasc)
             if data_adm: dados_json['data_admissao'] = str(data_adm)
 
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante)
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('associados', int(id_associado), 'EDICAO', json.dumps(dados_json), current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur, "associados", id_associado, "EDICAO", json.dumps(dados_json)
+            ):
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             conn.commit()
             msg = "Solicitação enviada para aprovação."
 
@@ -830,12 +1440,15 @@ def editar_associado():
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro edição: {e}")
-        return f"Erro: {e}", 500
+        app.logger.error(
+            "Falha ao editar associado. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível processar a edição.", 500
     finally:
         if conn: conn.close()
 
 @app.route("/cadastrar_produto_servico", methods=["POST"])
+@admin_required
 def cadastrar_produto_servico():
     conn = None
     try:
@@ -872,30 +1485,38 @@ def cadastrar_produto_servico():
             data_hora_cadastro
         ))
         conn.commit()
+        app.logger.info(
+            "Produto/servico cadastrado. usuario_id=%s", current_user.id
+        )
         return redirect(url_for("sucesso_produto_servico"))
     except psycopg2.IntegrityError as e:
         if conn: conn.rollback()
         if 'produtos_servicos_item_key' in str(e) or 'violates unique constraint "produtos_servicos_item_key"' in str(e).lower():
              return "Este item (Produto/Serviço) já está cadastrado.", 400
-        app.logger.error(f"Erro de integridade em /cadastrar_produto_servico: {e}")
-        return f"Erro de integridade no banco de dados: {e}", 400
-    except ValueError as e:
-        app.logger.error(f"Erro de valor em /cadastrar_produto_servico: {e}")
-        return f"Formato de dados inválido: {e}", 400
+        app.logger.error("Falha de integridade ao cadastrar produto/servico.")
+        return "Não foi possível cadastrar o produto/serviço.", 400
+    except ValueError:
+        return "Formato de dados inválido.", 400
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro inesperado em /cadastrar_produto_servico: {e}")
-        return f"Erro ao cadastrar produto/serviço: {e}", 500
+        app.logger.error(
+            "Falha ao cadastrar produto/servico. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível cadastrar o produto/serviço.", 500
     finally:
         if conn and not conn.closed:
             conn.close()
 
 @app.route("/cadastrar_conta_corrente", methods=["POST"])
+@login_required
 def cadastrar_conta_corrente():
     conn = None
     try:
-        dados = request.form
-        app.logger.info(f"Dados recebidos para conta corrente: {dados}")
+        dados = request.form.to_dict()
+        negado = _aplicar_escopo_uvr(dados, "uvr_conta", resposta_json=False)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de cadastro de conta corrente.")
 
         required_fields = {
             "uvr_conta": "UVR", "banco_conta": "Banco",
@@ -904,14 +1525,14 @@ def cadastrar_conta_corrente():
         }
         for field, msg in required_fields.items():
             if not dados.get(field):
-                app.logger.error(f"Campo obrigatório ausente: {msg}")
+                app.logger.error("Campo obrigatório ausente no cadastro de conta.")
                 return f"{msg} é obrigatório(a).", 400
 
         banco_selecionado = dados["banco_conta"]
         try:
             banco_codigo, banco_nome = banco_selecionado.split("|", 1)
         except ValueError:
-            app.logger.error(f"Valor inválido para o campo Banco: {banco_selecionado}")
+            app.logger.error("Valor inválido no cadastro de conta.")
             return "Valor inválido para o campo Banco. Formato esperado: 'codigo|nome'.", 400
 
         agencia = re.sub(r'[^0-9]', '', dados["agencia_conta"])
@@ -936,26 +1557,29 @@ def cadastrar_conta_corrente():
             dados.get("descricao_apelido_conta", "").strip(), data_hora
         ))
         conn.commit()
+        app.logger.info("Conta corrente cadastrada. usuario_id=%s", current_user.id)
         return redirect(url_for("sucesso_conta_corrente"))
     except psycopg2.IntegrityError as e:
         if conn: conn.rollback()
         if 'contas_correntes_uvr_banco_codigo_agencia_conta_corrente_key' in str(e) or \
            'contas_correntes_banco_codigo_agencia_conta_corrente_key' in str(e): 
-            app.logger.error(f"Tentativa de cadastrar conta duplicada: {e}")
             return "Esta conta corrente (UVR, Banco, Agência, Conta) já está cadastrada.", 400
-        app.logger.error(f"Erro de integridade em /cadastrar_conta_corrente: {e}")
-        return f"Erro de integridade no banco de dados: {e}", 400
-    except ValueError as e: 
-        app.logger.error(f"Erro de valor em /cadastrar_conta_corrente: {e}")
-        return f"Formato de dados inválido: {e}", 400
+        app.logger.error("Falha de integridade ao cadastrar conta corrente.")
+        return "Não foi possível cadastrar a conta corrente.", 400
+    except ValueError:
+        return "Formato de dados inválido.", 400
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro inesperado em /cadastrar_conta_corrente: {e}")
-        return f"Erro ao cadastrar conta corrente: {e}", 500
+        app.logger.error(
+            "Falha ao cadastrar conta corrente. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível cadastrar a conta corrente.", 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_produtos_servicos", methods=["GET"])
+@login_json_required
+@login_required
 def get_produtos_servicos():
     conn = None
     try:
@@ -968,17 +1592,23 @@ def get_produtos_servicos():
         ]
         return jsonify(produtos_servicos)
     except Exception as e:
-        app.logger.error(f"Erro em /get_produtos_servicos: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar produtos e serviços. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed:
             conn.close()
 
 @app.route("/get_cadastros_ativos", methods=["GET"])
+@login_json_required
+@login_required
 def get_cadastros_ativos():
     conn = None
     try:
-        uvr_filter = request.args.get("uvr")
+        uvr_filter, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+        if negado:
+            return negado
         tipo_cadastro_filter = request.args.get("tipo_cadastro_filtro") 
 
         conn = conectar_banco()
@@ -1005,14 +1635,20 @@ def get_cadastros_ativos():
         cadastros = [{"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2]} for row in cur.fetchall()]
         return jsonify(cadastros)
     except Exception as e:
-        app.logger.error(f"Erro em /get_cadastros_ativos: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar cadastros ativos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_resumo_fluxo_caixa")
+@login_json_required
+@login_required
 def get_resumo_fluxo_caixa():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     data_inicial = request.args.get("data_inicial")
     data_final = request.args.get("data_final")
 
@@ -1056,13 +1692,19 @@ def get_resumo_fluxo_caixa():
         })
 
     except Exception as e:
-        app.logger.error(f"Erro em /get_resumo_fluxo_caixa: {e}")
+        app.logger.error(
+            "Falha ao consultar resumo do fluxo. erro_tipo=%s", type(e).__name__
+        )
         if conn: conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
 
 @app.route("/get_contas_correntes") 
+@login_json_required
+@login_required
 def get_contas_correntes_fluxo_caixa():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     conn = None
     try:
         conn = conectar_banco()
@@ -1088,16 +1730,22 @@ def get_contas_correntes_fluxo_caixa():
                   } for row in cur.fetchall()]
         return jsonify(contas)
     except Exception as e:
-        app.logger.error(f"Erro em /get_contas_correntes (fluxo de caixa/extrato): {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar contas correntes. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_associados_ativos", methods=["GET"])
+@login_json_required
+@login_required
 def get_associados_ativos():
     conn = None
     try:
-        uvr_filter = request.args.get("uvr")
+        uvr_filter, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+        if negado:
+            return negado
         if not uvr_filter:
             return jsonify({"error": "Parâmetro UVR é obrigatório"}), 400
 
@@ -1110,12 +1758,15 @@ def get_associados_ativos():
         associados = [{"id": row[0], "nome": row[1]} for row in cur.fetchall()]
         return jsonify(associados)
     except Exception as e:
-        app.logger.error(f"Erro em /get_associados_ativos: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar associados ativos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_distinct_grupos")
+@login_json_required
 @login_required
 def get_distinct_grupos():
     """Retorna os Grupos (Atividades) baseados no Tipo (Receita/Despesa)."""
@@ -1146,6 +1797,7 @@ def get_distinct_grupos():
     return jsonify(grupos_filtrados)
 
 @app.route("/get_distinct_subgrupos")
+@login_json_required
 @login_required
 def get_distinct_subgrupos():
     """Retorna os Subgrupos vinculados a um Grupo Pai (tabela 'subgrupos')."""
@@ -1161,11 +1813,15 @@ def get_distinct_subgrupos():
         res = [r[0] for r in cur.fetchall()]
         return jsonify(res)
     except Exception as e:
-        return jsonify([])
+        app.logger.error(
+            "Falha ao consultar subgrupos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         conn.close()
 
 @app.route("/get_items_for_filters")
+@login_json_required
 @login_required
 def get_items_for_filters():
     """Retorna itens filtrados por Grupo e Subgrupo."""
@@ -1193,16 +1849,23 @@ def get_items_for_filters():
         res = [r[0] for r in cur.fetchall()]
         return jsonify(res)
     except Exception as e:
-        return jsonify([])
+        app.logger.error(
+            "Falha ao consultar itens. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         conn.close()
 
 @app.route("/registrar_transacao_financeira", methods=["POST"])
+@login_required
 def registrar_transacao_financeira():
     conn = None
     try:
-        dados = request.form
-        app.logger.info(f"Dados para registrar transação: {dados}")
+        dados = request.form.to_dict()
+        negado = _aplicar_escopo_uvr(dados, "uvr_transacao", resposta_json=False)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de registro de transacao financeira.")
         required_fields = { 
             "uvr_transacao": "UVR", "data_documento_transacao": "Data do Documento", 
             "tipo_transacao": "Tipo (Receita/Despesa)",
@@ -1245,6 +1908,17 @@ def registrar_transacao_financeira():
         if not nome_final_origem:
              return "Nome do Fornecedor/Prestador/Cliente/Associado é obrigatório.", 400
 
+        id_escopo_origem = None
+        tabela_origem = None
+        if id_origem_selecionado:
+            tabela_origem = "associados" if tipo_atividade == "Rateio dos Associados" else "cadastros"
+            id_escopo_origem = int(id_origem_selecionado)
+            negado = _autorizar_objetos_da_uvr(
+                [(tabela_origem, id_origem_selecionado)], resposta_json=False
+            )
+            if negado:
+                return negado
+
         descricoes_list = request.form.getlist("produto_servico_descricao[]")
         unidades_list = request.form.getlist("produto_servico_unidade[]")
         quantidades_str_list = request.form.getlist("produto_servico_quantidade[]")
@@ -1285,8 +1959,8 @@ def registrar_transacao_financeira():
         try:
             data_documento = datetime.strptime(dados["data_documento_transacao"], '%Y-%m-%d').date()
             data_hora_registro = datetime.strptime(dados["data_hora_cadastro_transacao"], '%d/%m/%Y %H:%M:%S')
-        except ValueError as e:
-            return f"Formato de data inválido: {e}", 400
+        except ValueError:
+            return "Formato de data inválido.", 400
 
         conn = conectar_banco()
         cur = conn.cursor()
@@ -1295,15 +1969,44 @@ def registrar_transacao_financeira():
             (uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
              tipo_transacao, tipo_atividade, valor_total_documento, data_hora_registro, 
              status_pagamento)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            WHERE (
+                %s IS NULL
+                OR (
+                    %s = 'associados'
+                    AND EXISTS (
+                        SELECT 1 FROM associados a
+                        WHERE a.id = %s AND a.uvr = %s
+                    )
+                )
+                OR (
+                    %s = 'cadastros'
+                    AND EXISTS (
+                        SELECT 1 FROM cadastros c
+                        WHERE c.id = %s AND c.uvr = %s
+                    )
+                )
+            )
+            RETURNING id
         """, (
             dados["uvr_transacao"], dados.get("associacao_transacao",""),
             id_final_origem_fk, nome_final_origem,
             dados.get("numero_documento_transacao", ""), data_documento,
             dados["tipo_transacao"], dados["tipo_atividade_transacao"],
-            valor_total_documento_calculado, data_hora_registro, 'Aberto' 
+            valor_total_documento_calculado, data_hora_registro, 'Aberto',
+            id_escopo_origem,
+            tabela_origem,
+            id_escopo_origem,
+            dados["uvr_transacao"],
+            tabela_origem,
+            id_escopo_origem,
+            dados["uvr_transacao"],
         ))
-        id_transacao_criada = cur.fetchone()[0]
+        transacao_criada = cur.fetchone()
+        if not transacao_criada:
+            conn.rollback()
+            return _resposta_acesso_negado_html()
+        id_transacao_criada = transacao_criada[0]
 
         for item_data in itens_para_db:
             cur.execute("""
@@ -1315,23 +2018,28 @@ def registrar_transacao_financeira():
                 item_data['quantidade'], item_data['valor_unitario'], item_data['valor_total_item']
             ))
         conn.commit()
+        app.logger.info(
+            "Transacao financeira registrada. usuario_id=%s", current_user.id
+        )
         return redirect(url_for("sucesso_transacao"))
     except psycopg2.Error as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro de DB em /registrar_transacao_financeira: {e} - {getattr(e, 'diag', '')}")
-        return f"Erro no banco de dados: {e}", 500
-    except ValueError as e: 
+        app.logger.error(
+            "Falha de banco ao registrar transacao. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível registrar a transação.", 500
+    except ValueError:
         if conn: conn.rollback()
-        app.logger.error(f"Erro de valor em /registrar_transacao_financeira: {e}")
-        return f"Erro de formato de dados: {e}", 400
-    except InvalidOperation as e: 
+        return "Formato de dados inválido.", 400
+    except InvalidOperation:
         if conn: conn.rollback()
-        app.logger.error(f"Erro de operação Decimal em /registrar_transacao_financeira: {e}")
-        return f"Erro de formato numérico: {e}", 400
+        return "Formato numérico inválido.", 400
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro inesperado em /registrar_transacao_financeira: {e}", exc_info=True)
-        return f"Erro ao registrar transação: {e}", 500
+        app.logger.error(
+            "Falha ao registrar transacao. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível registrar a transação.", 500
     finally:
         if conn: conn.close()
 
@@ -1343,6 +2051,11 @@ def editar_transacao():
         dados = request.form
         id_transacao = dados.get("id_transacao")
         if not id_transacao: return "ID da transação não encontrado.", 400
+        negado = _autorizar_objeto_por_uvr(
+            "transacoes_financeiras", id_transacao, resposta_json=False
+        )
+        if negado:
+            return negado
 
         # 1. Parse dos Itens (Mesma lógica do cadastro)
         descricoes = request.form.getlist("produto_servico_descricao[]")
@@ -1368,7 +2081,11 @@ def editar_transacao():
 
         # 2. Dados do Cabeçalho
         cabecalho = {
-            "uvr": dados["uvr_transacao"],
+            "uvr": (
+                dados["uvr_transacao"]
+                if current_user.role == "admin"
+                else current_user.uvr_acesso
+            ),
             "associacao": dados.get("associacao_transacao",""),
             "data_documento": dados["data_documento_transacao"],
             "tipo_transacao": dados["tipo_transacao"],
@@ -1378,14 +2095,37 @@ def editar_transacao():
             "nome_origem": dados.get("nome_fornecedor_prestador_transacao"),
             "valor_total": float(valor_total_novo)
         }
+        if (
+            current_user.role != "admin"
+            and cabecalho["id_origem"]
+            and str(cabecalho["id_origem"]).isdigit()
+        ):
+            negado = _autorizar_objeto_por_uvr(
+                "cadastros", cabecalho["id_origem"], resposta_json=False
+            )
+            if negado:
+                return negado
 
         conn = conectar_banco()
         cur = conn.cursor()
 
         # 3. TRAVA DE SEGURANÇA (Rigidez Contábil)
         # Verifica se já existe qualquer pagamento/recebimento vinculado
-        cur.execute("SELECT valor_pago_recebido, status_pagamento FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
-        row_pag = cur.fetchone()
+        uvr_objeto = (
+            None if current_user.role == "admin" else current_user.uvr_acesso
+        )
+        row_pag = _consulta_objeto_por_uvr(
+            cur,
+            """
+            SELECT valor_pago_recebido, status_pagamento
+            FROM transacoes_financeiras
+            WHERE id = %s
+            """,
+            id_transacao,
+            uvr_objeto,
+        )
+        if not row_pag:
+            return "Recurso não encontrado.", 404
         
         valor_ja_pago = row_pag[0] if row_pag and row_pag[0] else 0
         status_atual = row_pag[1] if row_pag else "Aberto"
@@ -1415,6 +2155,9 @@ def editar_transacao():
                 id_origem_sql, cabecalho['nome_origem'],
                 valor_total_novo, id_transacao
             ))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return "Recurso não encontrado.", 404
 
             # Atualiza Itens (Estratégia: Apaga todos antigos e recria os novos)
             cur.execute("DELETE FROM itens_transacao WHERE id_transacao = %s", (id_transacao,))
@@ -1432,27 +2175,42 @@ def editar_transacao():
             cabecalho['itens'] = itens_processados
             cabecalho['descricao_visual'] = f"Edição NF {cabecalho['numero_documento']} - {cabecalho['nome_origem']}"
             
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('transacoes_financeiras', id_transacao, 'EDICAO', json.dumps(cabecalho), current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur,
+                "transacoes_financeiras",
+                id_transacao,
+                "EDICAO",
+                json.dumps(cabecalho),
+                cadastro_relacionado_id=(
+                    int(cabecalho["id_origem"])
+                    if cabecalho["id_origem"]
+                    and str(cabecalho["id_origem"]).isdigit()
+                    else None
+                ),
+            ):
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             
             conn.commit()
             return pagina_sucesso_base("Solicitação Enviada", "A edição da transação foi enviada para aprovação.")
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro edição transacao: {e}")
-        return f"Erro: {e}", 500
+        app.logger.error(
+            "Falha ao editar transação. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível processar a edição.", 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_clientes_fornecedores_com_pendencias", methods=["GET"])
+@login_json_required
+@login_required
 def get_clientes_fornecedores_com_pendencias():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     tipo_movimentacao = request.args.get("tipo_movimentacao")
-    app.logger.info(f"FluxoCaixa: Buscando pendências para UVR: {uvr}, Movimentação: {tipo_movimentacao}")
 
     if not uvr or not tipo_movimentacao:
         return jsonify({"error": "Parâmetros UVR e Tipo de Movimentação são obrigatórios"}), 400
@@ -1468,27 +2226,30 @@ def get_clientes_fornecedores_com_pendencias():
                 SELECT DISTINCT c.id::TEXT, c.razao_social, c.tipo_cadastro, FALSE as is_associado_rateio
                 FROM cadastros c
                 JOIN transacoes_financeiras tf ON c.id = tf.id_cadastro_origem
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Receita' AND c.tipo_cadastro = 'Cliente' AND tf.status_pagamento <> 'Liquidado'
+                WHERE tf.uvr = %s AND c.uvr = %s
+                  AND tf.tipo_transacao = 'Receita' AND c.tipo_cadastro = 'Cliente'
+                  AND tf.status_pagamento <> 'Liquidado'
                 ORDER BY c.razao_social
             """
-            cur.execute(query_clientes, (uvr,))
+            cur.execute(query_clientes, (uvr, uvr))
             for row in cur.fetchall():
                 results.append({"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
-            app.logger.info(f"FluxoCaixa: {len(results)} clientes encontrados para recebimento.")
 
         elif tipo_movimentacao == "Pagamento":
             query_fornecedores = """
                 SELECT DISTINCT c.id::TEXT, c.razao_social, c.tipo_cadastro, FALSE as is_associado_rateio
                 FROM cadastros c
                 JOIN transacoes_financeiras tf ON c.id = tf.id_cadastro_origem
-                WHERE tf.uvr = %s AND tf.tipo_transacao = 'Despesa' AND c.tipo_cadastro = 'Fornecedor/Prestador' AND tf.status_pagamento <> 'Liquidado'
+                WHERE tf.uvr = %s AND c.uvr = %s
+                  AND tf.tipo_transacao = 'Despesa'
+                  AND c.tipo_cadastro = 'Fornecedor/Prestador'
+                  AND tf.status_pagamento <> 'Liquidado'
             """
-            cur.execute(query_fornecedores, (uvr,))
+            cur.execute(query_fornecedores, (uvr, uvr))
             fornecedores_count = 0
             for row in cur.fetchall():
                 results.append({"id": row[0], "razao_social": row[1], "tipo_cadastro": row[2], "is_associado_rateio": row[3]})
                 fornecedores_count +=1
-            app.logger.info(f"FluxoCaixa: {fornecedores_count} fornecedores encontrados para pagamento.")
 
             query_associados_rateio = """
                 SELECT DISTINCT tf.nome_cadastro_origem AS id, tf.nome_cadastro_origem AS razao_social,
@@ -1507,22 +2268,26 @@ def get_clientes_fornecedores_com_pendencias():
                     nomes_rateio_adicionados.add(nome_rateio)
                     associados_count +=1
             results.sort(key=lambda x: x['razao_social'])
-            app.logger.info(f"FluxoCaixa: {associados_count} associados de rateio encontrados para pagamento.")
         else:
             return jsonify({"error": "Tipo de Movimentação inválido"}), 400
         
-        app.logger.info(f"FluxoCaixa: Total de {len(results)} entidades retornadas para o dropdown.")
         return jsonify(results)
         
     except Exception as e:
-        app.logger.error(f"Erro em /get_clientes_fornecedores_com_pendencias: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar pendências financeiras. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_notas_em_aberto")
+@login_json_required
+@login_required
 def get_notas_em_aberto():
-    uvr = request.args.get("uvr")
+    uvr, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     id_cf_str = request.args.get("id_cadastro_cf") 
     tipo_movimentacao = request.args.get("tipo_movimentacao") 
     is_associado_rateio_str = request.args.get("is_associado_rateio", "false")
@@ -1531,8 +2296,6 @@ def get_notas_em_aberto():
     # Novos parâmetros de data
     data_inicial = request.args.get("data_inicial")
     data_final = request.args.get("data_final")
-
-    app.logger.info(f"FluxoCaixa: Buscando notas UVR: {uvr}, ID: {id_cf_str}, Datas: {data_inicial} a {data_final}")
 
     if not all([uvr, id_cf_str, tipo_movimentacao, data_inicial, data_final]):
         return jsonify({"error": "Parâmetros UVR, ID, Movimentação e Datas são obrigatórios"}), 400
@@ -1589,17 +2352,67 @@ def get_notas_em_aberto():
         return jsonify(documentos)
         
     except Exception as e:
-        app.logger.error(f"Erro em /get_notas_em_aberto: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar notas em aberto. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/registrar_fluxo_caixa", methods=["POST"])
+@login_json_required
+@login_required
 def registrar_fluxo_caixa():
     conn = None
     try:
-        dados = request.json
-        app.logger.info(f"Registrando Fluxo de Caixa com dados JSON: {dados}")
+        dados, erro_json = _obter_json_objeto(
+            {
+                "uvr", "associacao", "tipo_movimentacao",
+                "id_cadastro_cf_str", "is_associado_rateio",
+                "nome_cadastro_cf_display", "id_conta_corrente",
+                "numero_documento_bancario", "data_efetiva", "valor_efetivo",
+                "data_hora_registro_fluxo", "observacoes",
+                "ids_nfs_selecionadas",
+            },
+        )
+        if erro_json:
+            return erro_json
+        if (
+            "ids_nfs_selecionadas" in dados
+            and not isinstance(dados.get("ids_nfs_selecionadas"), list)
+        ):
+            return jsonify({"error": "A lista de notas fiscais é inválida."}), 400
+        if any(
+            not str(identificador).isdigit()
+            for identificador in dados.get("ids_nfs_selecionadas", [])
+        ):
+            return jsonify({"error": "A lista de notas fiscais é inválida."}), 400
+        if not isinstance(dados.get("is_associado_rateio", False), bool):
+            return jsonify({"error": "O indicador de rateio é inválido."}), 400
+        negado = _aplicar_escopo_uvr(dados, "uvr", resposta_json=True)
+        if negado:
+            return negado
+
+        verificacoes = []
+        if dados.get("id_conta_corrente") is not None:
+            verificacoes.append(("contas_correntes", dados.get("id_conta_corrente")))
+        verificacoes.extend(
+            ("transacoes_financeiras", identificador)
+            for identificador in dados.get("ids_nfs_selecionadas", [])
+        )
+        if dados.get("id_cadastro_cf_str") and not dados.get("is_associado_rateio", False):
+            verificacoes.append(("cadastros", dados.get("id_cadastro_cf_str")))
+        negado = _autorizar_objetos_da_uvr(verificacoes)
+        if negado:
+            return negado
+        campos_obrigatorios = (
+            "uvr", "tipo_movimentacao", "id_conta_corrente",
+            "data_efetiva", "valor_efetivo", "ids_nfs_selecionadas",
+        )
+        if any(dados.get(campo) in (None, "", []) for campo in campos_obrigatorios):
+            return jsonify({"error": "Campos obrigatórios não informados."}), 400
+
+        app.logger.info("Solicitacao autorizada de registro de fluxo de caixa.")
         conn = conectar_banco()
         cur = conn.cursor()
 
@@ -1608,7 +2421,7 @@ def registrar_fluxo_caixa():
         tipo_mov = dados.get("tipo_movimentacao")
         
         id_cadastro_cf_str_from_js = dados.get("id_cadastro_cf_str") 
-        is_associado_rateio_from_js = dados.get("is_associado_rateio", False)
+        is_associado_rateio_from_js = dados.get("is_associado_rateio") is True
         nome_cf_display_from_js = dados.get("nome_cadastro_cf_display")
 
         id_cadastro_cf_db = None
@@ -1621,7 +2434,7 @@ def registrar_fluxo_caixa():
                 try:
                     id_cadastro_cf_db = int(id_cadastro_cf_str_from_js)
                 except ValueError:
-                    app.logger.error(f"FluxoCaixa: ID '{id_cadastro_cf_str_from_js}' não numérico para não-rateio no registro.")
+                    app.logger.error("Identificador inválido no registro de fluxo de caixa.")
                     return jsonify({"error": "ID do Cliente/Fornecedor inválido para registro."}), 400
             else: 
                  return jsonify({"error": "ID do Cliente/Fornecedor ausente para não-rateio."}), 400
@@ -1633,9 +2446,8 @@ def registrar_fluxo_caixa():
             data_efetiva = datetime.strptime(dados.get("data_efetiva"), '%Y-%m-%d').date()
             valor_efetivo = Decimal(str(dados.get("valor_efetivo")).replace(",", "."))
             data_registro = datetime.strptime(dados.get("data_hora_registro_fluxo"), '%d/%m/%Y %H:%M:%S')
-        except (ValueError, TypeError, InvalidOperation) as e:
-            app.logger.error(f"Erro de conversão de data/valor no fluxo de caixa: {e}")
-            return jsonify({"error": f"Formato de data ou valor inválido: {e}"}), 400
+        except (ValueError, TypeError, InvalidOperation):
+            return jsonify({"error": "Formato de data ou valor inválido."}), 400
         
         total_nfs_selecionadas_valor = Decimal('0.00')
         notas_ids_selecionadas = dados.get("ids_nfs_selecionadas", [])
@@ -1644,10 +2456,16 @@ def registrar_fluxo_caixa():
              return jsonify({"error": "Nenhuma nota fiscal (transação) foi selecionada para este lançamento."}), 400
 
         for id_nf_str in notas_ids_selecionadas:
-            cur.execute("SELECT (valor_total_documento - valor_pago_recebido) as valor_pendente FROM transacoes_financeiras WHERE id = %s", (int(id_nf_str),))
+            cur.execute("""
+                SELECT (valor_total_documento - valor_pago_recebido) AS valor_pendente
+                FROM transacoes_financeiras
+                WHERE id = %s AND uvr = %s
+            """, (int(id_nf_str), uvr))
             nf_pendente_row = cur.fetchone()
-            if nf_pendente_row and nf_pendente_row[0] is not None:
-                 total_nfs_selecionadas_valor += Decimal(nf_pendente_row[0])
+            if not nf_pendente_row or nf_pendente_row[0] is None:
+                conn.rollback()
+                return _resposta_acesso_negado_json()
+            total_nfs_selecionadas_valor += Decimal(nf_pendente_row[0])
         
         saldo_operacao_calculado = total_nfs_selecionadas_valor - valor_efetivo
         observacoes = dados.get("observacoes")
@@ -1657,13 +2475,30 @@ def registrar_fluxo_caixa():
             (uvr, associacao, tipo_movimentacao, id_cadastro_cf, nome_cadastro_cf,
              id_conta_corrente, numero_documento_bancario, data_efetiva, valor_efetivo,
              saldo_operacao_calculado, data_hora_registro_fluxo, observacoes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+            SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+            FROM contas_correntes cc
+            WHERE cc.id = %s AND cc.uvr = %s
+              AND (
+                  %s = TRUE
+                  OR EXISTS (
+                      SELECT 1 FROM cadastros c
+                      WHERE c.id = %s AND c.uvr = %s
+                  )
+              )
+            RETURNING id
         """, (
             uvr, associacao, tipo_mov, id_cadastro_cf_db, nome_cadastro_cf_db, 
             id_conta, numero_doc_bancario, data_efetiva, valor_efetivo,
-            saldo_operacao_calculado, data_registro, observacoes
+            saldo_operacao_calculado, data_registro, observacoes,
+            id_conta, uvr,
+            is_associado_rateio_from_js,
+            id_cadastro_cf_db, uvr,
         ))
-        id_fluxo = cur.fetchone()[0]
+        fluxo_criado = cur.fetchone()
+        if not fluxo_criado:
+            conn.rollback()
+            return _resposta_acesso_negado_json()
+        id_fluxo = fluxo_criado[0]
 
         valor_efetivo_restante_para_aplicar = valor_efetivo
         for id_nf_str in notas_ids_selecionadas:
@@ -1671,9 +2506,16 @@ def registrar_fluxo_caixa():
             if valor_efetivo_restante_para_aplicar <= Decimal('0'):
                 break 
 
-            cur.execute("SELECT valor_pago_recebido, valor_total_documento, (valor_total_documento - valor_pago_recebido) as valor_pendente FROM transacoes_financeiras WHERE id = %s", (id_transacao,))
+            cur.execute("""
+                SELECT valor_pago_recebido, valor_total_documento,
+                       (valor_total_documento - valor_pago_recebido) AS valor_pendente
+                FROM transacoes_financeiras
+                WHERE id = %s AND uvr = %s
+            """, (id_transacao, uvr))
             nf_data = cur.fetchone()
-            if not nf_data: continue
+            if not nf_data:
+                conn.rollback()
+                return _resposta_acesso_negado_json()
 
             atual_pago_na_nf, total_doc_da_nf, pendente_na_nf = Decimal(nf_data[0]), Decimal(nf_data[1]), Decimal(nf_data[2])
             valor_a_aplicar_nesta_nf = min(valor_efetivo_restante_para_aplicar, pendente_na_nf)
@@ -1682,8 +2524,13 @@ def registrar_fluxo_caixa():
                 cur.execute("""
                     INSERT INTO fluxo_caixa_transacoes_link
                     (id_fluxo_caixa, id_transacao_financeira, valor_aplicado_nesta_nf)
-                    VALUES (%s, %s, %s)
-                """, (id_fluxo, id_transacao, valor_a_aplicar_nesta_nf))
+                    SELECT %s, tf.id, %s
+                    FROM transacoes_financeiras tf
+                    WHERE tf.id = %s AND tf.uvr = %s
+                """, (id_fluxo, valor_a_aplicar_nesta_nf, id_transacao, uvr))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return _resposta_acesso_negado_json()
 
                 novo_valor_pago_total_na_nf = atual_pago_na_nf + valor_a_aplicar_nesta_nf
                 
@@ -1695,21 +2542,35 @@ def registrar_fluxo_caixa():
                 cur.execute("""
                     UPDATE transacoes_financeiras
                     SET valor_pago_recebido = %s, status_pagamento = %s
-                    WHERE id = %s
-                """, (novo_valor_pago_total_na_nf, status_final_nf, id_transacao))
+                    WHERE id = %s AND uvr = %s
+                """, (
+                    novo_valor_pago_total_na_nf,
+                    status_final_nf,
+                    id_transacao,
+                    uvr,
+                ))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return _resposta_acesso_negado_json()
                 
                 valor_efetivo_restante_para_aplicar -= valor_a_aplicar_nesta_nf
 
         conn.commit()
+        app.logger.info("Fluxo de caixa registrado. usuario_id=%s", current_user.id)
         return jsonify({"status": "sucesso", "message": "Fluxo de caixa registrado e transações atualizadas."})
     except psycopg2.Error as db_err:
         if conn: conn.rollback()
-        app.logger.error(f"Erro de banco de dados em /registrar_fluxo_caixa: {db_err}", exc_info=True)
-        return jsonify({"error": f"Erro no banco de dados: {db_err}"}), 500
+        app.logger.error(
+            "Falha de banco ao registrar fluxo. erro_tipo=%s",
+            type(db_err).__name__,
+        )
+        return jsonify({"error": "Não foi possível registrar o fluxo de caixa."}), 500
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro em /registrar_fluxo_caixa: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao registrar fluxo. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível registrar o fluxo de caixa."}), 500
     finally:
         if conn: conn.close()
 
@@ -1737,10 +2598,15 @@ def gerar_proximo_numero_denuncia(ano_atual, cur):
     return f"{prefixo}{proximo_num:04d}" # Formata com 4 dígitos, ex: 0001
 
 @app.route("/registrar_denuncia", methods=["POST"])
+@desativada_online
+@login_required
 def registrar_denuncia():
     conn = None
     try:
-        dados = request.form
+        dados = request.form.to_dict()
+        negado = _aplicar_escopo_uvr(dados, "uvr_denuncia", resposta_json=False)
+        if negado:
+            return negado
         required_fields = {
             "descricao_denuncia": "Descrição da Denúncia",
             "uvr_denuncia": "UVR",
@@ -1774,24 +2640,34 @@ def registrar_denuncia():
             dados.get("associacao_denuncia", "")
         ))
         conn.commit()
+        app.logger.info("Denuncia registrada. usuario_id=%s", current_user.id)
         return redirect(url_for("sucesso_denuncia"))
     except psycopg2.IntegrityError as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro de integridade ao registrar denúncia: {e}")
+        app.logger.error("Falha de integridade ao registrar denuncia.")
         return "Erro ao registrar denúncia: Número de denúncia já existe. Tente novamente.", 400
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro inesperado ao registrar denúncia: {e}", exc_info=True)
-        return f"Erro ao registrar denúncia: {e}", 500
+        app.logger.error(
+            "Falha ao registrar denuncia. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível registrar a denúncia.", 500
     finally:
         if conn: conn.close()
 
 
 # --- ROTAS PARA OS FILTROS DE RELATÓRIO FINANCEIRO ---
 @app.route("/get_relatorio_uvrs", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_uvrs():
     conn = None
     try:
+        if getattr(current_user, "role", None) != "admin":
+            uvr, negado = _escopo_uvr_consulta()
+            if negado:
+                return negado
+            return jsonify([uvr])
         conn = conectar_banco()
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT uvr FROM transacoes_financeiras")
@@ -1806,12 +2682,16 @@ def get_relatorio_uvrs():
         all_uvrs = sorted(list(uvrs_transacoes.union(uvrs_contas).union(uvrs_fluxo).union(uvrs_denuncias)))
         return jsonify(all_uvrs)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_uvrs: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar UVRs do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed: conn.close()
 
 @app.route("/get_relatorio_tipos_atividade_transacao", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_tipos_atividade_transacao():
     tipo_transacao = request.args.get("tipo_transacao") 
     conn = None
@@ -1828,12 +2708,16 @@ def get_relatorio_tipos_atividade_transacao():
         tipos_atividade = [row[0] for row in cur.fetchall()]
         return jsonify(tipos_atividade)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_tipos_atividade_transacao: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar atividades do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed: conn.close()
 
 @app.route("/get_relatorio_catalog_options", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_catalog_options():
     option_type = request.args.get("option_type") 
     tipo_transacao = request.args.get("tipo_transacao") 
@@ -1886,15 +2770,21 @@ def get_relatorio_catalog_options():
         options = [row[0] for row in cur.fetchall()]
         return jsonify(options)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_catalog_options ({option_type}): {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar catálogo do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn and not conn.closed: conn.close()
 
 @app.route("/get_relatorio_entidades_para_filtro", methods=["GET"])
+@login_json_required
+@login_required
 def get_relatorio_entidades_para_filtro():
     tipo_entidade = request.args.get("tipo_entidade")
-    uvr_param = request.args.get("uvr") 
+    uvr_param, negado = _escopo_uvr_consulta(request.args.get("uvr"))
+    if negado:
+        return negado
     tipo_transacao_param = request.args.get("tipo_transacao_rel")
 
     conn = None
@@ -1916,8 +2806,8 @@ def get_relatorio_entidades_para_filtro():
                 conditions.append("tf.tipo_transacao = 'Receita'")
             # Se tipo_transacao_param for "" (Todos), não adiciona filtro de tipo de transação específico para cliente.
             if uvr_param:
-                conditions.append("tf.uvr = %s")
-                params.append(uvr_param)
+                conditions.extend(("c.uvr = %s", "tf.uvr = %s"))
+                params.extend((uvr_param, uvr_param))
             
             if conditions:
                  query = f"{base_select} WHERE {' AND '.join(conditions)} ORDER BY nome"
@@ -1934,8 +2824,8 @@ def get_relatorio_entidades_para_filtro():
             if tipo_transacao_param == "Despesa":
                 conditions.append("tf.tipo_transacao = 'Despesa'")
             if uvr_param:
-                conditions.append("tf.uvr = %s")
-                params.append(uvr_param)
+                conditions.extend(("c.uvr = %s", "tf.uvr = %s"))
+                params.extend((uvr_param, uvr_param))
 
             if conditions:
                 query = f"{base_select} WHERE {' AND '.join(conditions)} ORDER BY nome"
@@ -1965,8 +2855,8 @@ def get_relatorio_entidades_para_filtro():
             # Se tipo_transacao_param for "" (Todos), ainda assim só queremos rateios (que são despesas).
             
             if uvr_param:
-                conditions.append("tf.uvr = %s")
-                params.append(uvr_param)
+                conditions.extend(("a.uvr = %s", "tf.uvr = %s"))
+                params.extend((uvr_param, uvr_param))
             
             if conditions:
                 query = f"{base_select} WHERE {' AND '.join(conditions)} ORDER BY a.nome"
@@ -1976,14 +2866,15 @@ def get_relatorio_entidades_para_filtro():
             return jsonify([])
 
         if query:
-            app.logger.debug(f"Query para entidades de relatório: {query} com params {params}")
             cur.execute(query, tuple(params))
             entidades = [{"id": row[0], "nome": row[1]} for row in cur.fetchall()]
         
         return jsonify(entidades)
     except Exception as e:
-        app.logger.error(f"Erro em /get_relatorio_entidades_para_filtro: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar entidades do relatório. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -2099,7 +2990,7 @@ def fetch_report_data(filters):
                     cur_nome_assoc.close()
                     
             except ValueError:
-                app.logger.warning(f"ID da entidade inválido: {id_entidade_str} para tipo {tipo_entidade}")
+                app.logger.warning("Identificador de entidade inválido no relatório.")
 
 
         if filters.get("tipo_transacao_rel"): 
@@ -2147,8 +3038,7 @@ def fetch_report_data(filters):
         
         base_query += " ORDER BY data_efetiva_pag_rec, tf.data_documento, tf.id, it.valor_total_item, it.id"
         
-        app.logger.debug(f"Query do Relatório Financeiro Atualizada: {base_query}")
-        app.logger.debug(f"Parâmetros do Relatório Financeiro: {params}")
+        app.logger.debug("Consulta parametrizada do relatório financeiro preparada.")
 
         cur.execute(base_query, tuple(params))
         columns = [desc[0] for desc in cur.description]
@@ -2164,27 +3054,45 @@ def fetch_report_data(filters):
                      row_dict[key] = value.strftime('%Y-%m-%dT%H:%M:%S')
         return report_data
     except Exception as e:
-        app.logger.error(f"Erro ao buscar dados do relatório financeiro: {e}", exc_info=True)
+        app.logger.error(
+            "Falha na consulta do relatorio. erro_tipo=%s", type(e).__name__
+        )
         raise 
     finally:
         if conn: conn.close()
 
 @app.route("/gerar_relatorio", methods=["POST"])
+@login_json_required
+@login_required
 def gerar_relatorio():
     try:
-        filters = request.json
-        app.logger.info(f"Filtros recebidos para relatório financeiro: {filters}")
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_RELATORIO)
+        if erro_json:
+            return erro_json
+        negado = _autorizar_relatorio_financeiro(filters)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de relatorio financeiro.")
         data = fetch_report_data(filters)
         return jsonify(data)
     except Exception as e:
-        app.logger.error(f"Erro em /gerar_relatorio: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao gerar relatorio. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível gerar o relatório."}), 500
 
 @app.route("/baixar_csv_relatorio", methods=["POST"])
+@login_json_required
+@login_required
 def baixar_csv_relatorio():
     try:
-        filters = request.json
-        app.logger.info(f"Filtros recebidos para CSV do relatório financeiro: {filters}")
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_RELATORIO)
+        if erro_json:
+            return erro_json
+        negado = _autorizar_relatorio_financeiro(filters)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de CSV do relatorio financeiro.")
         data = fetch_report_data(filters)
 
         if not data:
@@ -2216,18 +3124,24 @@ def baixar_csv_relatorio():
 
 
             csv_row = [
-                row_data_dict.get("uvr", ""), row_data_dict.get("associacao", ""),
-                row_data_dict.get("nome_cadastro_origem", ""), row_data_dict.get("numero_documento", ""),
-                data_doc_str, 
-                data_efetiva_str, 
-                row_data_dict.get("tipo_transacao", ""),
-                row_data_dict.get("tipo_atividade_transacao", ""), row_data_dict.get("item_descricao", ""),
-                row_data_dict.get("item_tipo_catalogo", ""), row_data_dict.get("item_tipo_atividade_catalogo", ""),
-                row_data_dict.get("item_grupo_catalogo", ""), row_data_dict.get("item_subgrupo_catalogo", ""),
-                row_data_dict.get("unidade", ""), str(row_data_dict.get("quantidade", "")).replace('.', ','),
+                _texto_csv_seguro(row_data_dict.get("uvr", "")),
+                _texto_csv_seguro(row_data_dict.get("associacao", "")),
+                _texto_csv_seguro(row_data_dict.get("nome_cadastro_origem", "")),
+                _texto_csv_seguro(row_data_dict.get("numero_documento", "")),
+                _texto_csv_seguro(data_doc_str),
+                _texto_csv_seguro(data_efetiva_str),
+                _texto_csv_seguro(row_data_dict.get("tipo_transacao", "")),
+                _texto_csv_seguro(row_data_dict.get("tipo_atividade_transacao", "")),
+                _texto_csv_seguro(row_data_dict.get("item_descricao", "")),
+                _texto_csv_seguro(row_data_dict.get("item_tipo_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("item_tipo_atividade_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("item_grupo_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("item_subgrupo_catalogo", "")),
+                _texto_csv_seguro(row_data_dict.get("unidade", "")),
+                str(row_data_dict.get("quantidade", "")).replace('.', ','),
                 str(row_data_dict.get("valor_unitario", "")).replace('.', ','), 
                 str(row_data_dict.get("valor_total_item", "")).replace('.', ','),
-                row_data_dict.get("status_pagamento", ""), 
+                _texto_csv_seguro(row_data_dict.get("status_pagamento", "")),
                 str(row_data_dict.get("valor_pago_neste_item", "")).replace('.', ',') 
             ]
             writer.writerow(csv_row)
@@ -2238,8 +3152,10 @@ def baixar_csv_relatorio():
             headers={"Content-Disposition": "attachment;filename=relatorio_financeiro.csv"}
         )
     except Exception as e:
-        app.logger.error(f"Erro em /baixar_csv_relatorio: {e}", exc_info=True)
-        return jsonify({"error": f"Erro ao gerar CSV: {str(e)}"}), 500
+        app.logger.error(
+            "Falha ao gerar CSV do relatorio. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível gerar o relatório."}), 500
 
 # --- FUNÇÕES AUXILIARES PARA PDF ---
 def _format_decimal(value_str):
@@ -2262,13 +3178,13 @@ def _create_pdf_header_footer(canvas, doc, title, subtitle=""):
     canvas.saveState()
     styles = getSampleStyleSheet()
     
-    header_text = title
+    header_text = _texto_pdf_seguro(title)
     p_header = Paragraph(header_text, styles['h1'])
     w, h = p_header.wrapOn(canvas, doc.width, doc.topMargin)
     p_header.drawOn(canvas, doc.leftMargin, doc.height + doc.topMargin - h + 0.2*inch)
 
     if subtitle:
-        p_subtitle = Paragraph(subtitle, styles['h3'])
+        p_subtitle = Paragraph(_texto_pdf_seguro(subtitle), styles['h3'])
         w_sub, h_sub = p_subtitle.wrapOn(canvas, doc.width, doc.topMargin)
         p_subtitle.drawOn(canvas, doc.leftMargin, doc.height + doc.topMargin - h - h_sub + 0.1*inch)
 
@@ -2279,10 +3195,17 @@ def _create_pdf_header_footer(canvas, doc, title, subtitle=""):
 
 # --- ROTAS PARA PDF ---
 @app.route("/baixar_pdf_relatorio_financeiro", methods=["POST"])
+@login_json_required
+@login_required
 def baixar_pdf_relatorio_financeiro():
     try:
-        filters = request.json
-        app.logger.info(f"Filtros recebidos para PDF do relatório financeiro: {filters}")
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_RELATORIO)
+        if erro_json:
+            return erro_json
+        negado = _autorizar_relatorio_financeiro(filters)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de PDF do relatorio financeiro.")
         data = fetch_report_data(filters)
 
         if not data:
@@ -2375,20 +3298,20 @@ def baixar_pdf_relatorio_financeiro():
             data_efet_fmt = datetime.strptime(data_efet_val, '%Y-%m-%d').strftime('%d/%m/%y') if data_efet_val else ""
 
             table_data.append([
-                Paragraph(data_doc_fmt, style_center),
-                Paragraph(data_efet_fmt, style_center),
-                Paragraph(row.get("uvr", ""), style_center),
-                Paragraph(row.get("nome_cadastro_origem", "")[:20], style_body), 
-                Paragraph(row.get("numero_documento", "")[:10], style_center),
-                Paragraph(row.get("tipo_transacao", "")[:3], style_center), 
-                Paragraph(row.get("tipo_atividade_transacao", "")[:15], style_body), 
-                Paragraph(row.get("item_descricao", "")[:25], style_body), 
-                Paragraph(row.get("item_grupo_catalogo", "")[:12], style_body), 
-                Paragraph(row.get("item_subgrupo_catalogo", "")[:12], style_body), 
+                Paragraph(_texto_pdf_seguro(data_doc_fmt), style_center),
+                Paragraph(_texto_pdf_seguro(data_efet_fmt), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("uvr", "")), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("nome_cadastro_origem", "")[:20]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("numero_documento", "")[:10]), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("tipo_transacao", "")[:3]), style_center),
+                Paragraph(_texto_pdf_seguro(row.get("tipo_atividade_transacao", "")[:15]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("item_descricao", "")[:25]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("item_grupo_catalogo", "")[:12]), style_body),
+                Paragraph(_texto_pdf_seguro(row.get("item_subgrupo_catalogo", "")[:12]), style_body),
                 Paragraph(_format_decimal_quantidade(row.get("quantidade","")), style_right),
                 Paragraph(_format_decimal(row.get("valor_unitario","")), style_right),
                 Paragraph(_format_decimal(row.get("valor_total_item","")), style_right),
-                Paragraph(row.get("status_pagamento","")[:10], style_center), 
+                Paragraph(_texto_pdf_seguro(row.get("status_pagamento","")[:10]), style_center),
                 Paragraph(_format_decimal(row.get("valor_pago_neste_item","")), style_right) 
             ])
 
@@ -2420,21 +3343,36 @@ def baixar_pdf_relatorio_financeiro():
                          onLaterPages=lambda c, d: _create_pdf_header_footer(c, d, title_pdf, subtitle_pdf))
         
         buffer.seek(0)
-        filename = f"relatorio_financeiro_{filters.get('uvr','todos')}_{filters.get('data_inicial','inicio')}_a_{filters.get('data_final','fim')}.pdf"
+        uvr_arquivo = _nome_arquivo_seguro(filters.get("uvr"), "todos")
+        inicio_arquivo = _nome_arquivo_seguro(filters.get("data_inicial"), "inicio")
+        fim_arquivo = _nome_arquivo_seguro(filters.get("data_final"), "fim")
+        filename = (
+            f"relatorio_financeiro_{uvr_arquivo}_"
+            f"{inicio_arquivo}_a_{fim_arquivo}.pdf"
+        )
         return Response(
             buffer, mimetype='application/pdf',
             headers={'Content-Disposition': f'attachment;filename={filename}'}
         )
     except Exception as e:
-        app.logger.error(f"Erro em /baixar_pdf_relatorio_financeiro: {e}", exc_info=True)
-        return jsonify({"error": f"Erro ao gerar PDF: {str(e)}"}), 500
+        app.logger.error(
+            "Falha ao gerar PDF do relatorio. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível gerar o relatório."}), 500
 
 
 @app.route("/baixar_pdf_extrato", methods=["POST"])
+@login_json_required
+@login_required
 def baixar_pdf_extrato():
     try:
-        filters = request.json
-        app.logger.info(f"Filtros recebidos para PDF do extrato: {filters}")
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_EXTRATO)
+        if erro_json:
+            return erro_json
+        negado = _autorizar_extrato_financeiro(filters)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de PDF do extrato bancario.")
         data = fetch_extrato_data(filters)
 
         if not data or "movimentacoes" not in data:
@@ -2470,8 +3408,8 @@ def baixar_pdf_extrato():
         table_data_extrato = [header_mov_pdf]
         for mov in data["movimentacoes"]:
             table_data_extrato.append([
-                Paragraph(mov.get("data", ""), style_body),
-                Paragraph(mov.get("historico", ""), style_body),
+                Paragraph(_texto_pdf_seguro(mov.get("data", "")), style_body),
+                Paragraph(_texto_pdf_seguro(mov.get("historico", "")), style_body),
                 Paragraph(_format_decimal(mov.get("entrada", "")), style_right),
                 Paragraph(_format_decimal(mov.get("saida", "")), style_right),
                 Paragraph(_format_decimal(mov.get("saldo_parcial", "")), style_right)
@@ -2500,16 +3438,23 @@ def baixar_pdf_extrato():
                          onLaterPages=lambda c, d: _create_pdf_header_footer(c, d, title_pdf, subtitle_pdf))
         
         buffer.seek(0)
-        filename = f"extrato_pdf_{conta_info.get('uvr','UVR')}_{conta_info.get('conta','CONTA').replace('/','-')}_{filters.get('data_inicial_extrato')}_a_{filters.get('data_final_extrato')}.pdf"
+        uvr_arquivo = _nome_arquivo_seguro(conta_info.get("uvr"), "UVR")
+        conta_arquivo = _nome_arquivo_seguro(conta_info.get("conta"), "CONTA")
+        filename = (
+            f"extrato_pdf_{uvr_arquivo}_{conta_arquivo}_"
+            f"{filters.get('data_inicial_extrato')}_a_{filters.get('data_final_extrato')}.pdf"
+        )
         return Response(
             buffer, mimetype='application/pdf',
             headers={'Content-Disposition': f'attachment;filename={filename}'}
         )
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
+    except ValueError:
+        return jsonify({"error": "Filtros inválidos para o extrato."}), 400
     except Exception as e:
-        app.logger.error(f"Erro em /baixar_pdf_extrato: {e}", exc_info=True)
-        return jsonify({"error": f"Erro ao gerar PDF do extrato: {str(e)}"}), 500
+        app.logger.error(
+            "Falha ao gerar PDF do extrato. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível gerar o extrato."}), 500
 
 
 # --- ROTAS E FUNÇÕES PARA EXTRATO BANCÁRIO (Função fetch_extrato_data ATUALIZADA) ---
@@ -2528,19 +3473,35 @@ def fetch_extrato_data(filters):
 
         data_inicial = datetime.strptime(data_inicial_str, '%Y-%m-%d').date()
         data_final = datetime.strptime(data_final_str, '%Y-%m-%d').date()
+        uvr_autorizada = filters.get("_uvr_autorizada")
+
+        cur.execute("""
+            SELECT uvr, associacao, banco_nome, agencia, conta_corrente, descricao_conta
+            FROM contas_correntes
+            WHERE id = %s AND (%s IS NULL OR uvr = %s)
+        """, (id_conta_corrente, uvr_autorizada, uvr_autorizada))
+        conta_info_row = cur.fetchone()
+        if not conta_info_row:
+            raise ValueError("Conta indisponivel para o escopo autorizado.")
 
         saldo_inicial = Decimal('0.00')
         cur.execute("""
-            SELECT COALESCE(SUM(CASE tipo_movimentacao WHEN 'Recebimento' THEN valor_efetivo ELSE -valor_efetivo END), 0)
-            FROM fluxo_caixa
-            WHERE id_conta_corrente = %s AND data_efetiva < %s
-        """, (id_conta_corrente, data_inicial))
+            SELECT COALESCE(SUM(
+                CASE fc.tipo_movimentacao
+                    WHEN 'Recebimento' THEN fc.valor_efetivo
+                    ELSE -fc.valor_efetivo
+                END
+            ), 0)
+            FROM fluxo_caixa fc
+            JOIN contas_correntes cc ON cc.id = fc.id_conta_corrente
+            WHERE fc.id_conta_corrente = %s
+              AND fc.data_efetiva < %s
+              AND (%s IS NULL OR cc.uvr = %s)
+        """, (id_conta_corrente, data_inicial, uvr_autorizada, uvr_autorizada))
         saldo_inicial_result = cur.fetchone()
         if saldo_inicial_result:
             saldo_inicial = saldo_inicial_result[0]
         
-        app.logger.info(f"Extrato - Saldo inicial calculado para conta {id_conta_corrente} antes de {data_inicial}: {saldo_inicial}")
-
         # --- QUERY ATUALIZADA COM ID ---
         cur.execute("""
             SELECT 
@@ -2553,12 +3514,21 @@ def fetch_extrato_data(filters):
                 fc.observacoes,
                 STRING_AGG(tf.numero_documento, ', ') AS nfs_vinculadas
             FROM fluxo_caixa fc
+            JOIN contas_correntes cc ON cc.id = fc.id_conta_corrente
             LEFT JOIN fluxo_caixa_transacoes_link fctl ON fc.id = fctl.id_fluxo_caixa
             LEFT JOIN transacoes_financeiras tf ON fctl.id_transacao_financeira = tf.id
-            WHERE fc.id_conta_corrente = %s AND fc.data_efetiva BETWEEN %s AND %s
+            WHERE fc.id_conta_corrente = %s
+              AND fc.data_efetiva BETWEEN %s AND %s
+              AND (%s IS NULL OR cc.uvr = %s)
             GROUP BY fc.id, fc.data_efetiva, fc.tipo_movimentacao, fc.valor_efetivo, fc.nome_cadastro_cf, fc.numero_documento_bancario, fc.observacoes
             ORDER BY fc.data_efetiva, fc.id
-        """, (id_conta_corrente, data_inicial, data_final))
+        """, (
+            id_conta_corrente,
+            data_inicial,
+            data_final,
+            uvr_autorizada,
+            uvr_autorizada,
+        ))
         
         movimentacoes = []
         saldo_acumulado_periodo = saldo_inicial
@@ -2597,8 +3567,6 @@ def fetch_extrato_data(filters):
                 "descricao_simples": f"{tipo_mov} - {nome_cf}"
             })
         
-        cur.execute("SELECT uvr, associacao, banco_nome, agencia, conta_corrente, descricao_conta FROM contas_correntes WHERE id = %s", (id_conta_corrente,))
-        conta_info_row = cur.fetchone()
         conta_info = {}
         if conta_info_row:
             conta_info = {
@@ -2617,33 +3585,50 @@ def fetch_extrato_data(filters):
             "saldo_final": str(saldo_acumulado_periodo) 
         }
 
-    except ValueError as ve: 
-        app.logger.error(f"Erro de valor ao buscar dados do extrato: {ve}", exc_info=True)
+    except ValueError:
         raise
     except Exception as e:
-        app.logger.error(f"Erro ao buscar dados do extrato: {e}", exc_info=True)
+        app.logger.error(
+            "Falha na consulta do extrato. erro_tipo=%s", type(e).__name__
+        )
         raise 
     finally:
         if conn: conn.close()
 
 @app.route("/gerar_extrato_bancario", methods=["POST"])
+@login_json_required
+@login_required
 def gerar_extrato_bancario_json():
     try:
-        filters = request.json
-        app.logger.info(f"Filtros recebidos para extrato bancário: {filters}")
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_EXTRATO)
+        if erro_json:
+            return erro_json
+        negado = _autorizar_extrato_financeiro(filters)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de extrato bancario.")
         data = fetch_extrato_data(filters) 
         return jsonify(data)
-    except ValueError as ve: 
-        return jsonify({"error": str(ve)}), 400
+    except ValueError:
+        return jsonify({"error": "Filtros inválidos para o extrato."}), 400
     except Exception as e:
-        app.logger.error(f"Erro em /gerar_extrato_bancario: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao gerar extrato. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível gerar o extrato."}), 500
 
 @app.route("/baixar_csv_extrato", methods=["POST"])
+@login_json_required
+@login_required
 def baixar_csv_extrato():
     try:
-        filters = request.json
-        app.logger.info(f"Filtros recebidos para CSV do extrato: {filters}")
+        filters, erro_json = _obter_json_objeto(JSON_CAMPOS_EXTRATO)
+        if erro_json:
+            return erro_json
+        negado = _autorizar_extrato_financeiro(filters)
+        if negado:
+            return negado
+        app.logger.info("Solicitacao autorizada de CSV do extrato bancario.")
         data = fetch_extrato_data(filters) 
 
         if not data or "movimentacoes" not in data:
@@ -2652,8 +3637,12 @@ def baixar_csv_extrato():
         output = io.StringIO()
         writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         
-        writer.writerow([f"Extrato Bancário - {data.get('conta_info',{}).get('display_name','N/A')}"])
-        writer.writerow([f"Período: {data.get('conta_info',{}).get('periodo','N/A')}"])
+        writer.writerow([_texto_csv_seguro(
+            f"Extrato Bancário - {data.get('conta_info',{}).get('display_name','N/A')}"
+        )])
+        writer.writerow([_texto_csv_seguro(
+            f"Período: {data.get('conta_info',{}).get('periodo','N/A')}"
+        )])
         writer.writerow([]) 
         writer.writerow(["Saldo Inicial:", str(data.get("saldo_inicial","0.00")).replace('.',',')])
         writer.writerow([]) 
@@ -2663,8 +3652,8 @@ def baixar_csv_extrato():
         
         for mov in data["movimentacoes"]:
             csv_row = [
-                mov.get("data", ""),
-                mov.get("historico", ""),
+                _texto_csv_seguro(mov.get("data", "")),
+                _texto_csv_seguro(mov.get("historico", "")),
                 str(mov.get("entrada", "")).replace('.', ','),
                 str(mov.get("saida", "")).replace('.', ','),
                 str(mov.get("saldo_parcial", "")).replace('.', ',')
@@ -2675,20 +3664,30 @@ def baixar_csv_extrato():
         writer.writerow(["Saldo Final:", str(data.get("saldo_final","0.00")).replace('.',',')])
         
         output.seek(0)
-        filename = f"extrato_{data.get('conta_info',{}).get('uvr','UVR')}_{data.get('conta_info',{}).get('conta','CONTA').replace('/','-')}_{filters.get('data_inicial_extrato')}_a_{filters.get('data_final_extrato')}.csv"
+        conta_info = data.get("conta_info", {})
+        uvr_arquivo = _nome_arquivo_seguro(conta_info.get("uvr"), "UVR")
+        conta_arquivo = _nome_arquivo_seguro(conta_info.get("conta"), "CONTA")
+        filename = (
+            f"extrato_{uvr_arquivo}_{conta_arquivo}_"
+            f"{filters.get('data_inicial_extrato')}_a_{filters.get('data_final_extrato')}.csv"
+        )
         return Response(
             output,
             mimetype="text/csv; charset=utf-8",
             headers={"Content-Disposition": f"attachment;filename={filename}"}
         )
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
+    except ValueError:
+        return jsonify({"error": "Filtros inválidos para o extrato."}), 400
     except Exception as e:
-        app.logger.error(f"Erro em /baixar_csv_extrato: {e}", exc_info=True)
-        return jsonify({"error": f"Erro ao gerar CSV do extrato: {str(e)}"}), 500
+        app.logger.error(
+            "Falha ao gerar CSV do extrato. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível gerar o extrato."}), 500
 
 
 @app.route("/buscar_cnpj/<string:cnpj>", methods=["GET"])
+@login_json_required
+@login_required
 def buscar_cnpj(cnpj):
     try:
         cnpj_limpo = re.sub(r'[^0-9]', '', cnpj)
@@ -2716,11 +3715,14 @@ def buscar_cnpj(cnpj):
                 "uf": dados_brasilapi.get("uf", ""),
                 "telefone": telefone_principal,
             }
-            app.logger.info(f"CNPJ {cnpj_limpo} encontrado via BrasilAPI.")
+            app.logger.info("Consulta de CNPJ concluída pela primeira opção.")
             return jsonify(resultado)
         
         except requests.exceptions.RequestException as e_brasilapi:
-            app.logger.warning(f"Falha ao buscar CNPJ {cnpj_limpo} na BrasilAPI: {e_brasilapi}. Tentando OpenCNPJA...")
+            app.logger.warning(
+                "Primeira consulta de CNPJ falhou; alternativa acionada. erro_tipo=%s",
+                type(e_brasilapi).__name__,
+            )
             response_opencnpja = requests.get(f"https://open.cnpja.com/office/{cnpj_limpo}", timeout=5)
             response_opencnpja.raise_for_status()
             dados_opencnpja = response_opencnpja.json()
@@ -2735,25 +3737,29 @@ def buscar_cnpj(cnpj):
                 "uf": dados_opencnpja.get("address", {}).get("state", ""),
                 "telefone": f"({dados_opencnpja.get('phones', [{}])[0].get('area','')}) {dados_opencnpja.get('phones', [{}])[0].get('number','')}" if dados_opencnpja.get("phones") else "",
             }
-            app.logger.info(f"CNPJ {cnpj_limpo} encontrado via OpenCNPJA.")
+            app.logger.info("Consulta de CNPJ concluída pela opção alternativa.")
             return jsonify(resultado)
 
     except requests.exceptions.HTTPError as e_http:
         status_code = e_http.response.status_code if e_http.response else 500
         if status_code == 404:
             return jsonify({"erro": "CNPJ não encontrado ou inválido."}), 404
-        return jsonify({"erro": f"Erro HTTP ao consultar CNPJ: {status_code}"}), 502
+        return jsonify({"erro": "Não foi possível consultar o CNPJ agora."}), 502
     except requests.exceptions.RequestException as e_req:
-        app.logger.error(f"Erro de rede ao consultar CNPJ {cnpj_limpo}: {e_req}")
+        app.logger.warning(
+            "Consulta de CNPJ falhou. erro_tipo=%s", type(e_req).__name__
+        )
         return jsonify({"erro": "Erro de rede ao consultar CNPJ. Verifique sua conexão."}), 503
     except Exception as e_geral:
-        app.logger.error(f"Erro inesperado na busca por CNPJ {cnpj_limpo}: {e_geral}")
+        app.logger.error(
+            "Falha interna na consulta de CNPJ. erro_tipo=%s",
+            type(e_geral).__name__,
+        )
         return jsonify({"erro": "Erro interno ao processar CNPJ."}), 500
 
 @app.route("/get_solicitacoes_pendentes", methods=["GET"])
-@login_required
+@admin_json_required
 def get_solicitacoes_pendentes():
-    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     conn = None
     try:
         conn = conectar_banco()
@@ -2779,6 +3785,8 @@ def get_solicitacoes_pendentes():
                 dados = json.loads(raw_data)
             else:
                 dados = raw_data
+            if not isinstance(dados, dict):
+                dados = {}
             # --------------------------------------
 
             # Se for exclusão, o nome novo é irrelevante, usamos o tipo da ação
@@ -2791,6 +3799,11 @@ def get_solicitacoes_pendentes():
                 "nome_novo": nome_novo_ou_acao
             })
         return jsonify(res)
+    except Exception as e:
+        app.logger.error(
+            "Falha ao listar solicitações. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
@@ -2803,6 +3816,13 @@ def editar_conta_corrente():
         id_conta = dados.get("id_conta")
         
         if not id_conta: return "ID da conta não informado", 400
+        negado = _autorizar_objeto_por_uvr(
+            "contas_correntes", id_conta, resposta_json=False
+        )
+        if negado:
+            return negado
+        if current_user.role != "admin":
+            dados["uvr_conta"] = current_user.uvr_acesso
         
         # Tratamento do Banco (vem como "codigo|nome" do select)
         banco_selecionado = dados["banco_conta"]
@@ -2828,6 +3848,9 @@ def editar_conta_corrente():
                 dados["agencia_conta"], dados["conta_corrente_conta"], 
                 dados.get("descricao_apelido_conta", ""), int(id_conta)
             ))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             conn.commit()
             msg = "Conta alterada com sucesso!"
         else:
@@ -2842,11 +3865,11 @@ def editar_conta_corrente():
                 "descricao_conta": dados.get("descricao_apelido_conta", "") # <--- A LINHA QUE FALTAVA
             }
             
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante, status)
-                VALUES (%s, %s, %s, %s, %s, 'PENDENTE')
-            """, ('contas_correntes', int(id_conta), 'EDICAO', json.dumps(dados_novos), current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur, "contas_correntes", id_conta, "EDICAO", json.dumps(dados_novos)
+            ):
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             
             conn.commit()
             msg = "Solicitação de edição enviada para aprovação do Administrador."
@@ -2855,21 +3878,37 @@ def editar_conta_corrente():
         return pagina_sucesso_base("Processado", msg)
     except Exception as e:
         if conn: conn.rollback()
-        return f"Erro ao editar: {e}", 500
+        return "Não foi possível processar a edição.", 500
     finally:
         if conn: conn.close()
 
 @app.route("/responder_solicitacao", methods=["POST"])
-@login_required
+@admin_json_required
 def responder_solicitacao():
-    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
-    data = request.json
-    id_sol = data.get('id'); acao = data.get('acao')
+    data, erro_json = _obter_json_objeto(
+        {"id", "acao"}, campos_obrigatorios={"id", "acao"}
+    )
+    if erro_json:
+        return erro_json
+    id_sol = data.get("id")
+    acao = data.get("acao")
+    if not str(id_sol).isdigit():
+        return jsonify({"error": "Identificador inválido."}), 400
+    if acao not in {"aprovar", "rejeitar"}:
+        return jsonify({"error": "Ação inválida."}), 400
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT id_registro, dados_novos, tabela_alvo, tipo_solicitacao FROM solicitacoes_alteracao WHERE id = %s", (id_sol,))
+        cur.execute(
+            """
+            SELECT id_registro, dados_novos, tabela_alvo, tipo_solicitacao
+            FROM solicitacoes_alteracao
+            WHERE id = %s AND status = 'PENDENTE'
+            FOR UPDATE
+            """,
+            (id_sol,),
+        )
         solic = cur.fetchone()
         
         if not solic: return jsonify({"error": "Não encontrado"}), 404
@@ -2878,8 +3917,21 @@ def responder_solicitacao():
         if acao == 'aprovar':
             if tipo == 'EXCLUSAO':
                 # Executa a exclusão real
-                sql_del = f"DELETE FROM {tabela} WHERE id = %s"
+                exclusoes_permitidas = {
+                    "associados": "DELETE FROM associados WHERE id = %s",
+                    "cadastros": "DELETE FROM cadastros WHERE id = %s",
+                    "contas_correntes": "DELETE FROM contas_correntes WHERE id = %s",
+                    "transacoes_financeiras": "DELETE FROM transacoes_financeiras WHERE id = %s",
+                    "patrimonio": "DELETE FROM patrimonio WHERE id = %s",
+                }
+                sql_del = exclusoes_permitidas.get(tabela)
+                if not sql_del:
+                    conn.rollback()
+                    return jsonify({"error": "Solicitação inválida."}), 400
                 cur.execute(sql_del, (id_reg,))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"error": "Recurso não encontrado."}), 404
                 msg = "Registro excluído com sucesso!"
             else:
                 # Executa a edição (APROVAÇÃO)
@@ -2956,8 +4008,27 @@ def responder_solicitacao():
                     d.pop('nome_visual', None)
                     
                     # Constrói a query de UPDATE dinamicamente baseada nas chaves do JSON
-                    campos = list(d.keys())
-                    valores = list(d.values())
+                    campos_permitidos = {
+                        "uvr", "associacao", "tipo_bem", "categoria",
+                        "descricao", "codigo_patrimonio", "marca", "modelo",
+                        "ano_fabricacao", "numero_serie_chassi",
+                        "situacao_propriedade", "entidade_proprietaria",
+                        "orgao_cedente", "numero_termo_comodato",
+                        "data_inicio_comodato", "data_fim_comodato", "placa",
+                        "renavam", "combustivel", "capacidade_carga",
+                        "controle_por", "medidor_inicial", "medidor_atual",
+                        "local_instalacao", "setor_uso", "nome_responsavel",
+                        "nome_operador_principal", "status_bem",
+                        "estado_conservacao", "permite_abastecimento",
+                        "permite_manutencao", "alerta_preventiva",
+                        "observacoes_gerais", "foto_bem_base64",
+                        "eh_bem_publico", "uso_compartilhado",
+                    }
+                    campos = [campo for campo in d if campo in campos_permitidos]
+                    if not campos:
+                        conn.rollback()
+                        return jsonify({"error": "Solicitação inválida."}), 400
+                    valores = [d[campo] for campo in campos]
                     valores.append(id_reg) # ID para o WHERE no final
                     
                     set_clause = ", ".join([f"{campo}=%s" for campo in campos])
@@ -2968,17 +4039,28 @@ def responder_solicitacao():
 
                 msg = "Edição aprovada e aplicada!"
 
-            cur.execute("UPDATE solicitacoes_alteracao SET status='APROVADO' WHERE id=%s", (id_sol,))
+            cur.execute(
+                "UPDATE solicitacoes_alteracao SET status='APROVADO' WHERE id=%s AND status='PENDENTE'",
+                (id_sol,),
+            )
         else:
-            cur.execute("UPDATE solicitacoes_alteracao SET status='REJEITADO' WHERE id=%s", (id_sol,))
+            cur.execute(
+                "UPDATE solicitacoes_alteracao SET status='REJEITADO' WHERE id=%s AND status='PENDENTE'",
+                (id_sol,),
+            )
             msg = "Solicitação rejeitada."
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
             
         conn.commit()
         return jsonify({"status": "sucesso", "message": msg})
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro ao responder solicitação: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao responder solicitação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
@@ -2989,17 +4071,27 @@ def imprimir_ficha_associado(id):
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        
-        sql = """
+        if getattr(current_user, "role", None) == "admin":
+            escopo_sql = "WHERE id = %s"
+            parametros = (id,)
+        else:
+            uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+            if not uvr_usuario:
+                return "", 404
+            escopo_sql = "WHERE id = %s AND uvr = %s"
+            parametros = (id, uvr_usuario)
+
+        sql = f"""
             SELECT nome, cpf, rg, data_nascimento, data_admissao, status, 
                    uvr, associacao, logradouro, endereco_numero, bairro, cidade, 
                    uf, cep, telefone, foto_base64, numero
-            FROM associados WHERE id = %s
+            FROM associados {escopo_sql}
         """
-        cur.execute(sql, (id,))
+        cur.execute(sql, parametros)
         row = cur.fetchone()
         
-        if not row: return "Associado não encontrado", 404
+        if not row:
+            return "", 404
 
         dados = {
             "nome": row[0], "cpf": row[1], "rg": row[2],
@@ -3028,7 +4120,10 @@ def imprimir_ficha_associado(id):
         style_valor = ParagraphStyle('FichaValor', parent=styles['Normal'], fontSize=10, leading=12) # removed spaceAfter to compact rows
         
         # Cabeçalho
-        story.append(Paragraph(f"Ficha Cadastral do Associado - {dados['assoc']}", style_titulo))
+        story.append(Paragraph(
+            f"Ficha Cadastral do Associado - {_texto_pdf_seguro(dados['assoc'])}",
+            style_titulo,
+        ))
         story.append(Spacer(1, 0.5*cm))
 
         # --- PROCESSAMENTO DA FOTO (CORRIGIDO PROPORÇÃO) ---
@@ -3064,8 +4159,10 @@ def imprimir_ficha_associado(id):
                 
                 # Cria a imagem com as dimensões calculadas
                 img_obj = ReportLabImage(imagem_io, width=display_w, height=display_h)
-            except Exception as e: 
-                app.logger.error(f"Erro imagem PDF: {e}")
+            except Exception as e:
+                app.logger.warning(
+                    "Falha ao processar imagem da ficha. erro_tipo=%s", type(e).__name__
+                )
 
         # --- ORGANIZAÇÃO DOS DADOS EM LISTAS ---
         # Formato: (Label, Valor)
@@ -3096,12 +4193,18 @@ def imprimir_ficha_associado(id):
             # Itera de 2 em 2 para fazer pares
             for i in range(0, len(lista_campos), 2):
                 campo1 = lista_campos[i]
-                cell1 = [Paragraph(f"<b>{campo1[0]}</b>", style_label), Paragraph(campo1[1], style_valor)]
+                cell1 = [
+                    Paragraph(f"<b>{_texto_pdf_seguro(campo1[0])}</b>", style_label),
+                    Paragraph(_texto_pdf_seguro(campo1[1]), style_valor),
+                ]
                 
                 cell2 = []
                 if i + 1 < len(lista_campos):
                     campo2 = lista_campos[i+1]
-                    cell2 = [Paragraph(f"<b>{campo2[0]}</b>", style_label), Paragraph(campo2[1], style_valor)]
+                    cell2 = [
+                        Paragraph(f"<b>{_texto_pdf_seguro(campo2[0])}</b>", style_label),
+                        Paragraph(_texto_pdf_seguro(campo2[1]), style_valor),
+                    ]
                 
                 rows.append([cell1, cell2])
             
@@ -3161,19 +4264,26 @@ def imprimir_ficha_associado(id):
         return Response(buffer, mimetype='application/pdf', headers={'Content-Disposition': f'inline;filename=ficha_{id}.pdf'})
 
     except Exception as e:
-        app.logger.error(f"Erro PDF: {e}", exc_info=True)
-        return f"Erro: {e}", 500
+        app.logger.error(
+            "Falha ao gerar ficha de associado. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível gerar a ficha.", 500
     finally:
         if conn: conn.close()
 
 # --- GESTÃO DE CLIENTES / FORNECEDORES (LEITURA) ---
 
 @app.route("/buscar_cadastros", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_cadastros():
     termo = request.args.get("q", "").lower()
     tipo = request.args.get("tipo", "") # Cliente ou Fornecedor
     uvr_tela = request.args.get("uvr", "")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_tela)
+    if negado:
+        return negado
+    uvr_tela = uvr_autorizada or ""
     
     conn = None
     try:
@@ -3213,26 +4323,30 @@ def buscar_cadastros():
             })
         return jsonify(res)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar cadastros. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_cadastro/<int:id>", methods=["GET"])
+@login_json_required
 @login_required
 def get_cadastro(id):
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
-        row = cur.fetchone()
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
+        row = _consulta_objeto_por_uvr(
+            cur, "SELECT * FROM cadastros WHERE id = %s", id, uvr
+        )
         
         if not row: return jsonify({"error": "Não encontrado"}), 404
         
-        # Segurança UVR
-        if current_user.uvr_acesso and current_user.role != 'admin' and row[1] != current_user.uvr_acesso: 
-            return jsonify({"error": "Acesso negado"}), 403
-
         # Mapeamento (Ajuste os índices se sua tabela for diferente)
         data = {
             "id": row[0], "uvr": row[1], "associacao": row[2], 
@@ -3254,10 +4368,20 @@ def imprimir_ficha_cadastro(id):
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
+        if getattr(current_user, "role", None) == "admin":
+            cur.execute("SELECT * FROM cadastros WHERE id = %s", (id,))
+        else:
+            uvr_usuario = str(getattr(current_user, "uvr_acesso", None) or "").strip()
+            if not uvr_usuario:
+                return "", 404
+            cur.execute(
+                "SELECT * FROM cadastros WHERE id = %s AND uvr = %s",
+                (id, uvr_usuario),
+            )
         row = cur.fetchone()
         
-        if not row: return "Não encontrado", 404
+        if not row:
+            return "", 404
         
         # Dados organizados
         d = {
@@ -3273,7 +4397,10 @@ def imprimir_ficha_cadastro(id):
         story = []
         styles = getSampleStyleSheet()
         
-        story.append(Paragraph(f"Ficha Cadastral - {d['tipo']}", ParagraphStyle('T', parent=styles['Heading1'], alignment=TA_CENTER)))
+        story.append(Paragraph(
+            f"Ficha Cadastral - {_texto_pdf_seguro(d['tipo'])}",
+            ParagraphStyle('T', parent=styles['Heading1'], alignment=TA_CENTER),
+        ))
         story.append(Spacer(1, 0.5*cm))
 
         # Função auxiliar para tabela de 2 colunas
@@ -3281,12 +4408,12 @@ def imprimir_ficha_cadastro(id):
             rows = []
             col_w = 8*cm # Largura fixa pois não tem foto
             for i in range(0, len(lista_campos), 2):
-                c1 = [[Paragraph(f"<b>{lista_campos[i][0]}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
-                      [Paragraph(str(lista_campos[i][1]), ParagraphStyle('val', fontSize=10))]]
+                c1 = [[Paragraph(f"<b>{_texto_pdf_seguro(lista_campos[i][0])}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
+                      [Paragraph(_texto_pdf_seguro(lista_campos[i][1]), ParagraphStyle('val', fontSize=10))]]
                 c2 = []
                 if i + 1 < len(lista_campos):
-                    c2 = [[Paragraph(f"<b>{lista_campos[i+1][0]}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
-                          [Paragraph(str(lista_campos[i+1][1]), ParagraphStyle('val', fontSize=10))]]
+                    c2 = [[Paragraph(f"<b>{_texto_pdf_seguro(lista_campos[i+1][0])}</b>", ParagraphStyle('lbl', fontSize=8, textColor=colors.gray))],
+                          [Paragraph(_texto_pdf_seguro(lista_campos[i+1][1]), ParagraphStyle('val', fontSize=10))]]
                 rows.append([c1, c2])
             
             t = Table(rows, colWidths=[col_w, col_w])
@@ -3310,8 +4437,13 @@ def imprimir_ficha_cadastro(id):
         
         doc.build(story)
         buffer.seek(0)
-        filename = f"ficha_{d['razao'][:10].replace(' ','_')}.pdf"
+        filename = f"ficha_{_nome_arquivo_seguro(d['razao'], 'cadastro')}.pdf"
         return Response(buffer, mimetype='application/pdf', headers={'Content-Disposition': f'inline;filename={filename}'})
+    except Exception as e:
+        app.logger.error(
+            "Falha ao gerar ficha de cadastro. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível gerar a ficha.", 500
     finally:
         if conn: conn.close()
 # --- AÇÕES DE ESCRITA (EDITAR / EXCLUIR) ---
@@ -3324,6 +4456,11 @@ def editar_cadastro():
         dados = request.form.to_dict()
         id_cad = dados.get("id_cadastro")
         if not id_cad: return "ID não informado", 400
+        negado = _autorizar_objeto_por_uvr("cadastros", id_cad, resposta_json=False)
+        if negado:
+            return negado
+        if current_user.role != "admin":
+            dados["uvr"] = current_user.uvr_acesso
         
         conn = conectar_banco()
         cur = conn.cursor()
@@ -3345,106 +4482,155 @@ def editar_cadastro():
                 dados.get("uf"), dados.get("telefone"), dados["tipo_atividade"], dados["tipo_cadastro"], 
                 int(id_cad)
             ))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             conn.commit()
             msg = "Alterações salvas com sucesso!"
         
         # Usuário: Cria solicitação
         else:
-            dados_json = json.dumps(dados)
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('cadastros', int(id_cad), 'EDICAO', dados_json, current_user.username))
+            campos_permitidos = {
+                "uvr", "associacao", "razao_social", "cnpj", "cep",
+                "logradouro", "numero", "bairro", "cidade", "uf",
+                "telefone", "tipo_atividade", "tipo_cadastro",
+            }
+            dados_json = json.dumps(
+                {campo: dados.get(campo, "") for campo in campos_permitidos}
+            )
+            if not _inserir_solicitacao_escopada(
+                cur, "cadastros", id_cad, "EDICAO", dados_json
+            ):
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             conn.commit()
             msg = "Solicitação de edição enviada para aprovação."
         
         return pagina_sucesso_base("Processado", msg)
     except Exception as e:
         if conn: conn.rollback()
-        return f"Erro: {e}", 500
+        return "Não foi possível processar a edição.", 500
     finally:
         if conn: conn.close()
 
 @app.route("/excluir_cadastro/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_cadastro(id):
     conn = None
     try:
+        negado = _autorizar_objeto_por_uvr("cadastros", id, resposta_json=True)
+        if negado:
+            return negado
         conn = conectar_banco()
         cur = conn.cursor()
         
         # Busca dados para registrar quem foi excluído (opcional, mas bom para histórico)
-        cur.execute("SELECT razao_social FROM cadastros WHERE id = %s", (id,))
-        row = cur.fetchone()
-        nome_registro = row[0] if row else "Desconhecido"
+        uvr_objeto = (
+            None if current_user.role == "admin" else current_user.uvr_acesso
+        )
+        row = _consulta_objeto_por_uvr(
+            cur,
+            "SELECT razao_social FROM cadastros WHERE id = %s",
+            id,
+            uvr_objeto,
+        )
+        if not row:
+            return jsonify({"error": "Recurso não encontrado."}), 404
+        nome_registro = row[0]
 
         if current_user.role == 'admin':
             cur.execute("DELETE FROM cadastros WHERE id = %s", (id,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Registro excluído permanentemente."})
         else:
             # Usuário cria solicitação de EXCLUSÃO
             # Salvamos apenas o nome/motivo no JSON, pois o ID já identifica o registro
             dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "razao_social": nome_registro})
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('cadastros', id, 'EXCLUSAO', dados_json, current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur, "cadastros", id, "EXCLUSAO", dados_json
+            ):
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
             
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/excluir_associado/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_associado(id):
     conn = None
     try:
+        negado = _autorizar_objeto_por_uvr("associados", id, resposta_json=True)
+        if negado:
+            return negado
         conn = conectar_banco()
         cur = conn.cursor()
         
         # Busca dados para registrar quem foi excluído (histórico)
-        cur.execute("SELECT nome FROM associados WHERE id = %s", (id,))
-        row = cur.fetchone()
-        nome_registro = row[0] if row else "Desconhecido"
+        uvr_objeto = (
+            None if current_user.role == "admin" else current_user.uvr_acesso
+        )
+        row = _consulta_objeto_por_uvr(
+            cur,
+            "SELECT nome FROM associados WHERE id = %s",
+            id,
+            uvr_objeto,
+        )
+        if not row:
+            return jsonify({"error": "Recurso não encontrado."}), 404
+        nome_registro = row[0]
 
         if current_user.role == 'admin':
             # Se for Admin, apaga de verdade
             cur.execute("DELETE FROM associados WHERE id = %s", (id,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Associado excluído permanentemente."})
         else:
             # Se for Usuário Comum, cria uma SOLICITAÇÃO para o admin aprovar
             import json
             dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "nome": nome_registro})
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('associados', id, 'EXCLUSAO', dados_json, current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur, "associados", id, "EXCLUSAO", dados_json
+            ):
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
             
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro ao excluir associado: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao processar associado. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
 # --- GESTÃO DE CONTAS CORRENTES (NOVAS ROTAS) ---
 
 @app.route("/buscar_contas_correntes_gestao", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_contas_correntes_gestao():
     termo = request.args.get("q", "").lower()
     uvr_tela = request.args.get("uvr", "")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_tela)
+    if negado:
+        return negado
+    uvr_tela = uvr_autorizada or ""
     
     conn = None
     try:
@@ -3480,19 +4666,27 @@ def buscar_contas_correntes_gestao():
             })
         return jsonify(res)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar contas. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_conta_corrente_detalhe/<int:id>", methods=["GET"])
+@login_json_required
 @login_required
 def get_conta_corrente_detalhe(id):
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM contas_correntes WHERE id = %s", (id,))
-        row = cur.fetchone()
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
+        row = _consulta_objeto_por_uvr(
+            cur, "SELECT * FROM contas_correntes WHERE id = %s", id, uvr
+        )
         
         if not row: return jsonify({"error": "Não encontrado"}), 404
         
@@ -3505,23 +4699,26 @@ def get_conta_corrente_detalhe(id):
         }
         return jsonify(data)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar conta. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         if conn: conn.close()
 
 
 
 @app.route("/excluir_conta_corrente/<int:id>", methods=["POST"])
-@login_required
+@admin_json_required
 def excluir_conta_corrente(id):
-    if current_user.role != 'admin':
-        return jsonify({"error": "Apenas administradores podem excluir contas."}), 403
-        
     conn = None
     try:
         conn = conectar_banco()
         cur = conn.cursor()
         cur.execute("DELETE FROM contas_correntes WHERE id = %s", (id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
         conn.commit()
         return jsonify({"status": "sucesso", "message": "Conta excluída com sucesso."})
     except psycopg2.IntegrityError:
@@ -3529,14 +4726,16 @@ def excluir_conta_corrente(id):
         return jsonify({"error": "Não é possível excluir esta conta pois ela possui movimentações financeiras registradas."}), 400
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao excluir conta. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_detalhes_solicitacao/<int:id>", methods=["GET"])
-@login_required
+@admin_json_required
 def get_detalhes_solicitacao(id):
-    if current_user.role != 'admin': return jsonify({"error": "Negado"}), 403
     conn = None
     try:
         conn = conectar_banco()
@@ -3619,8 +4818,8 @@ def get_detalhes_solicitacao(id):
             }
         # ------------------------------
 
-        if not sql_atual: 
-            return jsonify({"error": f"Tabela '{tabela}' desconhecida ou não configurada para detalhes."}), 400
+        if not sql_atual:
+            return jsonify({"error": "Solicitação inválida."}), 400
 
         # Busca os dados ATUAIS no banco
         cur.execute(sql_atual, (id_reg,))
@@ -3690,7 +4889,11 @@ def get_detalhes_solicitacao(id):
                     try: tot_fmt = f"{float(tot):.2f}".replace('.', ',')
                     except: tot_fmt = str(tot)
 
-                    html += f'<tr><td>{desc}</td><td>{qtd_fmt} {un}</td><td>{tot_fmt}</td></tr>'
+                    html += (
+                        f"<tr><td>{escape(str(desc or ''))}</td>"
+                        f"<td>{escape(str(qtd_fmt))} {escape(str(un or ''))}</td>"
+                        f"<td>{escape(str(tot_fmt))}</td></tr>"
+                    )
                 
                 html += '</tbody></table>'
                 return html
@@ -3704,7 +4907,8 @@ def get_detalhes_solicitacao(id):
                 "campo": "Detalhamento de Itens",
                 "valor_atual": html_atual,
                 "valor_novo": html_novo,
-                "mudou": mudou_itens
+                "mudou": mudou_itens,
+                "html_seguro": True,
             })
         # ------------------------------------------------------------------
 
@@ -3720,14 +4924,17 @@ def get_detalhes_solicitacao(id):
         })
 
     except Exception as e:
-        app.logger.error(f"Erro em get_detalhes_solicitacao: {e}")
-        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+        app.logger.error(
+            "Falha ao consultar solicitação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         if conn: conn.close()
         
 # --- GESTÃO DE TRANSAÇÕES (CRUD) ---
 
 @app.route("/buscar_transacoes_gestao", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_transacoes_gestao():
     # Pega os filtros que vieram do Javascript
@@ -3735,6 +4942,10 @@ def buscar_transacoes_gestao():
     data_fim = request.args.get("data_final")
     tipo = request.args.get("tipo")
     uvr_tela = request.args.get("uvr")
+    uvr_autorizada, negado = _escopo_uvr_consulta(uvr_tela)
+    if negado:
+        return negado
+    uvr_tela = uvr_autorizada or ""
     termo = request.args.get("q", "").lower()
 
     conn = None
@@ -3804,11 +5015,14 @@ def buscar_transacoes_gestao():
         return jsonify(resultados)
 
     except Exception as e:
-        app.logger.error(f"Erro ao buscar transações: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar transações. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 @app.route("/get_transacao_detalhes/<int:id>", methods=["GET"])
+@login_json_required
 @login_required
 def get_transacao_detalhes(id):
     conn = None
@@ -3817,27 +5031,37 @@ def get_transacao_detalhes(id):
         cur = conn.cursor()
 
         # 1. Busca os dados gerais da transação
-        cur.execute("""
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
+        cabecalho = _consulta_objeto_por_uvr(cur, """
             SELECT id, uvr, associacao, tipo_transacao, tipo_atividade,
                    nome_cadastro_origem, numero_documento, data_documento,
                    valor_total_documento, status_pagamento, data_hora_registro
             FROM transacoes_financeiras WHERE id = %s
-        """, (id,))
-        cabecalho = cur.fetchone()
+        """, id, uvr)
 
         if not cabecalho:
             return jsonify({"error": "Transação não encontrada"}), 404
 
         # 2. Busca os itens e faz JOIN para descobrir Grupo e Subgrupo originais
         # Usamos LEFT JOIN pois o produto pode ter sido excluído do catálogo, mas o registro histórico fica
+        filtro_itens_uvr = (
+            ""
+            if uvr is None
+            else " AND LOWER(TRIM(tf.uvr)) = LOWER(TRIM(%s))"
+        )
+        parametros_itens = (id,) if uvr is None else (id, uvr)
         cur.execute("""
             SELECT it.descricao, it.unidade, it.quantidade, it.valor_unitario, it.valor_total_item,
                    ps.grupo, ps.subgrupo
             FROM itens_transacao it
+            INNER JOIN transacoes_financeiras tf ON tf.id = it.id_transacao
             LEFT JOIN produtos_servicos ps ON it.descricao = ps.item
             WHERE it.id_transacao = %s
+        """ + filtro_itens_uvr + """
             ORDER BY it.id ASC
-        """, (id,))
+        """, parametros_itens)
         itens_db = cur.fetchall()
 
         # Formata os itens para JSON
@@ -3873,29 +5097,47 @@ def get_transacao_detalhes(id):
         return jsonify(dados_retorno)
 
     except Exception as e:
-        app.logger.error(f"Erro ao buscar detalhes da transação: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar transação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         if conn: conn.close()
 
 # --- NOVAS ROTAS PARA GESTÃO DE PRODUTOS E SUBGRUPOS ---
 
 @app.route("/api/subgrupos", methods=["GET", "POST"])
-@login_required
+@admin_json_required
 def api_subgrupos():
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
+    cur = None
     try:
         if request.method == "POST":
             # Cadastrar ou Editar Subgrupo
-            dados = request.json
+            dados, erro_json = _obter_json_objeto(
+                {"acao", "nome", "atividade_pai", "id"},
+                campos_obrigatorios={"acao"},
+            )
+            if erro_json:
+                return erro_json
             acao = dados.get('acao')
             nome = dados.get('nome', '').strip()
             atividade = dados.get('atividade_pai', '')
             id_sub = dados.get('id')
 
-            if not nome or not atividade:
+            if acao not in {"novo", "editar", "excluir"}:
+                return jsonify({"erro": "Ação inválida."}), 400
+            if acao in {"novo", "editar"} and (not nome or not atividade):
                 return jsonify({"erro": "Nome e Atividade (Grupo) são obrigatórios."}), 400
+            if acao in {"editar", "excluir"} and not id_sub:
+                return jsonify({"erro": "Identificador obrigatório."}), 400
+            if acao in {"editar", "excluir"} and not str(id_sub).isdigit():
+                return jsonify({"erro": "Identificador inválido."}), 400
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        if request.method == "POST":
 
             if acao == 'novo':
                 try:
@@ -3908,6 +5150,9 @@ def api_subgrupos():
 
             elif acao == 'editar':
                 cur.execute("UPDATE subgrupos SET nome = %s WHERE id = %s", (nome, id_sub))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"erro": "Recurso não encontrado."}), 404
                 # Também atualiza o texto na tabela antiga para manter consistência por enquanto
                 cur.execute("UPDATE produtos_servicos SET subgrupo = %s WHERE id_subgrupo = %s", (nome, id_sub))
                 conn.commit()
@@ -3920,6 +5165,9 @@ def api_subgrupos():
                     return jsonify({"erro": "Não é possível excluir: existem produtos vinculados a este subgrupo."}), 400
                 
                 cur.execute("DELETE FROM subgrupos WHERE id = %s", (id_sub,))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"erro": "Recurso não encontrado."}), 404
                 conn.commit()
                 return jsonify({"sucesso": True})
 
@@ -3938,25 +5186,44 @@ def api_subgrupos():
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro API Subgrupos: {e}")
-        return jsonify({"erro": str(e)}), 500
+        app.logger.error(
+            "Falha na API de subgrupos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"erro": "Não foi possível processar a solicitação."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 @app.route("/api/produtos_crud", methods=["GET", "POST", "DELETE"])
-@login_required
+@admin_json_required
 def api_produtos_crud():
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
+    cur = None
     try:
         if request.method == "POST":
             # Salvar Produto
-            d = request.json
+            d, erro_json = _obter_json_objeto(
+                {"id", "item", "id_subgrupo", "grupo"},
+                campos_obrigatorios={"item", "grupo"},
+            )
+            if erro_json:
+                return erro_json
             id_prod = d.get('id')
             item = d.get('item', '').strip()
             id_subgrupo = d.get('id_subgrupo')
             grupo = d.get('grupo') # Atividade
             
+            if not item or not grupo:
+                return jsonify({"erro": "Grupo e nome são obrigatórios."}), 400
+            if id_prod and not str(id_prod).isdigit():
+                return jsonify({"erro": "Identificador inválido."}), 400
+            if id_subgrupo and not str(id_subgrupo).isdigit():
+                return jsonify({"erro": "Subgrupo inválido."}), 400
+
+        conn = conectar_banco()
+        cur = conn.cursor()
+
+        if request.method == "POST":
             # Busca nome do subgrupo para manter compatibilidade
             nome_subgrupo = ""
             if id_subgrupo:
@@ -3985,18 +5252,26 @@ def api_produtos_crud():
                     SET tipo_atividade=%s, grupo=%s, subgrupo=%s, id_subgrupo=%s, item=%s
                     WHERE id=%s
                 """, (grupo, grupo, nome_subgrupo, id_subgrupo, item, id_prod))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"erro": "Recurso não encontrado."}), 404
                 conn.commit()
             
             return jsonify({"sucesso": True})
 
         elif request.method == "DELETE":
             id_prod = request.args.get('id')
+            if not id_prod or not str(id_prod).isdigit():
+                return jsonify({"erro": "Identificador inválido."}), 400
             # Verifica uso em transações
             cur.execute("SELECT COUNT(*) FROM itens_transacao WHERE descricao = (SELECT item FROM produtos_servicos WHERE id = %s)", (id_prod,))
             if cur.fetchone()[0] > 0:
                  return jsonify({"erro": "Não pode excluir: Item já usado em transações financeiras."}), 400
             
             cur.execute("DELETE FROM produtos_servicos WHERE id = %s", (id_prod,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"erro": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"sucesso": True})
 
@@ -4042,60 +5317,88 @@ def api_produtos_crud():
 
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"erro": str(e)}), 500
+        app.logger.error(
+            "Falha na API de produtos. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"erro": "Não foi possível processar a solicitação."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 @app.route("/excluir_transacao/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_transacao(id):
     conn = None
     try:
+        negado = _autorizar_objeto_por_uvr(
+            "transacoes_financeiras", id, resposta_json=True
+        )
+        if negado:
+            return negado
         conn = conectar_banco()
         cur = conn.cursor()
         
-        # Verifica se tem pagamentos vinculados
-        cur.execute("SELECT valor_pago_recebido FROM transacoes_financeiras WHERE id = %s", (id,))
-        row = cur.fetchone()
+        # Confere escopo, pagamentos e descrição em uma única consulta.
+        uvr_objeto = (
+            None if current_user.role == "admin" else current_user.uvr_acesso
+        )
+        row = _consulta_objeto_por_uvr(
+            cur,
+            """
+            SELECT valor_pago_recebido, numero_documento, nome_cadastro_origem
+            FROM transacoes_financeiras
+            WHERE id = %s
+            """,
+            id,
+            uvr_objeto,
+        )
         if not row: return jsonify({"error": "Transação não encontrada"}), 404
         
         valor_pago = row[0]
         if valor_pago > 0:
             return jsonify({"error": "Não é possível excluir esta transação pois ela possui pagamentos/recebimentos registrados no Fluxo de Caixa. Estorne os pagamentos antes."}), 400
 
-        # Pega dados para o log/solicitação
-        cur.execute("SELECT numero_documento, nome_cadastro_origem FROM transacoes_financeiras WHERE id = %s", (id,))
-        dados_reg = cur.fetchone()
-        desc = f"NF {dados_reg[0]} - {dados_reg[1]}"
+        desc = f"NF {row[1]} - {row[2]}"
 
         if current_user.role == 'admin':
             cur.execute("DELETE FROM transacoes_financeiras WHERE id = %s", (id,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Transação excluída com sucesso."})
         else:
             # Solicitação
             dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "descricao": desc})
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('transacoes_financeiras', id, 'EXCLUSAO', dados_json, current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur, "transacoes_financeiras", id, "EXCLUSAO", dados_json
+            ):
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada."})
 
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 # --- ROTAS DE GESTÃO DO FLUXO DE CAIXA (CRUD) ---
 
 @app.route("/get_movimentacao_detalhes/<int:id>")
+@login_json_required
 @login_required
 def get_movimentacao_detalhes(id):
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
     try:
+        conn = conectar_banco()
+        cur = conn.cursor()
         # Busca dados do Fluxo e cruza com Transações para pegar Doc e Atividade
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
+        filtro_uvr = "" if uvr is None else " AND LOWER(TRIM(fc.uvr)) = LOWER(TRIM(%s))"
+        parametros = (id,) if uvr is None else (id, uvr)
         cur.execute("""
             SELECT 
                 fc.id, 
@@ -4109,8 +5412,9 @@ def get_movimentacao_detalhes(id):
             LEFT JOIN fluxo_caixa_transacoes_link fctl ON fc.id = fctl.id_fluxo_caixa
             LEFT JOIN transacoes_financeiras tf ON fctl.id_transacao_financeira = tf.id
             WHERE fc.id = %s
+        """ + filtro_uvr + """
             GROUP BY fc.id, fc.data_efetiva, fc.valor_efetivo, fc.tipo_movimentacao, fc.numero_documento_bancario
-        """, (id,))
+        """, parametros)
         
         row = cur.fetchone()
         
@@ -4139,20 +5443,24 @@ def get_movimentacao_detalhes(id):
             "vinculado": (docs_nfs != "")
         })
     except Exception as e:
-        app.logger.error(f"Erro ao buscar detalhes da movimentação: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao consultar movimentação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
         conn.close()
 
 @app.route("/excluir_movimentacao/<int:id>", methods=["POST"])
-@login_required
+@admin_json_required
 def excluir_movimentacao(id):
-    if current_user.role != 'admin': 
-        return jsonify({"error": "Apenas administradores podem excluir."}), 403
-
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
     try:
+        conn = conectar_banco()
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM fluxo_caixa WHERE id = %s FOR UPDATE", (id,))
+        if not cur.fetchone():
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
         # 1. Busca se há vínculos com Transações (NFs) para estornar
         cur.execute("""
             SELECT id_transacao_financeira, valor_aplicado_nesta_nf 
@@ -4187,16 +5495,23 @@ def excluir_movimentacao(id):
 
         # 3. Exclui do Fluxo de Caixa (o DELETE CASCADE no banco remove os links automaticamente)
         cur.execute("DELETE FROM fluxo_caixa WHERE id = %s", (id,))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Recurso não encontrado."}), 404
         conn.commit()
         
         return jsonify({"status": "sucesso", "message": "Movimentação excluída e saldos estornados!"})
 
     except Exception as e:
-        conn.rollback()
-        app.logger.error(f"Erro ao excluir movimentação: {e}")
-        return jsonify({"error": str(e)}), 500
+        if conn:
+            conn.rollback()
+        app.logger.error(
+            "Falha ao excluir movimentação. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 # --- GESTÃO DE PATRIMÔNIO / FROTA ---
 
 @app.route("/cadastrar_patrimonio", methods=["POST"])
@@ -4254,14 +5569,14 @@ def cadastrar_patrimonio():
         conn.commit()
         return pagina_sucesso_base("Sucesso", "Bem/Patrimônio cadastrado com sucesso!")
         
-    except Exception as e:
+    except Exception:
         if conn: conn.rollback()
-        app.logger.error(f"Erro ao cadastrar patrimônio: {e}")
-        return f"Erro: {e}", 500
+        raise
     finally:
         if conn: conn.close()
 
 @app.route("/buscar_patrimonio", methods=["GET"])
+@login_json_required
 @login_required
 def buscar_patrimonio():
     conn = None
@@ -4269,6 +5584,10 @@ def buscar_patrimonio():
         termo = request.args.get("q", "").lower()
         categoria = request.args.get("categoria", "")
         uvr = request.args.get("uvr", "")
+        uvr_autorizada, negado = _escopo_uvr_consulta(uvr)
+        if negado:
+            return negado
+        uvr = uvr_autorizada or ""
 
         sql = "SELECT id, descricao, tipo_bem, placa, status_bem, nome_responsavel, medidor_atual, controle_por, categoria, codigo_patrimonio FROM patrimonio WHERE 1=1"
         params = []
@@ -4306,22 +5625,31 @@ def buscar_patrimonio():
             })
         return jsonify(res)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(
+            "Falha ao buscar patrimônio. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível realizar a consulta."}), 500
     finally:
         if conn: conn.close()
 
 @app.route("/get_patrimonio_detalhes/<int:id>")
+@login_json_required
 @login_required
 def get_patrimonio_detalhes(id):
-    conn = conectar_banco()
-    cur = conn.cursor()
+    conn = None
     try:
-        cur.execute("SELECT * FROM patrimonio WHERE id = %s", (id,))
-        if cur.rowcount == 0: return jsonify({"error": "Não encontrado"}), 404
+        conn = conectar_banco()
+        cur = conn.cursor()
+        uvr, negado = _escopo_uvr_objeto(resposta_json=True)
+        if negado:
+            return negado
+        row = _consulta_objeto_por_uvr(
+            cur, "SELECT * FROM patrimonio WHERE id = %s", id, uvr
+        )
+        if not row: return jsonify({"error": "Não encontrado"}), 404
         
         # Mapeia colunas dinamicamente
         columns = [desc[0] for desc in cur.description]
-        row = cur.fetchone()
         data = dict(zip(columns, row))
         
         # Formata datas e decimais para JSON
@@ -4330,8 +5658,14 @@ def get_patrimonio_detalhes(id):
             if isinstance(v, Decimal): data[k] = float(v)
             
         return jsonify(data)
+    except Exception as e:
+        app.logger.error(
+            "Falha ao consultar patrimônio. erro_tipo=%s", type(e).__name__
+        )
+        return jsonify({"error": "Não foi possível consultar o recurso."}), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 @app.route("/editar_patrimonio", methods=["POST"])
 @login_required
@@ -4340,6 +5674,13 @@ def editar_patrimonio():
     try:
         dados = request.form
         id_pat = dados.get("id_patrimonio")
+        if not id_pat:
+            return "ID não informado.", 400
+        negado = _autorizar_objeto_por_uvr(
+            "patrimonio", id_pat, resposta_json=False
+        )
+        if negado:
+            return negado
         
         # 1. Prepara os dados (com tratamento de tipos)
         permite_abast = True if dados.get("permite_abastecimento") else False
@@ -4364,7 +5705,11 @@ def editar_patrimonio():
         
         # Monta dicionário de dados limpos
         dados_tratados = {
-            "uvr": dados["uvr_patrimonio"],
+            "uvr": (
+                dados["uvr_patrimonio"]
+                if current_user.role == "admin"
+                else current_user.uvr_acesso
+            ),
             "associacao": dados.get("associacao_patrimonio",""),
             "tipo_bem": dados["tipo_bem"], "categoria": dados["categoria_bem"],
             "descricao": dados["descricao_bem"], "codigo_patrimonio": dados["codigo_patrimonio"],
@@ -4399,6 +5744,9 @@ def editar_patrimonio():
             valores.append(id_pat)
             
             cur.execute(f"UPDATE patrimonio SET {campos_sql} WHERE id=%s", tuple(valores))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             conn.commit()
             return pagina_sucesso_base("Sucesso", "Patrimônio atualizado com sucesso!")
         else:
@@ -4411,53 +5759,75 @@ def editar_patrimonio():
                 if isinstance(obj, (datetime, date)): return obj.isoformat()
                 return str(obj)
 
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('patrimonio', id_pat, 'EDICAO', json.dumps(dados_tratados, default=json_serial), current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur,
+                "patrimonio",
+                id_pat,
+                "EDICAO",
+                json.dumps(dados_tratados, default=json_serial),
+            ):
+                conn.rollback()
+                return "Recurso não encontrado.", 404
             
             conn.commit()
             return pagina_sucesso_base("Solicitação Enviada", "As alterações foram enviadas para aprovação do administrador.")
 
     except Exception as e:
         if conn: conn.rollback()
-        app.logger.error(f"Erro edição patrimonio: {e}")
-        return f"Erro: {e}", 500
+        app.logger.error(
+            "Falha ao editar patrimônio. erro_tipo=%s", type(e).__name__
+        )
+        return "Não foi possível processar a edição.", 500
     finally:
         if conn: conn.close()
 
 @app.route("/excluir_patrimonio/<int:id>", methods=["POST"])
+@login_json_required
 @login_required
 def excluir_patrimonio(id):
     conn = None
     try:
+        negado = _autorizar_objeto_por_uvr("patrimonio", id, resposta_json=True)
+        if negado:
+            return negado
         conn = conectar_banco()
         cur = conn.cursor()
         
         # Busca descrição para o log
-        cur.execute("SELECT descricao FROM patrimonio WHERE id=%s", (id,))
-        row = cur.fetchone()
-        desc = row[0] if row else "Item Desconhecido"
+        uvr_objeto = (
+            None if current_user.role == "admin" else current_user.uvr_acesso
+        )
+        row = _consulta_objeto_por_uvr(
+            cur,
+            "SELECT descricao FROM patrimonio WHERE id = %s",
+            id,
+            uvr_objeto,
+        )
+        if not row:
+            return jsonify({"error": "Recurso não encontrado."}), 404
+        desc = row[0]
 
         if current_user.role == 'admin':
             cur.execute("DELETE FROM patrimonio WHERE id=%s", (id,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Item excluído permanentemente."})
         else:
             # Solicitação
             dados_json = json.dumps({"motivo": "Solicitado pelo usuário", "nome_visual": desc})
-            cur.execute("""
-                INSERT INTO solicitacoes_alteracao 
-                (tabela_alvo, id_registro, tipo_solicitacao, dados_novos, usuario_solicitante) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, ('patrimonio', id, 'EXCLUSAO', dados_json, current_user.username))
+            if not _inserir_solicitacao_escopada(
+                cur, "patrimonio", id, "EXCLUSAO", dados_json
+            ):
+                conn.rollback()
+                return jsonify({"error": "Recurso não encontrado."}), 404
             conn.commit()
             return jsonify({"status": "sucesso", "message": "Solicitação de exclusão enviada para aprovação."})
             
     except Exception as e:
         if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Não foi possível processar a solicitação."}), 500
     finally:
         if conn: conn.close()
 
@@ -4480,18 +5850,17 @@ def sucesso_produto_servico(): return pagina_sucesso_base("Sucesso", "Produto/Se
 @app.route("/sucesso_conta_corrente") 
 def sucesso_conta_corrente(): return pagina_sucesso_base("Sucesso", "Conta Corrente cadastrada com sucesso!")
 @app.route("/sucesso_denuncia")
+@desativada_online
+@login_required
 def sucesso_denuncia(): return pagina_sucesso_base("Sucesso", "Denúncia registrada com sucesso!")
 
 
+aplicar_limites_rotas(app)
+
+
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO, 
-                        format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s - %(message)s')
-    
-    if not app.debug: 
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(logging.INFO)
-        app.logger.addHandler(stream_handler)
-    
-    app.logger.info("Iniciando o aplicativo Flask...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    if app.config["APP_ENV"] in {"homologation", "production"}:
+        raise RuntimeError(
+            "Ambientes online devem iniciar a aplicação exclusivamente pelo Gunicorn."
+        )
+    app.run(host="127.0.0.1", port=5000, debug=app.config["DEBUG"])

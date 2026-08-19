@@ -1,0 +1,62 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% block title %}Detalhes do Servidor{% endblock %}
+{% block page_title %}Detalhes do servidor{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('fiscalizacao_contratos.servidores_lista', incluir_inativos=1 if not servidor.ativo else None) }}"
+   class="btn btn-outline-secondary">
+    <i class="fas fa-list me-2"></i>Lista de servidores
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card content-card mb-4">
+    <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+        <span><i class="fas fa-user-tie me-2"></i>{{ servidor.nome }}</span>
+        {% if servidor.ativo %}
+            <span class="badge text-bg-success">Ativo</span>
+        {% else %}
+            <span class="badge text-bg-secondary">Inativo</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <dl class="row detail-list mb-0">
+            <dt class="col-sm-4 col-lg-3">Matrícula</dt><dd class="col-sm-8 col-lg-9">{{ servidor.matricula }}</dd>
+            <dt class="col-sm-4 col-lg-3">Cargo</dt><dd class="col-sm-8 col-lg-9">{{ servidor.cargo or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Setor</dt><dd class="col-sm-8 col-lg-9">{{ servidor.setor or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">E-mail</dt><dd class="col-sm-8 col-lg-9">{{ servidor.email or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Telefone</dt><dd class="col-sm-8 col-lg-9">{{ servidor.telefone or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Observações</dt>
+            <dd class="col-sm-8 col-lg-9 text-break" style="white-space: pre-wrap;">{{ servidor.observacoes or '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Criado em</dt>
+            <dd class="col-sm-8 col-lg-9">{{ servidor.criado_em.strftime('%d/%m/%Y %H:%M') if servidor.criado_em else '-' }}</dd>
+            <dt class="col-sm-4 col-lg-3">Atualizado em</dt>
+            <dd class="col-sm-8 col-lg-9">{{ servidor.atualizado_em.strftime('%d/%m/%Y %H:%M') if servidor.atualizado_em else '-' }}</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
+    <a href="{{ url_for('fiscalizacao_contratos.servidores_editar', servidor_id=servidor.id) }}"
+       class="btn btn-primary">
+        <i class="fas fa-pen me-2"></i>Editar
+    </a>
+    {% if servidor.ativo %}
+    <form method="POST" action="{{ url_for('fiscalizacao_contratos.servidores_inativar', servidor_id=servidor.id) }}"
+          onsubmit="return confirm('Inativar este servidor? O cadastro será preservado.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-danger w-100">
+            <i class="fas fa-ban me-2"></i>Inativar
+        </button>
+    </form>
+    {% else %}
+    <form method="POST" action="{{ url_for('fiscalizacao_contratos.servidores_reativar', servidor_id=servidor.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-success w-100">
+            <i class="fas fa-rotate-left me-2"></i>Reativar
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

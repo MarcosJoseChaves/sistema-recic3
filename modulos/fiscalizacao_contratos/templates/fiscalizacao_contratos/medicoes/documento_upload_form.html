@@ -1,0 +1,56 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+{% block title %}Enviar documento comprobatório{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h2 class="mb-1">Enviar documento comprobatório</h2>
+    <p class="text-muted mb-0">Medição {{ medicao.numero_medicao }} — {{ medicao.numero_contrato }}</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.medicoes_detalhe', medicao_id=medicao.id) }}">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+<div class="alert alert-info">
+  O arquivo será armazenado de forma privada no cadastro de documentos do contrato e vinculado automaticamente a esta medição.
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-7">
+        <label class="form-label" for="titulo">Título *</label>
+        <input class="form-control" id="titulo" name="titulo" required maxlength="200" value="{{ documento.titulo|default('') }}">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label" for="categoria">Categoria na medição *</label>
+        <select class="form-select" id="categoria" name="categoria" required>
+          <option value="">Selecione</option>
+          {% for categoria in categorias %}
+          <option value="{{ categoria }}" {% if documento.categoria == categoria %}selected{% endif %}>{{ categoria }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="arquivo">Arquivo *</label>
+        <input class="form-control" id="arquivo" name="arquivo" type="file" required
+               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.odt,.ods">
+        <div class="form-text">Tamanho máximo: {{ limite_mb }} MB.</div>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="descricao">Descrição do documento</label>
+        <textarea class="form-control" id="descricao" name="descricao" rows="2">{{ documento.descricao|default('', true) }}</textarea>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="observacoes">Observações do vínculo com a medição</label>
+        <textarea class="form-control" id="observacoes" name="observacoes" rows="2">{{ documento.observacoes|default('', true) }}</textarea>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer d-flex flex-wrap gap-2">
+    <button class="btn btn-primary" type="submit"><i class="bi bi-cloud-upload"></i> Enviar e vincular</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.medicoes_detalhe', medicao_id=medicao.id) }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

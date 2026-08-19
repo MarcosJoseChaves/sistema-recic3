@@ -1,0 +1,80 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% set editando = modo == 'editar' %}
+{% block title %}{{ 'Editar' if editando else 'Novo' }} Servidor{% endblock %}
+{% block page_title %}{{ 'Editar servidor' if editando else 'Novo servidor' }}{% endblock %}
+
+{% block content %}
+<form method="POST"
+      action="{{ url_for('fiscalizacao_contratos.servidores_editar', servidor_id=servidor.get('id')) if editando else url_for('fiscalizacao_contratos.servidores_novo') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card content-card mb-4">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-id-card me-2"></i>Identificação
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label for="nome" class="form-label required-field">Nome</label>
+                    <input type="text" class="form-control" id="nome" name="nome"
+                           maxlength="255" required value="{{ servidor.get('nome', '') }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="matricula" class="form-label required-field">Matrícula</label>
+                    <input type="text" class="form-control" id="matricula" name="matricula"
+                           maxlength="50" required value="{{ servidor.get('matricula', '') }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="cargo" class="form-label">Cargo</label>
+                    <input type="text" class="form-control" id="cargo" name="cargo"
+                           maxlength="150" value="{{ servidor.get('cargo') or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="setor" class="form-label">Setor</label>
+                    <input type="text" class="form-control" id="setor" name="setor"
+                           maxlength="150" value="{{ servidor.get('setor') or '' }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card content-card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <i class="fas fa-address-book me-2"></i>Contato
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="email" class="form-label">E-mail</label>
+                    <input type="email" class="form-control" id="email" name="email"
+                           maxlength="254" value="{{ servidor.get('email') or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="telefone" class="form-label">Telefone</label>
+                    <input type="text" class="form-control" id="telefone" name="telefone"
+                           maxlength="30" value="{{ servidor.get('telefone') or '' }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card content-card mb-4">
+        <div class="card-header bg-dark text-white">
+            <i class="fas fa-note-sticky me-2"></i>Observações
+        </div>
+        <div class="card-body">
+            <label for="observacoes" class="form-label">Informações adicionais</label>
+            <textarea class="form-control" id="observacoes" name="observacoes"
+                      rows="4">{{ servidor.get('observacoes') or '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2">
+        <a href="{{ url_for('fiscalizacao_contratos.servidores_detalhe', servidor_id=servidor.get('id')) if editando else url_for('fiscalizacao_contratos.servidores_lista') }}"
+           class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-floppy-disk me-2"></i>{{ 'Salvar alterações' if editando else 'Cadastrar servidor' }}
+        </button>
+    </div>
+</form>
+{% endblock %}

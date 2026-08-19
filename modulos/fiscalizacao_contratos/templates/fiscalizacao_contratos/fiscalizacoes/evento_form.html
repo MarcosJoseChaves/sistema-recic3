@@ -1,0 +1,30 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+{% block header_actions %}
+<a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_detalhe',fiscalizacao_id=fiscalizacao.id) }}">Voltar</a>
+{% endblock %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-8">
+  <div class="card content-card">
+    <div class="card-header">Fiscalização de {{ fiscalizacao.data_fiscalizacao|fc_data }}</div>
+    <div class="card-body">
+      <div class="alert {{ 'alert-warning' if acao=='reabrir' else 'alert-danger' }}" role="alert">{{ aviso }}</div>
+      <p><strong>Contrato:</strong> {{ fiscalizacao.numero_contrato }}</p>
+      <p><strong>Objeto verificado:</strong> {{ fiscalizacao.objeto_verificado }}</p>
+      <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label" for="justificativa">Justificativa <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="justificativa" name="justificativa" rows="5" required>{{ justificativa }}</textarea>
+          <div class="form-text">Explique de forma clara o motivo desta ação. O texto ficará no histórico permanente.</div>
+        </div>
+        <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
+          <a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.fiscalizacoes_detalhe',fiscalizacao_id=fiscalizacao.id) }}">Cancelar</a>
+          <button class="btn {{ 'btn-warning' if acao=='reabrir' else 'btn-danger' }}" type="submit">Confirmar {{ acao }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div></div>
+{% endblock %}

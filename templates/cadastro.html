@@ -2,77 +2,15 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Sistema de Cadastros e Transações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <style>
-        /* --- ESTILO GERAL --- */
-        body { padding: 20px; background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
-        
-        /* --- FORM CONTAINERS --- */
-        .form-container { 
-            max-width: 1200px; 
-            background: white; 
-            padding: 30px; 
-            border-radius: 10px; 
-            box-shadow: 0 0 15px rgba(0,0,0,0.1); 
-            margin-top: 20px; 
-            display: none; /* Começa oculto */
-        }
-
-        h2 { color: #2c3e50; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
-        .required-field::after { content: "*"; color: red; margin-left: 5px; }
-        
-        /* --- ESTILO DO DASHBOARD --- */
-        .dashboard-card {
-            transition: transform 0.2s;
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .dashboard-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
-        }
-        .card-header-custom {
-            border-radius: 12px 12px 0 0 !important;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-size: 0.9rem;
-            padding: 15px;
-        }
-        .btn-dashboard {
-            text-align: left;
-            margin-bottom: 8px;
-            border-radius: 8px;
-            padding: 10px 15px;
-            font-weight: 500;
-        }
-        .btn-dashboard i {
-            width: 25px;
-            text-align: center;
-            margin-right: 8px;
-        }
-        .btn-group-dashboard {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 10px;
-        }
-        .btn-group-dashboard .btn {
-            flex: 1;
-        }
-
-        /* --- UTILITÁRIOS --- */
-        .item-row { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #dee2e6; position: relative; }
-        .remover-item { position: absolute; top: 10px; right: 10px; }
-        .valor-monetario { font-weight: bold; color: #2980b9; }
-        .tabela-container { overflow-x: auto; margin-top: 20px; }
-        #tabelaRelatorio th { white-space: nowrap; }
-    </style>
+    <script src="{{ url_for('static', filename='js/cadastro_seguranca.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cadastro.css') }}">
 </head>
 <body>
 
@@ -83,7 +21,10 @@
             </h3>
             <div>
                 <a href="/alterar_senha" class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-key"></i> Alterar Senha</a>
-                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</a>
+                <form method="post" action="{{ url_for('logout') }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sair</button>
+                </form>
             </div>
         </div>
 
@@ -163,6 +104,9 @@
                             <button id="btnAprovacoes" class="btn btn-warning w-100 btn-dashboard position-relative">
                                 <i class="fas fa-check-double"></i> Aprovações Pendentes
                             </button>
+                            <a href="{{ url_for('fiscalizacao_contratos.painel') }}" class="btn btn-outline-warning w-100 btn-dashboard mt-2">
+                                <i class="fas fa-file-signature"></i> Fiscalização de Contratos
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -176,6 +120,7 @@
         <div id="clienteFornecedorForm" class="form-container">
             <h2><i class="fas fa-user-plus"></i> Cadastro de Cliente / Fornecedor</h2>
             <form method="POST" action="/cadastrar" id="cadastroForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="id_cadastro" id="idCadastroHidden">
                 <div class="row">
                     <div class="col-md-6 mb-3">
@@ -263,6 +208,7 @@
         <div id="associadoForm" class="form-container">
             <h2><i class="fas fa-id-card"></i> Ficha de Associado</h2>
             <form method="POST" action="/cadastrar_associado" id="cadastroAssociadoForm" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="id_associado" id="idAssociadoHidden">
                 <div class="row">
                     <div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr" id="uvrSelectAssociado" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div>
@@ -279,6 +225,7 @@
         <div id="contaCorrenteForm" class="form-container">
             <h2><i class="fas fa-landmark"></i> Cadastro de Contas Correntes</h2>
             <form method="POST" action="/cadastrar_conta_corrente" id="cadastroContaCorrenteForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="id_conta" id="idContaHidden">
                 <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_conta" id="uvrSelectConta" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_conta" id="associacaoInputConta" readonly></div></div>
                 <div class="mb-3"><label class="form-label required-field">Banco</label><select class="form-select" name="banco_conta" id="bancoContaSelect" required><option value="">Carregando bancos...</option></select></div>
@@ -291,6 +238,7 @@
         <div id="receitaDespesaForm" class="form-container">
             <h2><i class="fas fa-file-invoice-dollar"></i> Registro de Transação (NF/Recibo)</h2>
             <form method="POST" action="/registrar_transacao_financeira" id="transacaoForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row"><div class="col-md-6 mb-3"><label class="form-label required-field">UVR</label><select class="form-select" name="uvr_transacao" id="uvrSelectTransacao" required><option value="">Selecione...</option><option value="UVR 01">UVR 01</option><option value="UVR 02">UVR 02</option></select></div><div class="col-md-6 mb-3"><label class="form-label">Associação</label><input type="text" class="form-control" name="associacao_transacao" id="associacaoInputTransacao" readonly></div></div>
                 <div class="row"><div class="col-md-4 mb-3"><label class="form-label required-field">Tipo</label><select class="form-select" name="tipo_transacao" id="tipoTransacaoSelect" required><option value="">Selecione...</option><option value="Despesa">Despesa</option><option value="Receita">Receita</option></select></div><div class="col-md-8 mb-3"><label class="form-label required-field">Atividade</label><select class="form-select" name="tipo_atividade_transacao" id="tipoAtividadeTransacaoSelect" required><option value="">Selecione Tipo Primeiro</option></select></div></div>
                 <div class="mb-3 p-3 bg-light rounded border"><label class="form-label required-field" id="labelFornecedorPrestadorCliente">Fornecedor / Cliente</label><select class="form-select" name="fornecedor_prestador_transacao" id="fornecedorPrestadorTransacaoSelect" required><option value="">Selecione...</option></select><input type="hidden" name="nome_fornecedor_prestador_transacao" id="nomeFornecedorPrestadorTransacaoInput"></div>
@@ -372,7 +320,8 @@
                 </div>
             </div>
             <hr><h4>Registrar Movimentação</h4>
-            <form id="formRegistrarFluxoCaixa">
+            <form id="formRegistrarFluxoCaixa" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row mb-3"><div class="col-md-4"><label class="form-label required-field">Tipo</label><select class="form-select" id="tipoMovimentacao" required><option value="">Selecione...</option><option value="Pagamento">Pagamento</option><option value="Recebimento">Recebimento</option></select></div><div class="col-md-8"><label class="form-label required-field">Entidade</label><select class="form-select" id="cadastroCFSelect" required><option value="">Selecione...</option></select></div></div>
                 <div class="card mb-3"><div class="card-header bg-secondary text-white">Documentos em Aberto</div><div class="card-body" id="nfsEmAbertoContainer" style="max-height: 200px; overflow-y: auto;"></div></div>
                 <div class="row mb-3"><div class="col-md-6"><label class="form-label required-field">Conta</label><select class="form-select" id="contaCorrenteSelect" required><option value="">Selecione...</option></select></div><div class="col-md-6"><label class="form-label">Nº Doc.</label><input type="text" class="form-control" name="numero_documento_bancario"></div></div>
@@ -451,6 +400,7 @@
 
                         <div class="tab-pane fade" id="content-novo-patrimonio">
                             <form id="formPatrimonio" action="/cadastrar_patrimonio" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 
                                 <h6 class="text-primary border-bottom pb-2 mb-3">1. Localização e Identificação</h6>
                                 <div class="row mb-3">
@@ -1073,6 +1023,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form action="/editar_movimentacao" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <input type="hidden" name="id" id="editCaixaId">
                     
@@ -1153,9 +1104,9 @@
         </div>
     </div>
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
 // 1. VARIÁVEIS GLOBAIS DE PERMISSÃO
-    const usuarioLogadoUvr = "{{ usuario.uvr_acesso if usuario and usuario.uvr_acesso else '' }}";
+    const usuarioLogadoUvr = {{ (usuario.uvr_acesso if usuario and usuario.uvr_acesso else '') | tojson }};
     const usuarioIsAdmin = "{{ 'true' if usuario and usuario.role == 'admin' else 'false' }}" === 'true';
 
     // 2. LISTA DE BANCOS E FUNÇÃO
@@ -1919,7 +1870,14 @@
             $.get(`/get_contas_correntes?uvr=${uvr}`, function(data) { 
                 select.empty().append('<option value="">Selecione a Conta...</option>');
                 if (data && data.length > 0) {
-                    data.forEach(c => { select.append(`<option value="${c.id}" data-uvr-conta="${c.uvr}">${c.display_name}</option>`); });
+                    data.forEach(c => {
+                        select.append(
+                            $('<option>')
+                                .val(c.id)
+                                .attr('data-uvr-conta', c.uvr)
+                                .text(c.display_name)
+                        );
+                    });
                     select.prop('disabled', false); 
                 } else {
                     select.append('<option value="">Nenhuma conta encontrada para esta UVR</option>');
@@ -1954,11 +1912,13 @@
                 if (data && data.length > 0) {
                     data.forEach(c => {
                         const isRateio = c.is_associado_rateio || false;
-                        select.append(`<option value="${c.id}" 
-                            data-nome="${c.razao_social}" 
-                            data-is-associado-rateio="${isRateio}">
-                            ${c.razao_social}${isRateio ? " (Rateio)" : ""}
-                        </option>`);
+                        select.append(
+                            $('<option>')
+                                .val(c.id)
+                                .attr('data-nome', c.razao_social)
+                                .attr('data-is-associado-rateio', isRateio)
+                                .text(`${c.razao_social}${isRateio ? ' (Rateio)' : ''}`)
+                        );
                     });
                 } else {
                     select.append(`<option value="">Nenhum com pendências encontrado</option>`);
@@ -2011,19 +1971,26 @@
                 container.empty();
                 if (notas && notas.length > 0) {
                     notas.forEach(nf => {
+                        const idNota = idNumericoSeguro(nf.id);
+                        const valorPendente = Number(nf.valor_restante);
+                        if (idNota === null || !Number.isFinite(valorPendente)) return;
                         let dataDocFormatada = new Date(nf.data_documento + 'T00:00:00').toLocaleDateString('pt-BR');
-                        container.append(`
-                            <div class="form-check">
-                                <input class="form-check-input nf-checkbox" type="checkbox" 
-                                    value="${nf.id}" 
-                                    id="fluxo_nf_${nf.id}" 
-                                    data-valor-pendente="${nf.valor_restante}">
-                                <label class="form-check-label" for="fluxo_nf_${nf.id}">
-                                    ${nf.numero_documento || 'Sem doc'} (${dataDocFormatada}) - 
-                                    R$ ${parseFloat(nf.valor_restante).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                                </label>
-                            </div>
-                        `);
+                        const idCampo = `fluxo_nf_${idNota}`;
+                        const linha = $('<div>').addClass('form-check');
+                        $('<input>').attr({
+                            class: 'form-check-input nf-checkbox',
+                            type: 'checkbox',
+                            id: idCampo,
+                            'data-valor-pendente': String(valorPendente)
+                        }).val(idNota).appendTo(linha);
+                        $('<label>').addClass('form-check-label')
+                            .attr('for', idCampo)
+                            .text(
+                                `${nf.numero_documento || 'Sem doc'} (${dataDocFormatada}) - `
+                                + `R$ ${valorPendente.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`
+                            )
+                            .appendTo(linha);
+                        container.append(linha);
                     });
                 } else { container.html('<small class="text-muted">Nenhum documento em aberto encontrado neste período.</small>'); }
                 calcularSaldoOperacaoFluxo(); 
@@ -2100,19 +2067,15 @@
                             atualizarCadastrosComNotasFluxo(); 
                         }
                     } else {
-                        alert("Erro ao registrar Fluxo de Caixa: " + (response.error || "Erro desconhecido. Verifique o console."));
-                        console.error("Erro do backend:", response);
+                        alert("Erro ao registrar Fluxo de Caixa: " + (response.error || "Erro desconhecido."));
                     }
                 },
                 error: function(xhr) {
                     let errorMsg = "Erro ao registrar Fluxo de Caixa.";
                     if (xhr.responseJSON && xhr.responseJSON.error) {
                         errorMsg += " Detalhes: " + xhr.responseJSON.error;
-                    } else if (xhr.statusText) {
-                        errorMsg += " Status: " + xhr.statusText;
                     }
                     alert(errorMsg);
-                    console.error("Erro AJAX:", xhr);
                 }
             });
         });
@@ -2123,8 +2086,8 @@
             $.getJSON('/get_relatorio_uvrs', function(data) {
                 const selects = $('#relUvr, #extratoUvr'); 
                 selects.find('option:not(:first)').remove(); // Limpa opções anteriores, exceto a primeira ("Todas" ou "Selecione")
-                data.forEach(uvr => selects.append(`<option value="${uvr}">${uvr}</option>`));
-            }).fail(() => console.error("Erro ao carregar UVRs para relatórios/extratos."));
+                data.forEach(uvr => selects.append($('<option>').val(uvr).text(uvr)));
+            });
         }
         function loadExtratoUVRs() { loadRelatorioUVRs(); } // Reutiliza a função
 
@@ -2143,11 +2106,11 @@
 
             $.getJSON(`/get_relatorio_tipos_atividade_transacao?tipo_transacao=${tipoTransacao}`, function(data) {
                 if (data && data.length > 0) {
-                    data.forEach(atv => select.append(`<option value="${atv}">${atv}</option>`));
+                    data.forEach(atv => select.append($('<option>').val(atv).text(atv)));
                     select.prop('disabled', false);
                 }
                 loadRelatorioCatalogOptions('grupo', { tipo_transacao: tipoTransacao, tipo_atividade_catalogo: select.val() }); 
-            }).fail(() => console.error("Erro ao carregar Tipos de Atividade da Transação para relatório."));
+            });
         }
         
         function loadRelatorioCatalogOptions(optionType, filters = {}) {
@@ -2178,7 +2141,7 @@
 
             $.getJSON(`/get_relatorio_catalog_options?${queryParams}`, function(data) {
                 if (data && data.length > 0) {
-                    data.forEach(opt => currentSelect.append(`<option value="${opt}">${opt}</option>`));
+                    data.forEach(opt => currentSelect.append($('<option>').val(opt).text(opt)));
                     if(optionType === 'subgrupo') { 
                         currentSelect.append('<option value="(Nenhum)">(Nenhum)</option>'); 
                     }
@@ -2187,7 +2150,7 @@
                      currentSelect.append('<option value="(Nenhum)">(Nenhum)</option>');
                      currentSelect.prop('disabled', false);
                 }
-            }).fail(() => console.error(`Erro ao carregar ${optionType} para relatório.`));
+            });
         }
 
         function loadRelatorioEntidades() {
@@ -2212,7 +2175,12 @@
                 selectNomeEntidade.empty().append(`<option value="">Todos(as) os(as) ${tipoEntidade.toLowerCase()}s</option>`);
                 if (data && data.length > 0) {
                     data.forEach(entidade => {
-                        selectNomeEntidade.append(`<option value="${entidade.id}" data-nome-entidade="${entidade.nome}">${entidade.nome}</option>`);
+                        selectNomeEntidade.append(
+                            $('<option>')
+                                .val(entidade.id)
+                                .attr('data-nome-entidade', entidade.nome)
+                                .text(entidade.nome)
+                        );
                     });
                     selectNomeEntidade.prop('disabled', false);
                 } else {
@@ -2221,7 +2189,6 @@
                 }
             }).fail(function() {
                 selectNomeEntidade.empty().append('<option value="">Erro ao carregar entidades</option>').prop('disabled', true);
-                console.error(`Erro ao carregar entidades do tipo: ${tipoEntidade} com UVR: ${uvr} e Tipo Trans.: ${tipoTransacao}`);
             });
         }
         
@@ -2325,7 +2292,7 @@
                             } else if (key === 'quantidade' && value) {
                                 try { value = parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } catch(e) { /* mantem original */ }
                             }
-                            tbodyHtml += `<td>${value}</td>`;
+                            tbodyHtml += `<td>${escaparHtml(value)}</td>`;
                         });
                         tbodyHtml += '</tr>';
                     });
@@ -2333,17 +2300,24 @@
                     $('#btnBaixarCsv').show();
                     $('#btnBaixarPdfRelatorioFinanceiro').show();
                 },
-                error: function(xhr) { $('#relatorioStatus').hide(); alert(`Erro ao gerar relatório: ${xhr.responseText || 'Erro desconhecido'}`); }
+                error: function(xhr) {
+                    $('#relatorioStatus').hide();
+                    alert(`Erro ao gerar relatório: ${xhr.responseJSON?.error || 'Erro desconhecido'}`);
+                }
             });
         });
 
         function baixarArquivo(url, filters, defaultFilename) {
             fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+                },
                 body: JSON.stringify(filters)
             })
             .then(async resp => {
+                if (tratarSessaoExpirada(resp.status)) return;
                 if (resp.ok) {
                     const blob = await resp.blob();
                     let filename = defaultFilename;
@@ -2369,9 +2343,8 @@
                     alert(errorMsg);
                 }
             })
-            .catch(err => {
-                console.error("Falha na requisição de download:", err);
-                alert("Erro ao baixar arquivo. Verifique o console.");
+            .catch(() => {
+                alert("Erro ao baixar arquivo.");
             });
         }
 
@@ -2439,20 +2412,18 @@
                         let tbodyHtml = '';
                         data.movimentacoes.forEach(mov => {
                             // Proteção de strings para evitar erro no javascript ao clicar
-                            const descSegura = (mov.descricao_simples || mov.historico).replace(/'/g, "\\'");
-
                             tbodyHtml += `<tr>
-                                <td class="text-center">${mov.data}</td>
-                                <td style="white-space: normal;">${mov.historico}</td>
+                                <td class="text-center">${escaparHtml(mov.data)}</td>
+                                <td style="white-space: normal;">${escaparHtml(mov.historico)}</td>
                                 <td class="text-end text-success">${parseFloat(mov.entrada || 0) > 0 ? parseFloat(mov.entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''}</td>
                                 <td class="text-end text-danger">${parseFloat(mov.saida || 0) > 0 ? parseFloat(mov.saida).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''}</td>
                                 <td class="text-end fw-bold">${parseFloat(mov.saldo_parcial || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                                 
                                 <td class="text-center">
-                                    <button class="btn btn-sm btn-info me-1 text-white" onclick="visualizarMovimentacao(${mov.id})" title="Ver Detalhes">
+                                    <button class="btn btn-sm btn-info me-1 text-white" onclick="visualizarMovimentacao(${idNumericoSeguro(mov.id)})" title="Ver Detalhes">
                                         <i class="fas fa-eye"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-danger" onclick="excluirMovimentacao(${mov.id}, '${descSegura}')" title="Excluir/Estornar">
+                                    <button class="btn btn-sm btn-danger" onclick="excluirMovimentacao(${idNumericoSeguro(mov.id)})" title="Excluir/Estornar">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </td>
@@ -2470,7 +2441,6 @@
                     $('#extratoStatus').hide(); 
                     let msg = "Erro desconhecido";
                     if(xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
-                    else if(xhr.responseText) msg = xhr.responseText;
                     alert(`Erro ao gerar extrato: ${msg}`); 
                 }
             });
@@ -2530,12 +2500,12 @@
             data.forEach(item => {
                 tbody.append(`
                     <tr>
-                        <td>${item.data}</td>
-                        <td>${item.solicitante}</td>
-                        <td>${item.nome_atual}</td>
-                        <td class="text-primary fw-bold">${item.nome_novo}</td>
+                        <td>${escaparHtml(item.data)}</td>
+                        <td>${escaparHtml(item.solicitante)}</td>
+                        <td>${escaparHtml(item.nome_atual)}</td>
+                        <td class="text-primary fw-bold">${escaparHtml(item.nome_novo)}</td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesSolicitacao(${item.id})" title="Ver o que mudou">
+                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesSolicitacao(${idNumericoSeguro(item.id)})" title="Ver o que mudou">
                                 <i class="fas fa-eye"></i> Detalhes
                             </button>
                         </td>
@@ -2548,6 +2518,11 @@
     }
 
     function verDetalhesSolicitacao(id) {
+        id = idNumericoSeguro(id);
+        if (id === null) {
+            alert('Não foi possível identificar a solicitação.');
+            return;
+        }
         $('#tabelaComparacaoBody').html('<tr><td colspan="3" class="text-center">Carregando comparação...</td></tr>');
         $('#areaComparacaoFoto').hide();
         
@@ -2559,9 +2534,6 @@
 
         $.getJSON(`/get_detalhes_solicitacao/${id}`, function(data) {
             $('#detalheSolicitante').text(data.usuario);
-            // Debug para ver se a data está chegando
-console.log("Data recebida do servidor:", data.data); 
-
 // Preenche o campo (ou coloca um traço se estiver vazio)
 $('#detalheData').text(data.data || data.data_documento || "--/--/----");
             
@@ -2572,14 +2544,18 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
                 const rowClass = row.mudou ? 'table-warning' : '';
                 const iconChange = row.mudou ? '<i class="fas fa-exclamation-triangle text-warning"></i> ' : '';
                 
-                let valAntigo = row.valor_atual || '<span class="text-muted small">vazio</span>';
-                let valNovo = row.valor_novo || '<span class="text-muted small">vazio</span>';
+                let valAntigo = row.valor_atual
+                    ? (row.html_seguro ? row.valor_atual : escaparHtml(row.valor_atual))
+                    : '<span class="text-muted small">vazio</span>';
+                let valNovo = row.valor_novo
+                    ? (row.html_seguro ? row.valor_novo : escaparHtml(row.valor_novo))
+                    : '<span class="text-muted small">vazio</span>';
 
                 if (row.mudou) valNovo = `<strong>${valNovo}</strong>`;
 
                 tbody.append(`
                     <tr class="${rowClass}">
-                        <td>${iconChange}${row.campo}</td>
+                        <td>${iconChange}${escaparHtml(row.campo)}</td>
                         <td class="text-muted">${valAntigo}</td>
                         <td>${valNovo}</td>
                     </tr>
@@ -2595,9 +2571,6 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
             let msg = "Erro desconhecido ao buscar detalhes.";
             if(xhr.responseJSON && xhr.responseJSON.error) {
                 msg = xhr.responseJSON.error;
-            } else if (xhr.responseText) {
-                msg = xhr.responseText;
-            }
             alert("Erro do Sistema: " + msg);
             var modalEl = document.getElementById('modalDetalhesAprovacao');
             var modalInstance = bootstrap.Modal.getInstance(modalEl);
@@ -2643,12 +2616,12 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
             data.forEach(c => {
                 tbody.append(`
                     <tr>
-                        <td>${c.razao}</td><td>${c.cnpj}</td><td>${c.tipo}</td><td>${c.cidade}</td><td>${c.uvr}</td>
+                        <td>${escaparHtml(c.razao)}</td><td>${escaparHtml(c.cnpj)}</td><td>${escaparHtml(c.tipo)}</td><td>${escaparHtml(c.cidade)}</td><td>${escaparHtml(c.uvr)}</td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white" onclick="visualizarCadastro(${c.id})"><i class="fas fa-eye"></i></button>
-                            <button class="btn btn-sm btn-success" onclick="imprimirFichaCadastro(${c.id})"><i class="fas fa-print"></i></button>
-                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoCadastro(${c.id})"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoCadastro(${c.id}, '${c.razao}')"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-info text-white" onclick="visualizarCadastro(${idNumericoSeguro(c.id)})"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-sm btn-success" onclick="imprimirFichaCadastro(${idNumericoSeguro(c.id)})"><i class="fas fa-print"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoCadastro(${idNumericoSeguro(c.id)})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoCadastro(${idNumericoSeguro(c.id)})"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `);
@@ -2683,16 +2656,16 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
                 // AQUI ESTÁ A MUDANÇA: Adicionamos o botão btn-danger (vermelho) na última coluna
                 tbody.append(`
                     <tr>
-                        <td>${assoc.nome}</td>
-                        <td>${assoc.cpf}</td>
-                        <td><span class="badge ${corStatus}">${assoc.status}</span></td>
-                        <td>${assoc.uvr}</td>
-                        <td>${assoc.data_admissao || '-'}</td>
+                        <td>${escaparHtml(assoc.nome)}</td>
+                        <td>${escaparHtml(assoc.cpf)}</td>
+                        <td><span class="badge ${corStatus}">${escaparHtml(assoc.status)}</span></td>
+                        <td>${escaparHtml(assoc.uvr)}</td>
+                        <td>${escaparHtml(assoc.data_admissao || '-')}</td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white" onclick="visualizarAssociado(${assoc.id})" title="Ver Detalhes"><i class="fas fa-eye"></i></button>
-                            <button class="btn btn-sm btn-success" onclick="imprimirFichaAssociado(${assoc.id})" title="Imprimir Ficha"><i class="fas fa-print"></i></button>
-                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoAssociado(${assoc.id})" title="Editar"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoAssociado(${assoc.id}, '${assoc.nome}')" title="Excluir"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-info text-white" onclick="visualizarAssociado(${idNumericoSeguro(assoc.id)})" title="Ver Detalhes"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-sm btn-success" onclick="imprimirFichaAssociado(${idNumericoSeguro(assoc.id)})" title="Imprimir Ficha"><i class="fas fa-print"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoAssociado(${idNumericoSeguro(assoc.id)})" title="Editar"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoAssociado(${idNumericoSeguro(assoc.id)})" title="Excluir"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `);
@@ -2752,8 +2725,13 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
             }
 
             // Configura os botões do rodapé do modal para funcionarem com este ID
-            $('#btnImprimirNoModal').attr('onclick', `imprimirFichaAssociado(${data.id})`);
-            $('#btnEditarNoModal').attr('onclick', `iniciarEdicaoAssociado(${data.id})`);
+            const associadoId = idNumericoSeguro(data.id);
+            $('#btnImprimirNoModal').off('click').on('click', function() {
+                if (associadoId !== null) imprimirFichaAssociado(associadoId);
+            });
+            $('#btnEditarNoModal').off('click').on('click', function() {
+                if (associadoId !== null) iniciarEdicaoAssociado(associadoId);
+            });
 
             // Abre o modal na tela
             var modal = new bootstrap.Modal(document.getElementById('modalVisualizarAssociado'));
@@ -2853,8 +2831,8 @@ $('#detalheData').text(data.data || data.data_documento || "--/--/----");
         $('#gestaoAssociadosContainer').show();
     }
 
-function solicitarExclusaoAssociado(id, nome) {
-        if (confirm(`Tem certeza que deseja excluir (ou solicitar a exclusão de) o associado: ${nome}?`)) {
+function solicitarExclusaoAssociado(id) {
+        if (confirm('Tem certeza que deseja excluir ou solicitar a exclusão deste associado?')) {
             $.ajax({
                 url: `/excluir_associado/${id}`,
                 type: 'POST',
@@ -2885,8 +2863,13 @@ function solicitarExclusaoAssociado(id, nome) {
             $('#verCadAtiv').text(data.tipo_atividade); $('#verCadTel').text(data.telefone);
             $('#verCadEnd').text(`${data.logradouro}, ${data.numero} - ${data.bairro}, ${data.cidade}/${data.uf}`);
             
-            $('#btnEditarCadNoModal').attr('onclick', `iniciarEdicaoCadastro(${data.id})`);
-            $('#btnImprimirCadNoModal').attr('onclick', `imprimirFichaCadastro(${data.id})`);
+            const cadastroId = idNumericoSeguro(data.id);
+            $('#btnEditarCadNoModal').off('click').on('click', function() {
+                if (cadastroId !== null) iniciarEdicaoCadastro(cadastroId);
+            });
+            $('#btnImprimirCadNoModal').off('click').on('click', function() {
+                if (cadastroId !== null) imprimirFichaCadastro(cadastroId);
+            });
             
             new bootstrap.Modal(document.getElementById('modalVisualizarCadastro')).show();
         });
@@ -2927,8 +2910,8 @@ function solicitarExclusaoAssociado(id, nome) {
     
     function imprimirFichaCadastro(id) { window.open(`/imprimir_ficha_cadastro/${id}`, '_blank'); }
     
-    function solicitarExclusaoCadastro(id, nome) {
-        if (confirm("Tem certeza que deseja excluir (ou solicitar exclusão) o cadastro de: " + nome + "?")) {
+    function solicitarExclusaoCadastro(id) {
+        if (confirm("Tem certeza que deseja excluir ou solicitar a exclusão deste cadastro?")) {
             $.ajax({
                 url: "/excluir_cadastro/" + id,
                 type: 'POST',
@@ -2970,13 +2953,13 @@ function solicitarExclusaoAssociado(id, nome) {
             data.forEach(c => {
                 tbody.append(`
                     <tr>
-                        <td>${c.banco}</td>
-                        <td>Ag: ${c.agencia} | CC: ${c.conta}</td>
-                        <td>${c.descricao || '-'}</td>
-                        <td>${c.uvr}</td>
+                        <td>${escaparHtml(c.banco)}</td>
+                        <td>Ag: ${escaparHtml(c.agencia)} | CC: ${escaparHtml(c.conta)}</td>
+                        <td>${escaparHtml(c.descricao || '-')}</td>
+                        <td>${escaparHtml(c.uvr)}</td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoConta(${c.id})"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="excluirConta(${c.id}, '${c.descricao || c.banco}')"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="iniciarEdicaoConta(${idNumericoSeguro(c.id)})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="excluirConta(${idNumericoSeguro(c.id)})"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `);
@@ -3026,8 +3009,8 @@ function solicitarExclusaoAssociado(id, nome) {
         $('#gestaoContasContainer').show();
     }
 
-    function excluirConta(id, nome) {
-        if (confirm(`ATENÇÃO: Tem certeza que deseja excluir a conta "${nome}"?\n\nIsso só será possível se não houver lançamentos financeiros vinculados a ela.`)) {
+    function excluirConta(id) {
+        if (confirm('ATENÇÃO: deseja excluir esta conta? A operação será bloqueada se houver lançamentos vinculados.')) {
             $.ajax({
                 url: `/excluir_conta_corrente/${id}`,
                 type: 'POST',
@@ -3082,29 +3065,25 @@ function solicitarExclusaoAssociado(id, nome) {
 
                 const corValor = t.tipo === 'Receita' ? 'text-success' : 'text-danger';
 
-                // Escapa aspas simples no nome da origem para não quebrar o HTML do botão excluir
-                const origemSegura = t.origem ? t.origem.replace(/'/g, "\\'") : "";
-                const docSeguro = t.doc ? t.doc.replace(/'/g, "\\'") : "";
-
                 tbody.append(`
                     <tr>
-                        <td>${t.data}</td>
-                        <td>${t.tipo}</td>
+                        <td>${escaparHtml(t.data)}</td>
+                        <td>${escaparHtml(t.tipo)}</td>
                         <td>
-                            ${t.origem} <br>
-                            <small class="text-muted">${t.uvr}</small>
+                            ${escaparHtml(t.origem)} <br>
+                            <small class="text-muted">${escaparHtml(t.uvr)}</small>
                         </td>
-                        <td>${t.doc}</td>
-                        <td class="text-end fw-bold ${corValor}">${t.valor}</td>
-                        <td class="text-center"><span class="badge ${badgeClass}">${t.status}</span></td>
+                        <td>${escaparHtml(t.doc)}</td>
+                        <td class="text-end fw-bold ${corValor}">${escaparHtml(t.valor)}</td>
+                        <td class="text-center"><span class="badge ${badgeClass}">${escaparHtml(t.status)}</span></td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesTransacao(${t.id})" title="Ver Itens">
+                            <button class="btn btn-sm btn-info text-white me-1" onclick="verDetalhesTransacao(${idNumericoSeguro(t.id)})" title="Ver Itens">
                                 <i class="fas fa-list"></i>
                             </button>
-                            <button class="btn btn-sm btn-warning text-white me-1" onclick="iniciarEdicaoTransacao(${t.id})" title="Editar">
+                            <button class="btn btn-sm btn-warning text-white me-1" onclick="iniciarEdicaoTransacao(${idNumericoSeguro(t.id)})" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoTransacao(${t.id}, '${docSeguro} - ${origemSegura}')" title="Excluir">
+                            <button class="btn btn-sm btn-danger" onclick="solicitarExclusaoTransacao(${idNumericoSeguro(t.id)})" title="Excluir">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
@@ -3151,8 +3130,8 @@ function solicitarExclusaoAssociado(id, nome) {
 
                 tbody.append(`
                     <tr>
-                        <td>${item.descricao}</td>
-                        <td class="text-center">${item.unidade}</td>
+                        <td>${escaparHtml(item.descricao)}</td>
+                        <td class="text-center">${escaparHtml(item.unidade)}</td>
                         <td class="text-end">${qtd}</td>
                         <td class="text-end">${unit}</td>
                         <td class="text-end fw-bold">${total}</td>
@@ -3240,7 +3219,7 @@ function solicitarExclusaoAssociado(id, nome) {
                 if (data && data.length > 0) {
                     data.forEach(sub => {
                         // AQUI ESTÁ O TRUQUE: Usamos sub.id no value, e sub.nome no texto
-                        selectSub.append(`<option value="${sub.id}">${sub.nome}</option>`);
+                        selectSub.append($('<option>').val(sub.id).text(sub.nome));
                     });
                     selectSub.prop('disabled', false);
                 } else {
@@ -3251,7 +3230,6 @@ function solicitarExclusaoAssociado(id, nome) {
                 carregarTabelaProdutos(); // Atualiza a tabela de produtos
             }).fail(function() {
                 selectSub.empty().append('<option value="">Erro ao carregar</option>');
-                console.error("Falha ao carregar subgrupos para o grupo:", grupo);
             });
         });
 
@@ -3287,16 +3265,18 @@ function solicitarExclusaoAssociado(id, nome) {
                 let badge = p.tipo === 'Receita' 
                     ? '<span class="badge bg-success">Receita</span>' 
                     : (p.tipo === 'Despesa' ? '<span class="badge bg-danger">Despesa</span>' : '<span class="badge bg-secondary">-</span>');
+                const itemCodificado = encodeURIComponent(String(p.item || '')).replace(/'/g, '%27');
+                const grupoCodificado = encodeURIComponent(String(p.grupo || '')).replace(/'/g, '%27');
 
                 tbody.append(`
                     <tr>
-                        <td class="fw-bold">${p.item}</td>
+                        <td class="fw-bold">${escaparHtml(p.item)}</td>
                         <td class="text-center">${badge}</td>
-                        <td>${p.subgrupo_nome || '-'}</td>
-                        <td><small>${p.grupo}</small></td>
+                        <td>${escaparHtml(p.subgrupo_nome || '-')}</td>
+                        <td><small>${escaparHtml(p.grupo)}</small></td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-warning text-white" onclick="editarProduto(${p.id}, '${p.item}', ${p.id_subgrupo}, '${p.grupo}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="excluirProduto(${p.id})"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-warning text-white" onclick="editarProduto(${idNumericoSeguro(p.id)}, decodeURIComponent('${itemCodificado}'), ${idNumericoSeguro(p.id_subgrupo)}, decodeURIComponent('${grupoCodificado}'))"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="excluirProduto(${idNumericoSeguro(p.id)})"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `);
@@ -3335,12 +3315,13 @@ function solicitarExclusaoAssociado(id, nome) {
             if(data.length === 0) lista.html('<li class="list-group-item text-muted">Nenhum subgrupo cadastrado.</li>');
             
             data.forEach(sub => {
+                const nomeCodificado = encodeURIComponent(String(sub.nome || '')).replace(/'/g, '%27');
                 lista.append(`
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        ${sub.nome}
+                        ${escaparHtml(sub.nome)}
                         <div>
-                            <button class="btn btn-sm btn-outline-warning me-1" onclick="prepararEdicaoSubgrupo(${sub.id}, '${sub.nome}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="excluirSubgrupo(${sub.id})"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-outline-warning me-1" onclick="prepararEdicaoSubgrupo(${idNumericoSeguro(sub.id)}, decodeURIComponent('${nomeCodificado}'))"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="excluirSubgrupo(${idNumericoSeguro(sub.id)})"><i class="fas fa-trash"></i></button>
                         </div>
                     </li>
                 `);
@@ -3419,7 +3400,9 @@ function solicitarExclusaoAssociado(id, nome) {
             data.forEach(sub => {
                 // --- CORREÇÃO AQUI ---
                 // Usa 'nome' (novo padrão) OU 'nome_subgrupo' (caso venha legado)
-                selectSub.append(`<option value="${sub.id}">${sub.nome || sub.nome_subgrupo}</option>`);
+                selectSub.append(
+                    $('<option>').val(sub.id).text(sub.nome || sub.nome_subgrupo)
+                );
             });
             if(subgrupoSelecionadoId) selectSub.val(subgrupoSelecionadoId);
         });
@@ -3743,7 +3726,9 @@ function solicitarExclusaoAssociado(id, nome) {
                         // 1. Grupo
                         const selGrupo = lastRow.find('.grupo-select');
                         if (item.grupo) {
-                            selGrupo.empty().append(`<option value="${item.grupo}" selected>${item.grupo}</option>`);
+                            selGrupo.empty().append(
+                                $('<option>').val(item.grupo).text(item.grupo).prop('selected', true)
+                            );
                         } else {
                             selGrupo.empty().append(`<option value="" selected>Original</option>`);
                         }
@@ -3751,14 +3736,18 @@ function solicitarExclusaoAssociado(id, nome) {
                         // 2. Subgrupo
                         const selSub = lastRow.find('.subgrupo-select');
                         if (item.subgrupo) {
-                            selSub.empty().append(`<option value="${item.subgrupo}" selected>${item.subgrupo}</option>`).prop('disabled', false);
+                            selSub.empty().append(
+                                $('<option>').val(item.subgrupo).text(item.subgrupo).prop('selected', true)
+                            ).prop('disabled', false);
                         } else {
                             selSub.empty().append('<option value="" selected>(Nenhum)</option>').prop('disabled', false);
                         }
 
                         // 3. Item (Descrição)
                         const selDesc = lastRow.find('.item-select');
-                        selDesc.empty().append(`<option value="${item.descricao}" selected>${item.descricao}</option>`).prop('disabled', false);
+                        selDesc.empty().append(
+                            $('<option>').val(item.descricao).text(item.descricao).prop('selected', true)
+                        ).prop('disabled', false);
                         
                         // 4. Unidade e Quantidade
                         lastRow.find('select[name="produto_servico_unidade[]"]').val(item.unidade);
@@ -3820,9 +3809,9 @@ function solicitarExclusaoAssociado(id, nome) {
                     
                     tbody.append(`
                         <tr>
-                            <td>${item.descricao}</td>
-                            <td class="text-center">${item.unidade}</td>
-                            <td class="text-center">${item.quantidade}</td>
+                            <td>${escaparHtml(item.descricao)}</td>
+                            <td class="text-center">${escaparHtml(item.unidade)}</td>
+                            <td class="text-center">${escaparHtml(item.quantidade)}</td>
                             <td class="text-end">R$ ${vlrUnit}</td>
                             <td class="text-end fw-bold">R$ ${vlrTotal}</td>
                         </tr>
@@ -3833,7 +3822,10 @@ function solicitarExclusaoAssociado(id, nome) {
             }
 
             // Configura o botão de "Editar" para abrir o formulário principal com este ID
-            $('#btnEditarNoModalTransacao').attr('onclick', `iniciarEdicaoTransacao(${data.id})`);
+            const transacaoId = idNumericoSeguro(data.id);
+            $('#btnEditarNoModalTransacao').off('click').on('click', function() {
+                if (transacaoId !== null) iniciarEdicaoTransacao(transacaoId);
+            });
 
             // Abre o modal
             new bootstrap.Modal(document.getElementById('modalDetalhesTransacao')).show();
@@ -3853,8 +3845,8 @@ function solicitarExclusaoAssociado(id, nome) {
         mostrarFormulario('gestaoTransacoesContainer');
     }
 
-    function solicitarExclusaoTransacao(id, docInfo) {
-        if (confirm(`Tem certeza que deseja excluir a transação: ${docInfo}?\n\nCUIDADO: Se houver pagamentos vinculados, a exclusão será bloqueada.`)) {
+    function solicitarExclusaoTransacao(id) {
+        if (confirm('Tem certeza que deseja excluir esta transação? A operação será bloqueada se houver pagamentos vinculados.')) {
             $.ajax({
                 url: `/excluir_transacao/${id}`,
                 type: 'POST',
@@ -3899,8 +3891,8 @@ function visualizarMovimentacao(id) {
         });
     }
 
-    function excluirMovimentacao(id, desc) {
-        if(confirm(`ATENÇÃO: Deseja realmente excluir/estornar este lançamento?\n\n"${desc}"\n\nSe ele estiver vinculado a uma Nota Fiscal, o status da nota voltará para "Aberto".`)) {
+    function excluirMovimentacao(id) {
+        if(confirm('ATENÇÃO: deseja realmente excluir/estornar este lançamento? Se houver nota fiscal vinculada, o status será recalculado.')) {
             $.ajax({
                 url: `/excluir_movimentacao/${id}`,
                 type: 'POST',
@@ -3916,7 +3908,6 @@ function visualizarMovimentacao(id) {
                 error: function(xhr) {
                     let msg = "Erro ao excluir.";
                     if (xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
-                    else if (xhr.responseText) msg = xhr.responseText;
                     alert(msg);
                 }
             });
@@ -3968,7 +3959,7 @@ function visualizarMovimentacao(id) {
             selects.empty().append('<option value="">Selecione...</option>');
             if (data && data.length > 0) {
                 data.forEach(assoc => {
-                    selects.append(`<option value="${assoc.nome}">${assoc.nome}</option>`);
+                    selects.append($('<option>').val(assoc.nome).text(assoc.nome));
                 });
             } else {
                 selects.append('<option value="">Nenhum associado ativo encontrado nesta UVR.</option>');
@@ -4011,20 +4002,20 @@ function visualizarMovimentacao(id) {
                 
                 tbody.append(`
                     <tr>
-                        <td><strong>${item.descricao}</strong><br><small class="text-muted">ID: ${item.id}</small></td>
-                        <td>${item.categoria}<br><small>${item.tipo}</small></td>
-                        <td>${item.placa}</td>
-                        <td>${item.medidor} (${item.controle_por})</td>
-                        <td>${item.responsavel}</td>
-                        <td><span class="badge bg-${item.status === 'Ativo' ? 'success' : 'secondary'}">${item.status}</span></td>
+                        <td><strong>${escaparHtml(item.descricao)}</strong><br><small class="text-muted">ID: ${idNumericoSeguro(item.id)}</small></td>
+                        <td>${escaparHtml(item.categoria)}<br><small>${escaparHtml(item.tipo)}</small></td>
+                        <td>${escaparHtml(item.placa)}</td>
+                        <td>${escaparHtml(item.medidor)} (${escaparHtml(item.controle_por)})</td>
+                        <td>${escaparHtml(item.responsavel)}</td>
+                        <td><span class="badge bg-${item.status === 'Ativo' ? 'success' : 'secondary'}">${escaparHtml(item.status)}</span></td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-info text-white me-1" onclick="visualizarPatrimonio(${item.id})" title="Ver Detalhes">
+                            <button class="btn btn-sm btn-info text-white me-1" onclick="visualizarPatrimonio(${idNumericoSeguro(item.id)})" title="Ver Detalhes">
                                 <i class="fas fa-eye"></i>
                             </button>
-                            <button class="btn btn-sm btn-warning me-1" onclick="iniciarEdicaoPatrimonio(${item.id})" title="Editar">
+                            <button class="btn btn-sm btn-warning me-1" onclick="iniciarEdicaoPatrimonio(${idNumericoSeguro(item.id)})" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn btn-sm btn-danger" onclick="excluirPatrimonio(${item.id}, '${item.descricao}')" title="${tituloExcluir}">
+                            <button class="btn btn-sm btn-danger" onclick="excluirPatrimonio(${idNumericoSeguro(item.id)})" title="${tituloExcluir}">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
@@ -4071,7 +4062,10 @@ function visualizarMovimentacao(id) {
             $('#viewPatrimonioLocal').text(`${data.setor_uso || ''} - ${data.local_instalacao || ''}`);
             $('#viewPatrimonioObs').text(data.observacoes_gerais || 'Nenhuma observação registrada.');
 
-            $('#btnEditarPatrimonioModal').attr('onclick', `iniciarEdicaoPatrimonio(${data.id})`);
+            const patrimonioId = idNumericoSeguro(data.id);
+            $('#btnEditarPatrimonioModal').off('click').on('click', function() {
+                if (patrimonioId !== null) iniciarEdicaoPatrimonio(patrimonioId);
+            });
             new bootstrap.Modal(document.getElementById('modalVisualizarPatrimonio')).show();
         });
     }
@@ -4199,10 +4193,10 @@ function visualizarMovimentacao(id) {
     }
 
     // 6. Excluir (ou Solicitar Exclusão)
-    function excluirPatrimonio(id, desc) {
+    function excluirPatrimonio(id) {
         const msg = usuarioIsAdmin ? 
-            `Tem certeza que deseja excluir o bem: ${desc}?\nEssa ação não pode ser desfeita.` : 
-            `Deseja solicitar a exclusão do bem: ${desc}?\nO administrador precisará aprovar.`;
+            'Tem certeza que deseja excluir este bem? Essa ação não pode ser desfeita.' :
+            'Deseja solicitar a exclusão deste bem? O administrador precisará aprovar.';
 
         if(confirm(msg)) {
             $.post(`/excluir_patrimonio/${id}`, function(res) {

@@ -1,0 +1,16 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+{% block title %}{{ 'Nova' if modo == 'nova' else 'Editar' }} medição{% endblock %}
+{% block content %}
+<h2><i class="fas fa-ruler-combined me-2"></i>{{ 'Nova' if modo == 'nova' else 'Editar' }} medição</h2>
+<form method="post" class="card content-card">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body"><div class="row g-3">
+  <div class="col-md-6"><label class="form-label" for="contrato_id">Contrato *</label><select class="form-select" id="contrato_id" name="contrato_id" required><option value="">Selecione</option>{% for c in contratos %}<option value="{{ c.id }}" {% if medicao.contrato_id == c.id %}selected{% endif %}>{{ c.numero_contrato }} — {{ c.empresa_nome }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><label class="form-label" for="numero_medicao">Número *</label><input class="form-control" type="number" min="1" id="numero_medicao" name="numero_medicao" value="{{ medicao.numero_medicao|default('') }}" required></div>
+  <div class="col-md-3"><label class="form-label" for="competencia">Competência *</label><input class="form-control" type="month" id="competencia" name="competencia" value="{{ medicao.competencia.strftime('%Y-%m') if medicao.competencia else '' }}" required></div>
+  <div class="col-md-3"><label class="form-label" for="periodo_inicio">Início *</label><input class="form-control" type="date" id="periodo_inicio" name="periodo_inicio" value="{{ medicao.periodo_inicio.isoformat() if medicao.periodo_inicio else '' }}" required></div>
+  <div class="col-md-3"><label class="form-label" for="periodo_fim">Fim *</label><input class="form-control" type="date" id="periodo_fim" name="periodo_fim" value="{{ medicao.periodo_fim.isoformat() if medicao.periodo_fim else '' }}" required></div>
+  <div class="col-md-6"><label class="form-label" for="servidor_fiscal_id">Fiscal responsável *</label><select class="form-select" id="servidor_fiscal_id" name="servidor_fiscal_id" required><option value="">Selecione</option>{% for s in servidores %}<option value="{{ s.id }}" {% if medicao.servidor_fiscal_id == s.id %}selected{% endif %}>{{ s.nome }} — {{ s.matricula }}</option>{% endfor %}</select></div>
+  <div class="col-md-4"><label class="form-label" for="data_apresentacao">Data de apresentação</label><input class="form-control" type="date" id="data_apresentacao" name="data_apresentacao" value="{{ medicao.data_apresentacao.isoformat() if medicao.data_apresentacao else '' }}"></div>
+  <div class="col-12"><label class="form-label" for="observacoes">Observações</label><textarea class="form-control" id="observacoes" name="observacoes" rows="4">{{ medicao.observacoes|default('', true) }}</textarea></div>
+</div></div><div class="card-footer d-flex gap-2"><button class="btn btn-primary"><i class="fas fa-save me-1"></i>Salvar</button><a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.medicoes_lista') }}">Cancelar</a></div></form>
+{% endblock %}

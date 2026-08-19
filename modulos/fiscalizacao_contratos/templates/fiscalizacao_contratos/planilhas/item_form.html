@@ -1,0 +1,19 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+{% block title %}{{ 'Editar' if modo == 'editar' else 'Novo' }} item{% endblock %}
+{% block page_title %}{{ 'Editar' if modo == 'editar' else 'Novo' }} item da planilha{% endblock %}
+{% block content %}
+<div class="alert alert-light border"><strong>{{ planilha.nome }}</strong> — versão {{ planilha.versao }} do contrato {{ planilha.numero_contrato }}</div>
+<div class="card content-card"><div class="card-body"><form method="post" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="col-md-2"><label class="form-label" for="ordem">Ordem *</label><input class="form-control" type="number" min="1" id="ordem" name="ordem" required value="{{ item.ordem or 1 }}"></div>
+<div class="col-md-5"><label class="form-label" for="grupo">Grupo</label><input class="form-control" id="grupo" name="grupo" maxlength="150" value="{{ item.grupo or '' }}" placeholder="Ex.: Mão de obra"></div>
+<div class="col-md-5"><label class="form-label" for="codigo_item">Código</label><input class="form-control" id="codigo_item" name="codigo_item" maxlength="100" value="{{ item.codigo_item or '' }}"></div>
+<div class="col-md-9"><label class="form-label" for="descricao">Descrição *</label><input class="form-control" id="descricao" name="descricao" required value="{{ item.descricao or '' }}"></div>
+<div class="col-md-3"><label class="form-label" for="unidade">Unidade *</label><input class="form-control" id="unidade" name="unidade" maxlength="50" required value="{{ item.unidade or '' }}" placeholder="Ex.: posto, mês, unidade"></div>
+<div class="col-md-4"><label class="form-label" for="quantidade">Quantidade *</label><input class="form-control" inputmode="decimal" id="quantidade" name="quantidade" required value="{{ item.quantidade|default('')|fc_decimal }}" placeholder="1.250,500000"></div>
+<div class="col-md-4"><label class="form-label" for="valor_unitario">Valor unitário *</label><input class="form-control" inputmode="decimal" id="valor_unitario" name="valor_unitario" required value="{{ item.valor_unitario|default('')|fc_decimal }}" placeholder="R$ 2.345,6789"></div>
+<div class="col-md-4"><label class="form-label" for="fator_multiplicador">Fator multiplicador *</label><input class="form-control" inputmode="decimal" id="fator_multiplicador" name="fator_multiplicador" required value="{{ item.fator_multiplicador|default('')|fc_decimal }}" placeholder="12 ou 1,5"><div class="form-text">Pode representar meses, ocorrências ou parcelas.</div></div>
+<div class="col-12"><label class="form-label" for="observacoes">Observações</label><textarea class="form-control" id="observacoes" name="observacoes" rows="2">{{ item.observacoes or '' }}</textarea></div>
+<div class="col-12 d-flex flex-column flex-sm-row justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{{ url_for('fiscalizacao_contratos.planilhas_detalhe', planilha_id=planilha.id) }}">Cancelar</a><button class="btn btn-primary"><i class="fas fa-save me-2"></i>Salvar item</button></div>
+</form></div></div>
+{% endblock %}

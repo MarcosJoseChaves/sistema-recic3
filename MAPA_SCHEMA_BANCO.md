@@ -1,0 +1,1367 @@
+# Mapa do schema do banco
+
+## Escopo e método
+
+Inventário da Etapa H2C.1, realizado em 29/07/2026 somente pelos arquivos
+versionados do `sistema-recic3`. Não foi usada a `DATABASE_URL`, não houve
+conexão PostgreSQL, execução de SQL, migration ou criação de banco.
+
+Atualização H2C.1B: a exportação externa e auditada do schema atual foi lida
+estaticamente. Ela foi validada pelo SHA-256
+`e2a9237b123aae8cab94e94055c9e31061b00f341536678b604f43f684c228cc`.
+O SQL não foi executado nem copiado para o Git. O relatório completo está em
+`RELATORIO_COMPARACAO_SCHEMA_ATUAL.md`.
+
+Ordem de confiança das evidências:
+
+1. migrations SQL numeradas;
+2. DDL de `criar_tabelas_se_nao_existir()` no `app.py`;
+3. SQL usado pelas rotas e serviços;
+4. scripts administrativos legados;
+5. testes e cursores simulados, apenas como evidência complementar.
+
+Legenda: `NN` = `NOT NULL`; `?` = aceita nulo; `PK` = chave primária; `FK` =
+chave estrangeira; `UQ` = único; `DEF` = default.
+
+## Resultado geral
+
+| Medida | Resultado |
+|---|---:|
+| Migrations SQL numeradas | 11 |
+| Tabelas criadas pelas migrations numeradas | 23 |
+| Colunas definidas pelas migrations numeradas | 351 |
+| Tabelas legadas definidas no `app.py` | 12 |
+| Tabelas usadas sem criação completa no repositório | 2 |
+| Total de tabelas de aplicação identificadas | 37 |
+| Declarações de FK nas migrations numeradas | 84 |
+| FKs legadas distintas no `app.py` | 7 |
+| Relacionamentos comprovados no total | 91 |
+| Declarações `CREATE INDEX` nas migrations | 70 |
+| Nomes distintos de índices explícitos | 69 |
+| Restrições `CHECK` nas migrations | 103 |
+| Colunas com definição não determinada | 41 |
+
+O schema atual acrescenta a seguinte fotografia física:
+
+| Medida | Schema atual |
+|---|---:|
+| Tabelas | 64 |
+| Sequências | 62 |
+| PKs | 63 |
+| UNIQUE constraints | 32 |
+| Índices normais / UNIQUE explícitos | 51 / 22 |
+| FKs | 113 |
+| CHECKs | 103 |
+| Funções, triggers, views, tipos e extensões | 0 |
+
+As 41 lacunas são as 37 colunas conhecidas pelo uso de `patrimonio`, duas de
+`grupos_atividade` e `id_grupo` pressuposta em `subgrupos` e
+`produtos_servicos`. Nomes históricos alternativos não foram contados.
+
+Essa contagem de lacunas descreve apenas o que faltava no Git durante H2C.1.
+Na H2C.1B, o dump resolveu a estrutura física de `patrimonio` e
+`grupos_atividade` e comprovou que as duas colunas `id_grupo` não existem no
+banco atual.
+
+Critérios de contagem:
+
+- coluna: cada definição de coluna dentro das 23 instruções `CREATE TABLE`;
+- FK/relacionamento: cada constraint que contém uma cláusula `REFERENCES`;
+  uma FK composta conta uma vez;
+- legado: a mesma FK repetida num `CREATE` e num `ALTER` conta uma vez;
+- índice: cada comando `CREATE INDEX`/`CREATE UNIQUE INDEX`, além da contagem
+  separada de nomes distintos;
+- check: cada ocorrência de `CHECK (`; checks na mesma linha contam
+  separadamente;
+- lacuna: coluna mencionada pelo código sem definição PostgreSQL completa.
+
+## Matriz das 37 tabelas
+
+| Tabela | Uso SQL | Finalidade | Origem do DDL | Situação |
+|---|---|---|---|---|
+| `cadastros` | `app.py` | clientes/fornecedores | `app.py` | completo + `associacao` incremental |
+| `associados` | `app.py` | associados | `app.py` | completo + `foto_base64` incremental |
+| `transacoes_financeiras` | `app.py` | documentos financeiros | `app.py` | completo + dois campos incrementais |
+| `itens_transacao` | `app.py` | itens financeiros | `app.py` | completo |
+| `subgrupos` | `app.py` e scripts | catálogo | `app.py`, `migracao_inteligente.py` | DDL conflitante/parcial |
+| `produtos_servicos` | `app.py` e scripts | catálogo | `app.py` | completo, mas `id_grupo` é pressuposta |
+| `contas_correntes` | `app.py` | contas por UVR | `app.py` | completo + `associacao` incremental |
+| `fluxo_caixa` | `app.py` | movimentações | `app.py` | completo + campos incrementais |
+| `fluxo_caixa_transacoes_link` | `app.py` | distribuição de pagamentos | `app.py` | completo |
+| `denuncias` | `app.py` | denúncias legadas | `app.py` | completo |
+| `usuarios` | `app.py` e scripts | login/auditoria | `app.py`, `criar_admin.py` | completo |
+| `solicitacoes_alteracao` | `app.py` | aprovação de alterações | `app.py`, `criar_tabela_solicitacoes.py` | schema confirma versão A do `app.py` |
+| `grupos_atividade` | scripts legados | catálogo de grupos | schema atual | DDL físico comprovado; relação pendente |
+| `patrimonio` | `app.py` | patrimônio legado | schema atual | 38 colunas comprovadas |
+| `fc_empresas` | módulo fiscal | contratadas | migration 001 | completo |
+| `fc_servidores` | módulo fiscal | responsáveis | migration 002 | completo |
+| `fc_contratos` | módulo fiscal | contratos | migration 003 | completo |
+| `fc_contrato_responsaveis` | módulo fiscal | histórico de responsáveis | migration 003 | completo |
+| `fc_aditivos` | módulo fiscal | aditivos | migration 004 | completo |
+| `fc_documentos` | módulo fiscal | documentos privados | migration 005 | completo |
+| `fc_planilhas_orcamentarias` | módulo fiscal | versões de planilha | migration 006 | completo |
+| `fc_planilha_itens` | módulo fiscal | itens orçamentários | migration 006 | completo |
+| `fc_ativos_contratuais` | módulo fiscal | ativos contratuais | migration 007 | completo |
+| `fc_ativo_vinculos` | módulo fiscal | histórico de vínculos | migration 007 | completo |
+| `fc_fiscalizacoes` | módulo fiscal | fiscalizações | migration 008 | completo |
+| `fc_ocorrencias` | módulo fiscal | ocorrências | migration 008 | completo |
+| `fc_ocorrencia_acompanhamentos` | módulo fiscal | histórico da ocorrência | migration 008 | completo |
+| `fc_fiscalizacao_eventos` | módulo fiscal | eventos da fiscalização | migration 009 | completo |
+| `fc_medicoes` | módulo fiscal | versões de medição | migration 010 | completo |
+| `fc_medicao_itens` | módulo fiscal | itens medidos | migration 010 | completo |
+| `fc_medicao_ajustes` | módulo fiscal | acréscimos/descontos/glosas | migration 010 | completo |
+| `fc_medicao_documentos` | módulo fiscal | documentos da medição | migration 010 | completo |
+| `fc_medicao_eventos` | módulo fiscal | eventos da medição | migration 010 | completo |
+| `fc_atestes` | módulo fiscal | ateste/encaminhamento | migration 011 | completo |
+| `fc_ateste_notas_fiscais` | módulo fiscal | notas fiscais | migration 011 | completo |
+| `fc_ateste_documentos` | módulo fiscal | documentos do ateste | migration 011 | completo |
+| `fc_ateste_eventos` | módulo fiscal | eventos do ateste | migration 011 | completo |
+
+Rastreabilidade do uso do módulo: `empresas_service.py`,
+`servidores_service.py`, `contratos_service.py`, `aditivos_service.py`,
+`documentos_service.py`, `planilhas_service.py`, `ativos_service.py`,
+`fiscalizacoes_service.py`, `ocorrencias_service.py`, `medicoes_service.py` e
+`atestes_service.py`, todos em
+`modulos/fiscalizacao_contratos/services/`. Os testes `test_fiscalizacao_*`
+confirmam expectativas e fluxos com mocks, mas não são tratados como DDL real.
+
+## Migrations numeradas
+
+Todas ficam em `modulos/fiscalizacao_contratos/migrations/`, usam `BEGIN` e
+`COMMIT`, não têm rollback reverso e não inserem dados.
+
+| Nº | Arquivo | Tabelas | Índices | CHECKs | FKs | ALTER/INSERT | Dependências |
+|---:|---|---:|---:|---:|---:|---:|---|
+| 001 | `001_criar_fc_empresas.sql` | 1 | 1 | 3 | 2 | 0/0 | `usuarios` |
+| 002 | `002_criar_fc_servidores.sql` | 1 | 1 | 2 | 2 | 0/0 | `usuarios` |
+| 003 | `003_criar_fc_contratos.sql` | 2 | 5 | 8 | 7 | 0/0 | 001, 002, `usuarios` |
+| 004 | `004_criar_fc_aditivos.sql` | 1 | 3 | 5 | 3 | 0/0 | 003, `usuarios` |
+| 005 | `005_criar_fc_documentos.sql` | 1 | 5 | 6 | 4 | 0/0 | 003, 004, `usuarios` |
+| 006 | `006_criar_fc_planilhas_orcamentarias.sql` | 2 | 8 | 11 | 7 | 0/0 | 003, 004, `usuarios` |
+| 007 | `007_criar_fc_ativos_contratuais.sql` | 2 | 9 | 10 | 7 | 0/0 | 001, 003, `usuarios` |
+| 008 | `008_criar_fc_fiscalizacoes_ocorrencias.sql` | 3 | 10 | 17 | 12 | 0/0 | 002, 003, 007, `usuarios` |
+| 009 | `009_criar_fc_fiscalizacao_eventos.sql` | 1 | 1 | 5 | 2 | 0/0 | 008, `usuarios` |
+| 010 | `010_criar_fc_medicoes.sql` | 5 | 14 | 23 | 22 | 0/0 | 002, 003, 005, 006, 008, `usuarios` |
+| 011 | `011_criar_fc_atestes.sql` | 4 | 13 | 13 | 16 | 0/0 | 002, 005, 010, `usuarios` |
+
+Todas usam `IF NOT EXISTS`. Isso permite repetição parcial, mas não é
+idempotência confiável: uma tabela existente e divergente é silenciosamente
+aceita.
+
+## DDL e executores legados
+
+| Arquivo | Efeito | Execução e risco |
+|---|---|---|
+| `app.py` | define 12 tabelas e alterações incrementais | funções não chamadas no import/startup atual |
+| `executar_migracao_produtos.py` | chama migração de subgrupos do `app.py` | manual, com confirmação literal |
+| `criar_admin.py` | cria `usuarios`; insere/atualiza admin | configuração histórica sensível; excluir da baseline |
+| `criar_tabela_solicitacoes.py` | cria outra versão de `solicitacoes_alteracao` | diverge do `app.py` e tem fallback local antigo |
+| `criar_coluna_foto.py` | adiciona `associados.foto_base64` | manual |
+| `migracao_inteligente.py` | cria subgrupos, adiciona vínculo e migra dados | configuração histórica sensível |
+| `fix_nomes_colunas.py` | renomeia colunas antigas | manual |
+| `fix_fluxo.py` | adiciona `fluxo_caixa.associacao` | manual |
+| `force_fix_academia.py` | remove colunas de `fluxo_caixa` | destrutivo; não usar na baseline |
+| `atualizar_padrao_v2.py` | insere/atualiza catálogo | carga de dados |
+| `importar_csv_nuvem.py` | insere grupos/subgrupos e atualiza produtos | pressupõe DDL ausente |
+| `migrar_dados.py` | copia dados e reajusta sequências | não é criação de schema |
+| `criar_usuario_uvr*.py` | insere/atualiza usuários | identidades e credenciais históricas |
+
+Não existe executor das migrations 001–011, ledger, ordem formal executável ou
+checksum. O `Procfile` inicia somente Gunicorn. Importar `app` e iniciar
+Gunicorn não executam migration.
+
+Foi localizada configuração histórica sensível em script legado; o arquivo não
+deve integrar a baseline e a credencial deverá ser rotacionada na etapa
+correspondente. Valores, usuários, hosts e URLs não são reproduzidos neste
+documento.
+
+## Schema legado comprovado
+
+Tipos e regras abaixo vêm do DDL do `app.py`, inclusive os `ALTER` internos.
+
+### `cadastros`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; uvr VARCHAR(10) NN; associacao VARCHAR(50)?;
+data_hora_cadastro TIMESTAMP NN; razao_social VARCHAR(255) NN;
+cnpj VARCHAR(14) NN; cep VARCHAR(8) NN; logradouro VARCHAR(255)?;
+numero VARCHAR(20)?; bairro VARCHAR(100)?; cidade VARCHAR(100)?;
+uf VARCHAR(2)?; telefone VARCHAR(20)?; tipo_atividade VARCHAR(255) NN;
+tipo_cadastro VARCHAR(50) NN.
+```
+
+UQ `uq_cadastros_cnpj_tipo_uvr(cnpj, tipo_cadastro, uvr)`.
+
+### `associados`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; numero VARCHAR(20) NN; uvr VARCHAR(10) NN;
+associacao VARCHAR(50) NN; nome VARCHAR(255) NN; cpf VARCHAR(11) NN UQ;
+rg VARCHAR(20) NN; data_nascimento DATE NN; data_admissao DATE NN;
+status VARCHAR(20) NN; cep VARCHAR(8) NN; logradouro VARCHAR(255)?;
+endereco_numero VARCHAR(20)?; bairro VARCHAR(100)?; cidade VARCHAR(100)?;
+uf VARCHAR(2)?; telefone VARCHAR(20) NN; data_hora_cadastro TIMESTAMP NN;
+foto_base64 TEXT?.
+```
+
+O schema atual acrescenta 12 colunas opcionais não declaradas nesse DDL:
+`funcao`, datas/motivos/observações de afastamento, suspensão, exclusão e
+readmissão. O código versionado não usa essas colunas; a baseline depende de
+decisão funcional.
+
+### `transacoes_financeiras`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; uvr VARCHAR(10) NN; associacao VARCHAR(50) NN;
+id_cadastro_origem INTEGER? FK cadastros(id);
+nome_cadastro_origem VARCHAR(255) NN; numero_documento VARCHAR(100)?;
+data_documento DATE NN; tipo_transacao VARCHAR(20) NN;
+tipo_atividade VARCHAR(255) NN; valor_total_documento DECIMAL(12,2) NN;
+data_hora_registro TIMESTAMP NN; valor_pago_recebido DECIMAL(12,2) DEF 0.00;
+status_pagamento VARCHAR(30) DEF 'Aberto'.
+```
+
+O schema atual acrescenta 13 colunas opcionais relacionadas a patrimônio,
+motorista, combustível, medidor, manutenção e garantia. Não foi localizado uso
+delas no código atual e `id_patrimonio` não possui FK. A baseline não deve
+excluí-las nem promovê-las automaticamente sem decisão funcional.
+
+### `itens_transacao`
+
+Operações: `SELECT`, `INSERT` e substituição por exclusão/reinserção.
+
+```text
+id SERIAL NN PK; id_transacao INTEGER NN FK transacoes_financeiras(id)
+ON DELETE CASCADE; descricao VARCHAR(255) NN; unidade VARCHAR(50) NN;
+quantidade DECIMAL(10,3) NN; valor_unitario DECIMAL(12,2) NN;
+valor_total_item DECIMAL(12,2) NN.
+```
+
+### `subgrupos`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; nome VARCHAR(255) NN; atividade_pai VARCHAR(255) NN.
+```
+
+UQ comprovada `(nome, atividade_pai)`. Um script usa `VARCHAR(150)` e outro
+pressupõe UQ `(nome, id_grupo)`. O schema atual confirma `VARCHAR(255)` e
+comprova a ausência de `id_grupo`; o script que exige essa coluna não é
+compatível com a estrutura instalada.
+
+### `produtos_servicos`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; tipo VARCHAR(20) NN; tipo_atividade VARCHAR(255) NN;
+grupo VARCHAR(255)?; subgrupo VARCHAR(255)?; item VARCHAR(255) NN UQ;
+data_hora_cadastro TIMESTAMP NN;
+id_subgrupo INTEGER? FK subgrupos(id).
+```
+
+O schema atual comprova que `id_grupo` não existe. A relação física do produto
+é somente com `subgrupos(id)`; o banco também possui
+`DEFAULT now()` em `data_hora_cadastro`.
+
+### `contas_correntes`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; uvr VARCHAR(10) NN; associacao VARCHAR(50) NN;
+banco_codigo VARCHAR(10) NN; banco_nome VARCHAR(100) NN;
+agencia VARCHAR(10) NN; conta_corrente VARCHAR(20) NN;
+descricao_conta VARCHAR(255)?; data_hora_cadastro TIMESTAMP NN.
+```
+
+UQ `(uvr, banco_codigo, agencia, conta_corrente)`.
+
+### `fluxo_caixa`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+```text
+id SERIAL NN PK; uvr VARCHAR(10) NN; associacao VARCHAR(50) NN;
+tipo_movimentacao VARCHAR(20) NN; id_cadastro_cf INTEGER? FK cadastros(id);
+nome_cadastro_cf VARCHAR(255)?; id_conta_corrente INTEGER NN FK contas_correntes(id);
+numero_documento_bancario VARCHAR(100)?; data_efetiva DATE NN;
+valor_efetivo DECIMAL(12,2) NN; saldo_operacao_calculado DECIMAL(12,2) NN;
+data_hora_registro_fluxo TIMESTAMP NN; observacoes TEXT?;
+categoria VARCHAR(100)?.
+```
+
+### `fluxo_caixa_transacoes_link`
+
+Operações: `SELECT`, `INSERT` e cascata pelo movimento.
+
+```text
+id_fluxo_caixa INTEGER NN PK/FK fluxo_caixa(id) ON DELETE CASCADE;
+id_transacao_financeira INTEGER NN PK/FK transacoes_financeiras(id);
+valor_aplicado_nesta_nf DECIMAL(12,2) NN.
+```
+
+PK composta pelos dois IDs.
+
+### `denuncias`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`; rotas desativadas online.
+
+```text
+id SERIAL NN PK; numero_denuncia VARCHAR(50) NN UQ;
+data_registro TIMESTAMP NN; descricao TEXT NN;
+status VARCHAR(50) DEF 'Pendente'; uvr VARCHAR(10)?; associacao VARCHAR(50)?.
+```
+
+### `usuarios`
+
+Autenticação e autoria; scripts também fazem `INSERT` e `UPDATE`.
+
+```text
+id SERIAL NN PK; username VARCHAR(50) NN UQ;
+password_hash VARCHAR(255) NN; nome_completo VARCHAR(100)?;
+role VARCHAR(20) NN; uvr_acesso VARCHAR(50)?; ativo BOOLEAN DEF TRUE.
+```
+
+`SERIAL` comprova `usuarios.id INTEGER`, compatível com as 44 FKs de auditoria
+do módulo.
+
+O schema atual acrescenta três colunas opcionais não usadas pelo código
+versionado: `email VARCHAR(255)`, `reset_token VARCHAR(255)` e
+`reset_token_expira TIMESTAMP`. A inclusão delas na baseline depende de decisão
+funcional.
+
+### `solicitacoes_alteracao`
+
+Operações: `SELECT`, `INSERT`, `UPDATE`. Definição do `app.py`:
+
+```text
+id SERIAL NN PK; tabela_alvo VARCHAR(50) NN; id_registro INTEGER NN;
+tipo_solicitacao VARCHAR(20) NN; dados_novos JSONB?;
+usuario_solicitante VARCHAR(50) NN;
+data_solicitacao TIMESTAMP DEF CURRENT_TIMESTAMP;
+status VARCHAR(20) DEF 'PENDENTE'; observacoes_admin TEXT?.
+```
+
+Drift: `criar_tabela_solicitacoes.py` usa `dados_novos TEXT`,
+`usuario_solicitante VARCHAR(100)` anulável e `motivo_rejeicao TEXT`.
+
+Classificação após H2C.1B: **schema atual e código confirmam a versão do
+`app.py`**. Estão instalados `JSONB`, usuário obrigatório de 50 caracteres e
+`observacoes_admin`; `motivo_rejeicao` não existe. O script antigo representa
+uma versão B incompatível e não deve integrar a baseline. Falta apenas a
+decisão formal de aposentá-lo.
+
+## Tabelas pressupostas, sem DDL completo
+
+### `grupos_atividade`
+
+Usada por `importar_csv_nuvem.py` e `fix_nomes_colunas.py`.
+
+```text
+id INTEGER NN PK DEF nextval(grupos_atividade_id_seq);
+nome VARCHAR(100) NN UQ.
+```
+
+O importador pressupõe corretamente `UNIQUE(nome)`, mas também pressupõe
+`subgrupos.id_grupo` e `produtos_servicos.id_grupo`, que não existem. Não há
+FK saindo ou chegando em `grupos_atividade`. A constraint UNIQUE conserva um
+nome histórico que menciona `nome_grupo`, embora a coluna atual seja `nome`.
+O DDL físico está determinado; a ligação funcional com o catálogo ainda
+depende de decisão.
+
+### `patrimonio`
+
+Possui `SELECT`, `INSERT`, `UPDATE` e `DELETE`, mas nenhum `CREATE TABLE`
+versionado. A H2C.1B comprovou 38 colunas:
+
+```text
+id INTEGER NN PK DEF nextval(patrimonio_id_seq);
+uvr VARCHAR(50)?; associacao VARCHAR(100)?; tipo_bem VARCHAR(100)?;
+categoria VARCHAR(100)?; descricao VARCHAR(255)?;
+codigo_patrimonio VARCHAR(50)?; marca VARCHAR(100)?; modelo VARCHAR(100)?;
+ano_fabricacao INTEGER?; numero_serie_chassi VARCHAR(100)?;
+situacao_propriedade VARCHAR(100)?; entidade_proprietaria VARCHAR(100)?;
+orgao_cedente VARCHAR(100)?; numero_termo_comodato VARCHAR(100)?;
+data_inicio_comodato DATE?; data_fim_comodato DATE?;
+placa VARCHAR(20)?; renavam VARCHAR(50)?; combustivel VARCHAR(50)?;
+capacidade_carga VARCHAR(50)?; controle_por VARCHAR(50)?;
+medidor_inicial NUMERIC(15,2)?; medidor_atual NUMERIC(15,2)?;
+local_instalacao VARCHAR(150)?; setor_uso VARCHAR(100)?;
+nome_responsavel VARCHAR(150)?; nome_operador_principal VARCHAR(150)?;
+status_bem VARCHAR(50)?; estado_conservacao VARCHAR(50)?;
+permite_abastecimento BOOLEAN?; permite_manutencao BOOLEAN?;
+alerta_preventiva INTEGER?; observacoes_gerais TEXT?;
+foto_bem_base64 TEXT?; eh_bem_publico BOOLEAN?; uso_compartilhado BOOLEAN?;
+data_cadastro TIMESTAMP? DEF CURRENT_TIMESTAMP.
+```
+
+As 37 colunas antes inferidas pelo código existem; `data_cadastro` é a coluna
+adicional e só aparece indiretamente em `SELECT *`. Não há FK, UNIQUE, CHECK ou
+índice explícito além do índice implícito da PK. O código usa `uvr` para
+autorização e mantém exclusão física. `transacoes_financeiras.id_patrimonio`
+existe, mas não possui FK, portanto a exclusão pode deixar referência lógica
+sem proteção do banco. A estrutura física deixou de ser lacuna; nulabilidade e
+regra de exclusão continuam sendo decisões funcionais.
+
+## Schema do módulo de Fiscalização de Contratos
+
+As definições a seguir vêm diretamente das migrations.
+
+### 001 `fc_empresas` — 17 colunas
+
+```text
+id BIGSERIAL NN PK; cnpj VARCHAR(14) NN UQ; razao_social VARCHAR(255) NN;
+nome_fantasia VARCHAR(255)?; cep VARCHAR(8) NN; logradouro VARCHAR(255)?;
+numero VARCHAR(30)?; bairro VARCHAR(120)?; cidade VARCHAR(120)?; uf CHAR(2)?;
+telefone VARCHAR(30)?; email VARCHAR(254)?; ativo BOOLEAN NN DEF TRUE;
+criado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks: CNPJ/CEP numéricos e UF. Índice
+`idx_fc_empresas_ativo_razao_social`.
+
+### 002 `fc_servidores` — 13 colunas
+
+```text
+id BIGSERIAL NN PK; nome VARCHAR(255) NN; matricula VARCHAR(50) NN UQ;
+cargo VARCHAR(150)?; setor VARCHAR(150)?; email VARCHAR(254)?;
+telefone VARCHAR(30)?; observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de nome/matrícula preenchidos. Índice `idx_fc_servidores_ativo_nome`.
+
+### 003 `fc_contratos` — 16 colunas
+
+```text
+id BIGSERIAL NN PK; numero_contrato VARCHAR(100) NN UQ;
+processo_administrativo VARCHAR(100)?; objeto TEXT NN;
+empresa_id BIGINT NN FK fc_empresas(id); valor_original NUMERIC(15,2) NN;
+data_assinatura DATE?; vigencia_inicio DATE?; vigencia_fim DATE?;
+situacao VARCHAR(30) NN DEF 'Em elaboração'; observacoes TEXT?;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de preenchimento, valor, vigência e situação. Índices
+`idx_fc_contratos_empresa`, `idx_fc_contratos_situacao_vigencia`.
+
+### 003 `fc_contrato_responsaveis` — 12 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id);
+servidor_id BIGINT NN FK fc_servidores(id);
+tipo_responsabilidade VARCHAR(30) NN; titular BOOLEAN NN DEF FALSE;
+data_inicio DATE NN DEF CURRENT_DATE; data_fim DATE?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de tipo, titularidade e período. Índices
+`idx_fc_contrato_responsaveis_contrato`,
+`uq_fc_contrato_responsavel_tipo_ativo`,
+`uq_fc_contrato_titular_tipo_ativo`.
+
+### 004 `fc_aditivos` — 19 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id);
+numero_termo VARCHAR(100) NN; tipo_aditivo VARCHAR(50) NN;
+data_assinatura DATE NN; data_inicio_efeitos DATE?; dias_acrescidos INTEGER?;
+nova_vigencia_fim DATE?; valor_acrescimo NUMERIC(15,2) NN DEF 0;
+valor_supressao NUMERIC(15,2) NN DEF 0; percentual_alteracao NUMERIC(9,4)?;
+descricao_alteracao TEXT?; justificativa TEXT?; observacoes TEXT?;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+UQ `(contrato_id, numero_termo)`; checks de tipo e não negatividade. Índices
+`idx_fc_aditivos_contrato_ativo`, `idx_fc_aditivos_tipo_ativo`,
+`idx_fc_aditivos_data_assinatura`, `uq_fc_aditivos_id_contrato_id`.
+
+### 005 `fc_documentos` — 19 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id); aditivo_id BIGINT?;
+categoria VARCHAR(50) NN; titulo VARCHAR(200) NN; descricao TEXT?;
+nome_original VARCHAR(255) NN; armazenamento_provedor VARCHAR(30) NN DEF 'cloudinary';
+armazenamento_chave VARCHAR(500) NN UQ; armazenamento_versao BIGINT?;
+mime_type VARCHAR(150) NN; extensao VARCHAR(10) NN; tamanho_bytes BIGINT NN;
+sha256 VARCHAR(64) NN; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+FK composta `(aditivo_id, contrato_id) -> fc_aditivos(id, contrato_id)`.
+Checks de categoria, título, provedor, tamanho, hash e extensão. Índices
+`idx_fc_documentos_contrato_ativo`, `idx_fc_documentos_aditivo_ativo`,
+`idx_fc_documentos_categoria_ativo`, `idx_fc_documentos_titulo`.
+
+### 006 `fc_planilhas_orcamentarias` — 15 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id); aditivo_id BIGINT?;
+nome VARCHAR(200) NN; versao INTEGER NN; tipo_planilha VARCHAR(30) NN;
+data_referencia DATE NN; descricao_referencia TEXT?;
+status VARCHAR(20) NN DEF 'Em elaboração'; vigente BOOLEAN NN DEF FALSE;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+UQ `(contrato_id, versao)`; FK composta para aditivo/contrato; checks de nome,
+versão, tipo, status e vigência. Índices `uq_fc_planilhas_original_contrato`,
+`uq_fc_planilhas_vigente_ativa_contrato`, `idx_fc_planilhas_contrato_ativo`,
+`idx_fc_planilhas_aditivo`, `idx_fc_planilhas_nome`.
+
+### 006 `fc_planilha_itens` — 16 colunas
+
+```text
+id BIGSERIAL NN PK; planilha_id BIGINT NN FK fc_planilhas_orcamentarias(id);
+ordem INTEGER NN; grupo VARCHAR(150)?; codigo_item VARCHAR(100)?;
+descricao TEXT NN; unidade VARCHAR(50) NN; quantidade NUMERIC(24,8) NN;
+valor_unitario NUMERIC(24,8) NN; fator_multiplicador NUMERIC(24,8) NN DEF 1;
+observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de ordem, preenchimento e valores. Índices
+`idx_fc_planilha_itens_planilha_ativo_ordem`, `idx_fc_planilha_itens_grupo`.
+
+### 007 `fc_ativos_contratuais` — 23 colunas
+
+```text
+id BIGSERIAL NN PK; codigo_interno VARCHAR(100) NN; tipo_ativo VARCHAR(40) NN;
+descricao TEXT NN; marca VARCHAR(100)?; modelo VARCHAR(100)?;
+ano_fabricacao INTEGER?; placa VARCHAR(20)?; renavam VARCHAR(30)?;
+chassi VARCHAR(50)?; numero_serie VARCHAR(100)?; numero_patrimonio VARCHAR(100)?;
+origem_ativo VARCHAR(20) NN; empresa_proprietaria_id BIGINT? FK fc_empresas(id);
+capacidade NUMERIC(24,8)?; unidade_capacidade VARCHAR(50)?;
+situacao VARCHAR(30) NN; observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de campos, listas, ano e capacidade. Índices normalizados
+`uq_fc_ativos_codigo_normalizado`, `uq_fc_ativos_placa_normalizada`,
+`uq_fc_ativos_chassi_normalizado`, `uq_fc_ativos_patrimonio_normalizado`;
+comuns `idx_fc_ativos_tipo_situacao_ativo`, `idx_fc_ativos_empresa`.
+
+### 007 `fc_ativo_vinculos` — 13 colunas
+
+```text
+id BIGSERIAL NN PK; ativo_id BIGINT NN FK fc_ativos_contratuais(id);
+contrato_id BIGINT NN FK fc_contratos(id); natureza_vinculo VARCHAR(40) NN;
+data_inicio DATE NN; data_fim DATE?; principal BOOLEAN NN DEF FALSE;
+observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de natureza, datas e estado. Índices `idx_fc_ativo_vinculos_contrato`,
+`idx_fc_ativo_vinculos_ativo`, `uq_fc_ativo_vinculo_ativo`.
+
+### 008 `fc_fiscalizacoes` — 17 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id);
+servidor_responsavel_id BIGINT NN FK fc_servidores(id);
+data_fiscalizacao DATE NN; hora_inicio TIME?; hora_fim TIME?;
+tipo_fiscalizacao VARCHAR(40) NN; local_fiscalizacao TEXT?;
+objeto_verificado TEXT NN; resultado VARCHAR(40) NN;
+status VARCHAR(20) NN DEF 'Em elaboração'; observacoes TEXT?;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de listas, objeto e horário. Índices
+`uq_fc_fiscalizacoes_id_contrato`, `idx_fc_fiscalizacoes_contrato_data`,
+`idx_fc_fiscalizacoes_servidor`, `idx_fc_fiscalizacoes_status`.
+
+### 008 `fc_ocorrencias` — 21 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id);
+fiscalizacao_id BIGINT?; ativo_contratual_id BIGINT? FK fc_ativos_contratuais(id);
+servidor_responsavel_id BIGINT NN FK fc_servidores(id);
+titulo VARCHAR(200) NN; categoria VARCHAR(50) NN; gravidade VARCHAR(20) NN;
+descricao TEXT NN; data_identificacao DATE NN; prazo_correcao DATE?;
+status VARCHAR(30) NN DEF 'Aberta'; exige_notificacao BOOLEAN NN DEF FALSE;
+numero_notificacao VARCHAR(100)?; data_regularizacao DATE?; conclusao TEXT?;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+FK composta `(fiscalizacao_id, contrato_id) -> fc_fiscalizacoes(id,
+contrato_id)`; checks de campos, listas, prazo, notificação e regularização.
+Cinco índices `idx_fc_ocorrencias_*` por contrato/status, fiscalização, ativo
+contratual, prazo e gravidade.
+
+### 008 `fc_ocorrencia_acompanhamentos` — 10 colunas
+
+```text
+id BIGSERIAL NN PK; ocorrencia_id BIGINT NN FK fc_ocorrencias(id);
+data_acompanhamento DATE NN; status_anterior VARCHAR(30) NN;
+status_novo VARCHAR(30) NN; descricao TEXT NN; providencia_contratada TEXT?;
+observacoes TEXT?; criado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id).
+```
+
+Checks de status e descrição. Índice
+`idx_fc_acompanhamentos_ocorrencia_data`.
+
+### 009 `fc_fiscalizacao_eventos` — 8 colunas
+
+```text
+id BIGSERIAL NN PK; fiscalizacao_id BIGINT NN FK fc_fiscalizacoes(id);
+tipo_evento VARCHAR(20) NN; status_anterior VARCHAR(20) NN;
+status_novo VARCHAR(20) NN; justificativa TEXT?;
+criado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id).
+```
+
+Checks de tipo, status, justificativa e transição. Índice
+`idx_fc_fiscalizacao_eventos_fiscalizacao_data`.
+
+### 010 `fc_medicoes` — 26 colunas
+
+```text
+id BIGSERIAL NN PK; contrato_id BIGINT NN FK fc_contratos(id);
+numero_medicao INTEGER NN; competencia DATE NN; periodo_inicio DATE NN;
+periodo_fim DATE NN; versao INTEGER NN DEF 1;
+medicao_origem_id BIGINT? FK fc_medicoes(id); atual BOOLEAN NN DEF TRUE;
+servidor_fiscal_id BIGINT NN FK fc_servidores(id); data_apresentacao DATE?;
+status VARCHAR(40) NN DEF 'Em elaboração';
+valor_bruto/total_acrescimos/total_descontos/total_glosas/valor_liquido
+NUMERIC(18,2) NN DEF 0; observacoes TEXT?; aprovado_em TIMESTAMPTZ?;
+servidor_aprovador_id BIGINT? FK fc_servidores(id);
+aprovado_por_usuario_id INTEGER? FK usuarios(id); ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+UQ `(contrato_id, numero_medicao, versao)`; checks de número, competência,
+período, versão, status, valores e aprovação. Índices
+`uq_fc_medicoes_atual_ativa_competencia`,
+`idx_fc_medicoes_contrato_competencia_status`, `idx_fc_medicoes_versoes`,
+`idx_fc_medicoes_servidor_fiscal`, `idx_fc_medicoes_atuais`.
+
+### 010 `fc_medicao_itens` — 18 colunas
+
+```text
+id BIGSERIAL NN PK; medicao_id BIGINT NN FK fc_medicoes(id);
+planilha_item_id BIGINT? FK fc_planilha_itens(id); ordem INTEGER NN;
+codigo_item VARCHAR(100)?; descricao TEXT NN; unidade VARCHAR(50) NN;
+quantidade_prevista NUMERIC(24,8)?; quantidade_medida NUMERIC(24,8) NN;
+preco_unitario NUMERIC(24,8) NN; valor_medido NUMERIC(18,2) NN;
+justificativa_excedente TEXT?; observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de ordem, campos, quantidades, preço, valor e excedente. Índices
+`uq_fc_medicao_item_planilha_ativo`, `idx_fc_medicao_itens_medicao_ordem`,
+`idx_fc_medicao_itens_planilha`.
+
+### 010 `fc_medicao_ajustes` — 13 colunas
+
+```text
+id BIGSERIAL NN PK; medicao_id BIGINT NN FK fc_medicoes(id);
+tipo_ajuste VARCHAR(20) NN; descricao TEXT NN; valor NUMERIC(18,2) NN;
+fiscalizacao_id BIGINT? FK fc_fiscalizacoes(id);
+ocorrencia_id BIGINT? FK fc_ocorrencias(id); observacoes TEXT?;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de tipo, descrição e valor. Índices por medição/tipo, ocorrência e
+fiscalização.
+
+### 010 `fc_medicao_documentos` — 10 colunas
+
+```text
+id BIGSERIAL NN PK; medicao_id BIGINT NN FK fc_medicoes(id);
+documento_id BIGINT NN FK fc_documentos(id); categoria VARCHAR(40) NN;
+observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Check de categoria. Índices `uq_fc_medicao_documento_ativo`,
+`idx_fc_medicao_documentos_medicao`.
+
+### 010 `fc_medicao_eventos` — 13 colunas
+
+```text
+id BIGSERIAL NN PK; medicao_id BIGINT NN FK fc_medicoes(id);
+tipo_evento VARCHAR(40) NN; status_anterior VARCHAR(40)?;
+status_novo VARCHAR(40) NN; justificativa TEXT?;
+valor_bruto/total_acrescimos/total_descontos/total_glosas/valor_liquido
+NUMERIC(18,2) NN; criado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id).
+```
+
+Checks de tipo, status, justificativa e valores. Índice
+`idx_fc_medicao_eventos_medicao_data`.
+
+### 011 `fc_atestes` — 18 colunas
+
+```text
+id BIGSERIAL NN PK; medicao_id BIGINT NN FK fc_medicoes(id);
+numero_ateste INTEGER NN; servidor_atestador_id BIGINT NN FK fc_servidores(id);
+data_ateste DATE?; status VARCHAR(40) NN DEF 'Em elaboração'; parecer TEXT?;
+observacoes TEXT?; valor_atestado NUMERIC(18,2) NN;
+protocolo_encaminhamento VARCHAR(200)?; encaminhado_em TIMESTAMPTZ?;
+servidor_encaminhador_id BIGINT? FK fc_servidores(id);
+encaminhado_por_usuario_id INTEGER? FK usuarios(id); ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de número, status, valor, data e encaminhamento. Seis índices
+`uq_fc_atestes_*`/`idx_fc_atestes_*`.
+
+### 011 `fc_ateste_notas_fiscais` — 14 colunas
+
+```text
+id BIGSERIAL NN PK; ateste_id BIGINT NN FK fc_atestes(id);
+numero_nota VARCHAR(100) NN; serie VARCHAR(50)?; data_emissao DATE NN;
+valor_nota NUMERIC(18,2) NN; chave_acesso VARCHAR(100)?;
+documento_id BIGINT? FK fc_documentos(id); observacoes TEXT?;
+ativo BOOLEAN NN DEF TRUE; criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Checks de número e valor. Índices `uq_fc_ateste_nota_ativa`,
+`idx_fc_ateste_notas_ateste`, `idx_fc_ateste_notas_numero_serie`,
+`idx_fc_ateste_notas_chave`.
+
+### 011 `fc_ateste_documentos` — 10 colunas
+
+```text
+id BIGSERIAL NN PK; ateste_id BIGINT NN FK fc_atestes(id);
+documento_id BIGINT NN FK fc_documentos(id); categoria VARCHAR(40) NN;
+observacoes TEXT?; ativo BOOLEAN NN DEF TRUE;
+criado_em/atualizado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id);
+atualizado_por_usuario_id INTEGER? FK usuarios(id).
+```
+
+Check de categoria. Índices `uq_fc_ateste_documento_ativo`,
+`idx_fc_ateste_documentos_ateste`.
+
+### 011 `fc_ateste_eventos` — 10 colunas
+
+```text
+id BIGSERIAL NN PK; ateste_id BIGINT NN FK fc_atestes(id);
+tipo_evento VARCHAR(50) NN; status_anterior VARCHAR(40)?;
+status_novo VARCHAR(40) NN; justificativa TEXT?;
+valor_atestado NUMERIC(18,2) NN; total_notas NUMERIC(18,2) NN;
+criado_em TIMESTAMPTZ NN DEF CURRENT_TIMESTAMP;
+criado_por_usuario_id INTEGER NN FK usuarios(id).
+```
+
+Checks de tipo, status, justificativa e valores. Índice
+`idx_fc_ateste_eventos_ateste_data`.
+
+## Relacionamentos
+
+As sete FKs legadas antes comprovadas no Git são:
+
+- transação → cadastro;
+- item → transação (`ON DELETE CASCADE`);
+- produto → subgrupo;
+- fluxo → cadastro;
+- fluxo → conta;
+- link → fluxo (`ON DELETE CASCADE`);
+- link → transação.
+
+Não existem tabelas `uvrs` ou `associacoes`: o vínculo é texto. Solicitações
+também não têm FK, pois guardam nome da tabela e ID genericamente.
+
+O schema atual contém 29 FKs legadas. As 22 adicionais pertencem às tabelas de
+auditoria, documentos, EPI e ouvidoria que só existem no banco atual. Somadas
+às 84 FKs do módulo, explicam as 113 FKs físicas. A lista nominal e as ações de
+exclusão estão em `RELATORIO_COMPARACAO_SCHEMA_ATUAL.md`.
+
+Nas migrations há 84 FKs: 44 para `usuarios`, 8 para `fc_contratos`, 7 para
+`fc_servidores`, 6 para `fc_medicoes`, 3 para `fc_fiscalizacoes`, 3 para
+`fc_documentos`, 3 para `fc_atestes`, 2 para `fc_empresas`, 2 para
+`fc_aditivos`, 2 para `fc_ativos_contratuais`, 2 para `fc_ocorrencias`, 1 para
+`fc_planilhas_orcamentarias` e 1 para `fc_planilha_itens`.
+
+Nenhuma FK do módulo declara `ON DELETE`/`ON UPDATE`; vale `NO ACTION`. FKs
+compostas preservam o contrato do aditivo/fiscalização. Não há ciclo entre
+tabelas distintas; há autorreferência opcional em `fc_medicoes`.
+
+## Índices e constraints
+
+Comprovados:
+
+- 70 comandos de índice, 69 nomes distintos;
+- `uq_fc_aditivos_id_contrato_id` é repetido em 005 e 006;
+- 23 PKs, 7 UQs internas, 103 checks e 84 FKs no módulo;
+- 12 PKs, sete unicidades de negócio e sete FKs distintas no DDL legado;
+- índices parciais e por expressão em responsáveis, planilhas, ativos,
+  medições e atestes.
+
+O índice repetido é `uq_fc_aditivos_id_contrato_id`, na tabela `fc_aditivos`,
+colunas `(id, contrato_id)`. As migrations 005 e 006 executam o mesmo `CREATE
+UNIQUE INDEX IF NOT EXISTS`. Em sequência, a 005 cria e a 006 ignora a
+repetição, sem falhar. A redundância deve ser removida do estado consolidado da
+baseline e considerada pelo controle/checksum da H2D, sem editar as migrations
+históricas.
+
+Índices compostos exigidos pelas FKs:
+
+- `uq_fc_aditivos_id_contrato_id`;
+- `uq_fc_fiscalizacoes_id_contrato`.
+
+Recomendações ainda não existentes — não incluir automaticamente na baseline:
+índices nas FKs legadas usadas em joins, em `fc_medicoes.medicao_origem_id` e
+em FKs de documentos/auditoria somente se consultas reais justificarem.
+
+## Tipos dos identificadores
+
+- as 12 tabelas do DDL legado usam `SERIAL`, portanto PK `INTEGER`, salvo a
+  tabela de link cuja PK é composta por dois `INTEGER`;
+- `usuarios.id` é comprovadamente `INTEGER/SERIAL`;
+- as 23 tabelas do módulo usam `BIGSERIAL`, portanto PK `BIGINT`;
+- todas as FKs entre tabelas `fc_*` são `BIGINT`;
+- as 44 FKs do módulo para `usuarios.id` são `INTEGER`;
+- não foi encontrada incompatibilidade de tipo nas migrations 001–011;
+- `patrimonio.id` e `grupos_atividade.id` são `INTEGER` com sequência;
+- `subgrupos.id_grupo` e `produtos_servicos.id_grupo` não existem no schema
+  atual.
+
+## Exclusões físicas legadas
+
+Foram encontradas 15 ocorrências de `DELETE FROM`, atingindo nove tabelas:
+`itens_transacao`, `associados`, `cadastros`, `contas_correntes`,
+`transacoes_financeiras`, `patrimonio`, `subgrupos`, `produtos_servicos` e
+`fluxo_caixa`.
+
+| Tabela | Rota/função e condição | Escopo | Relações/cascata comprovadas e risco |
+|---|---|---|---|
+| `itens_transacao` | `editar_transacao`: `WHERE id_transacao = %s`; `responder_solicitacao` repete na aprovação de edição | edição direta só para admin; usuário comum solicita | FK para transação com cascata; itens são apagados/recriados na mesma transação, mas o histórico individual anterior é perdido |
+| `associados` | `excluir_associado` e `responder_solicitacao`: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita ao admin | sem dependente comprovado; perda irreversível |
+| `cadastros` | `excluir_cadastro` e `responder_solicitacao`: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | referenciado por transações e fluxo, sem cascata; pode bloquear |
+| `contas_correntes` | `excluir_conta_corrente` e aprovação: `WHERE id = %s` | rota e execução final administrativas | referenciada por fluxo, sem cascata; tratamento espera erro de integridade |
+| `transacoes_financeiras` | `excluir_transacao` e aprovação: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | itens têm cascata; link não tem cascata; pode apagar itens ou ser bloqueada |
+| `patrimonio` | `excluir_patrimonio` e aprovação: `WHERE id = %s` | admin apaga; usuário limitado por UVR solicita | 38 colunas comprovadas; sem FKs; `transacoes_financeiras.id_patrimonio` pode ficar órfão |
+| `subgrupos` | `api_subgrupos`: `WHERE id = %s` | `admin_json_required` | produto referencia subgrupo sem cascata; código tenta bloquear quando há uso |
+| `produtos_servicos` | `api_produtos_crud`: `WHERE id = %s` | `admin_json_required` | sem FK filha comprovada; código faz busca textual em itens antes de apagar |
+| `fluxo_caixa` | `excluir_movimentacao`: `WHERE id = %s` | `admin_json_required` | links têm cascata; função estorna valores antes da exclusão |
+
+O módulo `fc_*` não usa `DELETE`. A baseline não deve inventar cascatas.
+
+## Dados de referência
+
+| Fonte | Classe | Baseline |
+|---|---|---|
+| listas de tipos/status em checks `fc_*` | A estrutural | manter constraints |
+| `padrao_itens.csv` e `padrao_itens2.csv` (50 linhas cada e conteúdo divergente) | B catálogo opcional | decidir e carregar separadamente |
+| importadores de CSV | B/C carga administrativa | não executar |
+| migração de subgrupos derivada de produtos atuais | D dado existente | excluir |
+| scripts de admin/usuários UVR | D identidade/credencial | excluir |
+| `migrar_dados.py` | D cópia histórica/real | excluir |
+| dados operacionais e documentos | D real/histórico | excluir |
+
+Nenhum registro obrigatório foi comprovado. A baseline não deve criar
+administrador.
+
+## Recursos PostgreSQL comprovados
+
+`SERIAL`, `BIGSERIAL`, sequências implícitas, `JSONB`, `TIMESTAMP`,
+`TIMESTAMPTZ`, índices parciais/por expressão, checks com regex, `EXTRACT`,
+`CURRENT_TIMESTAMP`, `CURRENT_DATE` e `SELECT ... FOR UPDATE`.
+
+Não foram encontrados extensões, enums PostgreSQL, views, materialized views,
+triggers, funções SQL, arrays, UUID de banco ou colunas geradas.
+
+## Convenções
+
+- legado: plural, `SERIAL`, `TIMESTAMP`, poucas constraints;
+- módulo: prefixo `fc_`, `BIGSERIAL`, auditoria por `usuarios.id INTEGER`,
+  `TIMESTAMPTZ`, inativação por `ativo` e nomes `ck_`, `uq_`, `fk_`, `idx_`;
+- eventos/acompanhamentos históricos não são editáveis;
+- nomes de status/tipo devem ser preservados, pois o código depende deles.
+
+## Drift entre migrations, código e testes
+
+| Divergência | Classificação |
+|---|---|
+| `patrimonio` sem DDL | objeto não documentado |
+| `grupos_atividade` sem DDL | objeto não documentado |
+| `id_grupo` em duas tabelas | ausente no banco; script legado incompatível |
+| duas versões de `solicitacoes_alteracao` | provável evolução manual divergente |
+| `subgrupos.nome` com 255 ou 150 | drift legado |
+| fixer admite `nome_subgrupo`/`nome_grupo` antigos | histórico desconhecido |
+| índice de aditivos repetido em 005/006 | redundância segura |
+| `IF NOT EXISTS` pode ocultar schema errado | risco de drift silencioso |
+| testes usam mocks e comparação textual | não comprovam schema real |
+| documento antigo dizia haver migration no import | superado pelo código/testes |
+| scripts antigos têm configurações/credenciais padrão | risco histórico |
+
+Atualização H2C.1B:
+
+- as 23 tabelas `fc_` não apresentam drift estrutural em relação às migrations;
+- a versão A de `solicitacoes_alteracao` está instalada e é usada pelo código;
+- `subgrupos.nome` está instalado como `VARCHAR(255)`;
+- há 27 tabelas adicionais sem uso SQL identificado no Git;
+- `associados`, `transacoes_financeiras` e `usuarios` possuem colunas adicionais
+  que exigem decisão funcional;
+- sete colunas de data/hora legadas possuem `DEFAULT now()` não declarado no
+  `CREATE TABLE` atual;
+- a ausência de tabela `uvr` é coerente com o modelo textual do sistema.
+
+## Suficiência do repositório
+
+Resposta após H2C.1B: **C — ainda exige decisões funcionais**.
+
+A exportação somente do schema já foi obtida, auditada e comparada. As lacunas
+técnicas de `patrimonio`, `grupos_atividade`, `solicitacoes_alteracao` e UVR
+foram esclarecidas. A baseline ainda não deve ser criada porque é necessário
+decidir o destino das 27 tabelas adicionais, das colunas históricas extras e
+das divergências funcionais do catálogo e do patrimônio.
+
+O schema atual é evidência do que existe, não aprovação automática do que deve
+ser recriado. O dump e o manifesto permanecem fora do Git.
+
+## Decisões funcionais da H2C.2A
+
+A H2C.2A definiu que nenhuma das 64 tabelas, coluna ou dado será removido
+durante esta fase. As classificações funcionais servem para orientar análise,
+visibilidade e prioridade; elas não autorizam exclusão nem inclusão automática
+na futura baseline.
+
+Foram analisadas individualmente as 27 tabelas adicionais. Elas permanecem
+preservadas e ocultas até que cada conjunto possua responsável, regra de negócio
+e critério de aceite. Também foram validadas como direções futuras:
+
+- substituir a exclusão cotidiana de patrimônio por inativação e reativação;
+- estruturar gradualmente o catálogo como grupo, subgrupo e produto;
+- manter a versão A de `solicitacoes_alteracao` como referência oficial;
+- evoluir UVR textual para cadastro e vínculo por identificador, preservando
+  compatibilidade durante a transição;
+- preservar as colunas históricas adicionais até decisão específica;
+- manter os 11 módulos de Fiscalização de Contratos administrativos enquanto
+  não houver uma nova matriz de perfis aprovada.
+
+O detalhamento e a sequência dos incrementos estão em
+`MATRIZ_DECISOES_FUNCIONAIS_H2C2A.md`.
+
+## Especificação funcional do patrimônio — H2C.2B
+
+A análise de leitura confirmou cinco rotas de patrimônio e uma única área em
+`templates/cadastro.html`. O cadastro, a consulta, os detalhes, a edição e a
+exclusão estão concentrados no `app.py`.
+
+As 38 colunas foram classificadas. A recomendação é preservar todas, reutilizar
+`status_bem` após caracterizar os valores existentes e introduzir histórico de
+situações de forma aditiva. `data_cadastro` permanece automática, somente para
+consulta, e valores nulos antigos não devem receber datas inventadas.
+
+O cadastro atual não aplica no servidor a proteção de UVR já usada na consulta
+e na edição. A exclusão física também não verifica a referência lógica em
+`transacoes_financeiras.id_patrimonio`. Esses são bloqueadores para a evolução
+segura.
+
+A especificação completa está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2B.md`.
+
+## Especificação funcional do catálogo — H2C.2C
+
+A leitura confirmou quatro estruturas centrais ou relacionadas:
+`grupos_atividade` (2 campos), `subgrupos` (3),
+`produtos_servicos` (8) e a tabela adicional `produtos` (8). O único vínculo
+físico atual do catálogo operacional é `produtos_servicos.id_subgrupo` para
+`subgrupos.id`; não há `id_grupo` nas tabelas esperadas pelo importador antigo.
+
+O desenho futuro deverá ser aditivo: grupo oficial, subgrupo ligado ao grupo e
+produto ligado ao subgrupo. Os textos antigos serão preservados durante a
+transição, e registros pendentes continuarão visíveis como “Não classificado”.
+Não haverá fusão automática com `produtos`, patrimônio, EPI ou catálogos do
+módulo Fiscalização.
+
+Os detalhes, campos, riscos e incrementos H2C.3C.1–H2C.3C.12 estão em
+`ESPECIFICACAO_FUNCIONAL_CATALOGO_H2C2C.md`.
+
+## Especificação funcional de UVRs — H2C.2D
+
+A leitura do código confirmou que não existe entidade central de UVR ou
+associação. `usuarios.uvr_acesso` fornece o escopo textual e as colunas `uvr`
+dos registros são usadas para autorização, pesquisa e relatórios. As colunas
+`associacao` são textuais e não participam diretamente dos helpers de
+autorização.
+
+Cadastros, associados, contas correntes, transações, fluxo de caixa, denúncias e
+patrimônio armazenam UVR e associação. A interface contém opções e pares fixos,
+sem validação institucional no servidor. Nenhuma FK ou cardinalidade entre os
+conceitos foi confirmada.
+
+O modelo desejado foi aprovado: associação e UVR serão entidades distintas; uma
+associação poderá possuir várias UVRs; usuários terão vínculos explícitos e uma
+UVR principal; e os textos atuais serão legado transitório.
+
+A inexistência atual de tabela `uvr` não é erro do dump. As novas estruturas
+serão desenhadas em migration futura, sem inventar DDL nesta especificação. Os
+detalhes aprovados estão em `ESPECIFICACAO_FUNCIONAL_UVR_H2C2D.md`.
+
+## Especificação funcional de perfis e permissões — H2C.2E
+
+O schema atual representa autorização por `usuarios.role` e
+`usuarios.uvr_acesso`. O primeiro é texto livre e o segundo guarda uma única UVR
+como texto. Não há modelo formal confirmado para catálogo de permissões,
+vínculos de múltiplos perfis, associação, várias UVRs, vigência ou auditoria das
+concessões.
+
+O código versionado reconhece `admin` e `user`. Administrador recebe alcance
+global por verificações textuais; usuário comum depende da UVR textual e de
+helpers de autorização por objeto. Fiscalização permanece global e
+administrativa.
+
+A H2C.2E aprovou separar perfil, permissão e escopo. Usuários poderão possuir
+vários perfis, inclusive perfis distintos por escopo. Permissões identificarão
+módulo e ação; escopos poderão ser global, associação, UVR ou objeto atribuído.
+`role` e `uvr_acesso` serão estruturas legadas transitórias.
+
+Nenhuma tabela nova deve ser considerada existente: não foram definidos DDL,
+nomes técnicos, colunas, chaves ou tipos. O desenho técnico futuro seguirá
+`ESPECIFICACAO_FUNCIONAL_PERFIS_PERMISSOES_H2C2E.md`.
+
+## Especificação funcional de solicitações de alteração — H2C.2F
+
+A versão A permanece a referência oficial: nove colunas, JSONB para os valores
+solicitados, solicitante textual obrigatório, três estados utilizados e
+`observacoes_admin` sem uso localizado. Não há FK para usuário ou objeto,
+fotografia anterior, analisador, data de análise, evento ou controle de versão
+do objeto.
+
+O script da versão B diverge no formato do JSON, tamanho/nulabilidade do
+solicitante e campo de rejeição. Ele é legado incompatível e não representa
+tabela existente nem fonte de DDL autorizada.
+
+A versão A será preservada e evoluída aditivamente. O estado desejado separará
+aprovação e aplicação, preservará solicitações aplicadas, exigirá catálogo
+técnico de objetos/campos, histórico de eventos e quatro fotografias: dados no
+envio, solicitados, vigentes antes da aplicação e efetivamente aplicados.
+
+A versão B não integra o estado desejado. Nenhum DDL, tabela, coluna, tipo, chave
+ou constraint foi criado nesta etapa. Os detalhes aprovados estão em
+`ESPECIFICACAO_FUNCIONAL_SOLICITACOES_ALTERACAO_H2C2F.md`.
+
+## Especificação funcional aprovada do patrimônio — H2C.2G
+
+A H2C.2G confirmou documentalmente que as 38 colunas atuais de `patrimonio`
+continuam preservadas e que nenhuma delas será removida na transição. O cadastro
+mistura hoje identificação, propriedade, responsabilidade, localização, uso,
+situação, conservação e indicadores operacionais. Somente `id` é obrigatório
+no schema; as demais colunas aceitam nulo, embora o formulário exija UVR,
+descrição, categoria e tipo.
+
+Foram mantidas como evidências do estado atual:
+
+- ausência de FK, UNIQUE, CHECK e índice explícito além da PK;
+- `uvr` textual usada na autorização por objeto;
+- `associacao`, responsáveis e operador armazenados como texto;
+- `status_bem` com quatro opções na interface, alterável como campo comum;
+- foto principal armazenada em Base64;
+- `transacoes_financeiras.id_patrimonio` opcional e sem FK;
+- exclusão física em rota própria e na aprovação de solicitação;
+- inexistência comprovada de estruturas próprias de transferência, custódia,
+  manutenção, abastecimento, documentos, fotos adicionais ou eventos.
+
+Em **30/07/2026**, foi aprovado o estado desejado:
+
+- preservar inicialmente as 38 colunas;
+- usar `status_bem` para situação administrativa;
+- separar condições operacionais;
+- tratar associação como responsável institucional e UVR como unidade de uso,
+  localização ou custódia;
+- manter identificador interno global e número patrimonial único por associação;
+- tornar placa e Renavam únicos quando aplicáveis e preenchidos;
+- condicionar a unicidade da série a fabricante e classificação/modelo;
+- manter histórico permanente;
+- limitar exclusão física a rascunho nunca ativado, enviado ou vinculado.
+
+Nenhum DDL foi criado. Nomes, tipos, constraints, índices, migrations e migração
+do legado permanecem pendentes. O detalhamento está em
+`ESPECIFICACAO_FUNCIONAL_PATRIMONIO_H2C2G.md`.
+
+## Consolidação funcional aprovada do catálogo — H2C.2H
+
+A H2C.2H confirmou, apenas por fontes versionadas, que o catálogo atual continua
+híbrido: `grupos_atividade` não possui FK para `subgrupos`; `subgrupos` usa
+`atividade_pai` textual; `produtos_servicos` tem textos legados e somente
+`id_subgrupo` opcional; `produtos` permanece uma estrutura adicional sem uso
+operacional localizado.
+
+Transações guardam a descrição e unidade, não `produto_id`, e relatórios ainda
+associam o catálogo pelo texto. As APIs administrativas atuais incluem exclusão
+física e não oferecem estado ou histórico. Esses fatos descrevem o legado e não
+autorizam alteração.
+
+O estado desejado aprovado separa natureza financeira da árvore Grupo →
+Subgrupo → Produto/Serviço. Cada entidade terá ID interno e código funcional;
+Produto/Serviço terá tipo, descrição e unidade padrão; aliases serão estruturas
+próprias; estados serão separados da classificação; e transações preservarão a
+fotografia histórica.
+
+`produtos` permanece legado fora da baseline inicial e os textos atuais serão
+preservados durante a transição. Nenhuma coluna, tabela, tipo, constraint ou DDL
+foi criado nesta etapa.
+
+## Delimitação aprovada das 27 tabelas adicionais — H2C.2I
+
+A pesquisa estática não localizou SQL operacional, interface, teste ou migration
+para nenhuma das 27 tabelas adicionais. A estrutura e as relações continuam
+comprovadas pelo inventário do schema; ausência no código não comprova
+obsolescência.
+
+| Domínio | Tabelas | Classificação aprovada | Destino | Confiança/risco |
+|---|---:|---|---|---|
+| Auditoria funcional | 6 | C/E/G | somente após especificação | média; histórico financeiro |
+| Pessoa física | 1 | F/G | decisão adiada | baixa; CPF e duplicidade |
+| Documentos/entregas | 5 | C/D/E | especificar ou substituir | média; arquivos e privacidade |
+| EPI | 8 | C/D/E/G | módulo opcional futuro | média; três catálogos e estoque |
+| Ouvidoria | 6 | C/E/G | fora do núcleo | média; manifestações sensíveis |
+| `produtos` | 1 | D | fora, decisão H2C.2H | alta |
+
+Nenhuma das 27 tabelas integra automaticamente a baseline nuclear e nenhuma está
+autorizada para remoção. Auditoria funcional é separada da trilha técnica;
+pessoa física permanece ambígua; documentos/entregas dependem de módulo próprio;
+EPI depende de redesenho; Ouvidoria fica fora do núcleo; e `produtos` continua
+legado.
+
+Estruturas substitutas deverão preservar referências antigas. Nenhuma alteração
+física, DDL ou modo somente leitura foi executado. A matriz individual está
+em `ESPECIFICACAO_FUNCIONAL_TABELAS_ADICIONAIS_H2C2I.md`.
+
+## Colunas adicionais e baseline — H2C.2J
+
+| Grupo documentado | Uso/sensibilidade | Destino funcional aprovado | Banco atual/possível futuro | Confiança |
+|---|---|---|---|---|
+| 7 colunas operacionais de `usuarios` (`id`, `username`, `password_hash`, `nome_completo`, `role`, `uvr_acesso`, `ativo`) | autenticação, identificação e autorização; acesso e dados pessoais | núcleo da conta, exceto autorização textual transitória | preservar; perfis e escopos próprios substituirão `role`/`uvr_acesso` | alta, código/schema/testes |
+| 3 opcionais de `usuarios` (`email`, `reset_token`, `reset_token_expira`) | sem uso localizado; pessoais/segredo temporário | e-mail quando aplicável; tokens em estrutura própria, nunca como dado estrutural | preservar; recuperação de acesso futura | média para estrutura, baixa para finalidade atual |
+| 19 colunas nominais de `associados` | cadastro, contato, documentos, vínculos, status, foto e auditoria; dados pessoais/restritos | núcleo futuro com vínculos por ID e histórico | preservar; histórico de associação/UVR e proteção documental futuros | alta, código/schema/interface |
+| 12 extras de `associados` | função e eventos de afastamento, suspensão, exclusão e readmissão; sensibilidade funcional | não entram automaticamente | preservar; possível histórico de situação | média por grupo, não determinada por coluna |
+| 13 colunas nominais de `transacoes_financeiras` | natureza, contraparte, documento, valores, estado, associação/UVR e auditoria; financeiro | núcleo financeiro com IDs, rateio e fotografia histórica | preservar; natureza, catálogo, conta e escopo estruturados | alta, código/schema/interface |
+| 13 extras de `transacoes_financeiras` | patrimônio, motorista, combustível, medidor, manutenção e garantia; operacional/financeiro | fora do núcleo até confirmação | preservar; possível estrutura relacionada | média por grupo, não determinada por coluna |
+
+Os nomes individuais das colunas extras não estão integralmente reproduzidos no
+Git e não foram inventados. O inventário nominal comprovado e sua classificação
+estão no documento H2C.2J.
+
+Nenhuma coluna foi removida ou promovida automaticamente. Os campos atuais ficam
+preservados no banco existente e nenhum DDL foi criado.
+
+### Estado funcional aprovado em 31/07/2026
+
+- a conta de usuário é separada do associado; `role`, `uvr_acesso` e tokens
+  legados não integram a nova tabela de usuários;
+- o associado tem uma associação principal, uma UVR principal, vínculos
+  secundários de UVR da mesma associação e histórico permanente;
+- dados bancários usam estrutura própria;
+- a transação tem associação obrigatória, natureza explícita, conta financeira,
+  UVR gerencial opcional, rateios próprios, Produto/Serviço por ID quando
+  aplicável e fotografia histórica;
+- campos legados e todas as colunas atuais permanecem no banco existente até
+  projeto específico de migração, sem autorização para remoção.
+
+Este é um modelo funcional: nenhuma estrutura física foi criada nesta etapa.
+
+## Modelo técnico aprovado do schema — H2C.3A
+
+A proposta aprovada em **31/07/2026** adota nomes portugueses em `snake_case`, PK `id`, FKs
+`*_id`, `TIMESTAMPTZ` para instantes, `DATE` para datas civis, `NUMERIC` para
+valores e quantidades, códigos ASCII estáveis e constraints nomeadas.
+
+O modelo de identificadores é híbrido: `usuarios.id` permanece `INTEGER`; novas
+tabelas usam `BIGINT IDENTITY`; as 23 `fc_*` preservam `BIGSERIAL`. São propostas
+estruturas próprias para migrations, autorização, associações/UVRs, vínculos de
+associados, dados bancários, catálogo, financeiro/rateios, patrimônio,
+solicitações, documentos privados e auditoria. Tabelas atuais e legadas não são
+removidas.
+
+Relacionamentos históricos usam RESTRICT; únicos parciais protegem vínculos
+principais ativos; CHECKs cobrem estados, valores e datas; regras entre várias
+linhas continuam transacionais. Índices se concentram em FKs, códigos, nomes
+normalizados, períodos, estados, objetos e `request_id`, sem duplicar PK/UNIQUE.
+
+A ordem aprovada parte da verificação do banco vazio e controle de migrations,
+segue dependências nucleares e termina com as migrations 001–011, dados
+estruturais e validações. As 30 decisões técnicas estão aprovadas em
+`MATRIZ_DECISOES_TECNICAS_H2C3A.md`. CPF usa `VARCHAR(11)` ou `TEXT`, nunca
+`CHAR(11)`; checksum textual usa `VARCHAR(64)`, nunca `CHAR(64)`. Nenhum DDL,
+migration ou banco foi criado ou alterado.
+
+## Revisão técnica independente — H2C.3B
+
+**Parecer final aprovado em 31/07/2026: APROVADO COM AJUSTES.** O modelo híbrido de IDs, tipos,
+históricos, alocações, documentos e 23 tabelas `fc_*` foi confirmado. As
+ressalvas principais são compatibilidade do código atual com a ausência de
+`role`/`uvr_acesso`, normalização, bootstrap, ledger e referências lógicas.
+
+Ciclos não impedem o schema se a fonte de verdade dos vínculos ficar nas tabelas
+temporais, documentos precederem seus vínculos e autorização for dividida em
+base e escopos organizacionais. Auditoria aceita ator técnico de bootstrap
+somente por exceção controlada.
+
+Ajustes aprovados para tratamento: ordem revisada, protocolo de lock/checksum do executor,
+namespace comum de nomes/aliases, validação transacional de períodos e rateios e
+uma estratégia executável única para `fc_*`. Nenhum DDL foi criado. Os 24
+achados e as 20 decisões aprovadas estão em `MATRIZ_AJUSTES_TECNICOS_H2C3B.md`.
+Nenhum ajuste foi implementado; a próxima etapa autorizada é somente a H2C.3C.
+
+## Especificação física aprovada — H2C.3C
+
+Em **31/07/2026**, foi aprovada documentalmente uma proposta fechada de **82
+tabelas nucleares** e **1.104 especificações de colunas**. O conjunto inclui 58
+tabelas novas, a forma futura de `usuarios` e as 23 tabelas `fc_*` preservadas.
+O catálogo separa controle técnico, autenticação, autorização, organizações,
+associados, documentos, catálogo, financeiro, patrimônio, solicitações,
+auditoria e Fiscalização.
+
+Tipos, nulabilidade, PKs, FKs, constraints, índices, DELETE, histórico,
+concorrência e compatibilidade foram localizados no desenho físico. IDs seguem o
+modelo híbrido; documentos usam metadado privado e vínculos específicos;
+alocações usam UVR e validação transacional; auditoria admite ator humano,
+técnico ou sistema. As 38 colunas patrimoniais atuais têm destino e risco
+documentados. As migrations 001–011 continuam sendo a única fonte executável
+das 23 `fc_*` e seus hashes foram calculados estaticamente.
+
+Não existe ciclo incontornável: autorização básica precede organizações;
+escopos vêm depois; documentos precedem vínculos; eventos seguem entidades. As
+24 decisões físicas foram aprovadas. Vínculos são fonte de verdade; fotografias
+reais são documentos privados; JSONB guarda apenas fotografia estruturada;
+alocações usam modo exclusivo. As sete estruturas patrimoniais serão
+reconferidas e simplificadas se alguma não tiver finalidade própria. Nenhum SQL,
+migration, manifesto, tabela, código ou teste PostgreSQL foi criado ou
+executado. Próxima etapa: H2C.3D.
+
+## Conferência final pré-implementação — H2C.3D
+
+Em **31/07/2026**, a recontagem confirmou 82 tabelas, 58 novas e 23 `fc_*`, mas
+ajustou o total para **1.103 colunas**: fundir fotografias patrimoniais em
+documentos (−1 tabela/−8 colunas), separar solicitações de associação e UVR (+1
+tabela/+5 colunas) e dar três FKs exclusivas a eventos do catálogo (+2 colunas).
+
+Foram inferidas 82 PKs e 239 FKs. Nas FC, confirmaram-se 23 PKs, 84 FKs, 25
+UNIQUEs distintos, 103 CHECKs e 69 índices distintos. O núcleo ainda não possui
+matrizes nominais suficientes para contar/auditar constraints, índices e DELETE.
+O hash UTF-8/LF da migration 001 diverge do valor documentado; 002–011 coincidem.
+
+Parecer aprovado documentalmente: **C — NÃO APROVADA PARA IMPLEMENTAÇÃO**. Não há ciclo
+incontornável, mas o catálogo de colunas e as matrizes precisam ser expandidos.
+Nenhum SQL, migration, código ou banco foi alterado. Nenhuma nova decisão humana
+foi identificada; a H2C.3E documental é obrigatória.
+
+## H2C.3E — catálogo físico definitivo em validação
+
+Em **31/07/2026**, a especificação foi expandida nominalmente nos documentos
+`CATALOGO_FISICO_DEFINITIVO_BASELINE_H2C3E.md` e
+`MATRIZ_INTEGRIDADE_RELACIONAL_H2C3E.md`. A baseline permanece com **82 tabelas**:
+58 novas, `usuarios` reutilizada e 23 `fc_*` históricas. São **1.103 colunas**:
+752 no núcleo não FC e 351 FC; 82 PKs; 238 FKs exatas (154 núcleo + 84 FC);
+86 estruturas UNIQUE, 32 parciais; 377 CHECKs; 213 índices explícitos; e 20
+regras transacionais.
+
+A diferença perante a estimativa de 239 FKs decorre da retirada de
+`catalogo_itens.substituto_id`: `catalogo_substituicoes` é a única fonte temporal
+do substituto. `patrimonios.medidor_atual` também é derivado, não armazenado; o
+valor legado será preservado na fotografia/evento inicial. Isso resolve as duas
+inconsistências de contagem do catálogo compacto sem perda de dado.
+
+`patrimonio_fotografias` foi incorporada a `patrimonio_documentos`.
+`solicitacao_organizacoes` foi substituída por `solicitacao_associacoes` e
+`solicitacao_uvrs`. `catalogo_eventos` usa três FKs opcionais e CHECK de
+exatamente uma referência. Todas as 238 FKs têm política RESTRICT/NO ACTION;
+não há CASCADE nem SET NULL. Há 54 estruturas com inativação/invalidação lógica;
+as demais são append-only ou protegidas por RESTRICT.
+
+Cada tabela, coluna, FK, constraint, índice, regra transacional, migration e
+teste possui localização nominal. Parecer documental: **A — ESPECIFICAÇÃO
+FÍSICA COMPLETA E APTA PARA REVISÃO FINAL DE AUTORIZAÇÃO**. Isso não autoriza
+implementação. Os quatro bloqueadores continuam ativos.
+
+## H2C.3E.3 — consolidação física final
+
+Recontagem normativa: **82 tabelas** (58 novas, `usuarios` reutilizada e 23
+`fc_*` históricas), **1.103 colunas**, 82 PKs, 238 FKs, 377 CHECKs, **363 objetos
+físicos de índice** e 28 operações globais. Menções anteriores a 1.104 colunas,
+213 índices ou 2.190 testes são marcos históricos substituídos por esta
+recontagem.
+
+As 82 tabelas foram individualizadas em nove categorias: 19 cadastros
+inativáveis, 8 fatos canceláveis/estornáveis, 15 históricos append-only, 7
+documentos com retenção, 11 vínculos temporais, 12 rascunhos descartáveis, 7
+catálogos protegidos, 2 estruturas técnicas de migration e 1 sem ciclo próprio.
+Foram relacionados 34 mecanismos de inativação/exclusão lógica, 7 cancelamentos,
+1 estorno, 9 substituições, 6 expirações, 7 revogações/encerramentos, 16
+append-only, 24 retenções e 17 tabelas participantes de descarte controlado em
+12 relações; há sobreposição intencional entre mecanismos. A relação
+nominal, coluna/estado, operação, teste e migration estão no catálogo físico.
+
+O plano final contém **2.341 identificadores**, 2.341 casos parametrizados e 9
+modelos: 1.103 colunas, 82 PKs, 238 FKs, 86 UNIQUEs, 377 CHECKs, 363 índices, 40
+transacionais, 28 de operações e 24 de segurança. Nenhum teste foi executado.
+
+Os 24 achados têm decisão, operação, modelo e situação. Permanecem quatro
+bloqueadores: `role`/`uvr_acesso`, executor, bootstrap e H001–H011 em PostgreSQL
+efêmero. Parecer integral: **A — ESPECIFICAÇÃO FÍSICA COMPLETA E APTA PARA
+REVISÃO FINAL DE AUTORIZAÇÃO**. Próxima etapa: H2C.3F, somente leitura.
+
+## Encerramento normativo H2C.3E/H2C.3F — 03/08/2026
+
+**DOCUMENTAÇÃO APROVADA.** Parecer H2C.3E: **A — ESPECIFICAÇÃO FÍSICA COMPLETA
+E APTA PARA REVISÃO FINAL DE AUTORIZAÇÃO**. Parecer independente H2C.3F.2: **A
+— RECOMENDADA A AUTORIZAÇÃO HUMANA PARA INÍCIO DA IMPLEMENTAÇÃO CONTROLADA**.
+
+Consolidam-se 82 tabelas (58 novas, `usuarios` reutilizada, 23 FC_*), 1.103
+colunas (752 + 351), 82 PKs, 238 FKs (154 RESTRICT + 84 NO ACTION), 86
+unicidades, 32 parciais, 377 CHECKs, 363 índices e 28 operações. M0014–M0024 não
+existem como IDs; as ordens 14–24 são H001–H011 imutáveis. O hash normalizado
+UTF-8/LF/SHA-256 de H001 é
+`a8a0b4c410b6243c28946927a20567ced0dc67b435d054db24c903e28f26bebc`.
+
+Permanecem consolidadas a incorporação de `patrimonio_fotografias`, a separação
+de `solicitacao_associacoes`/`solicitacao_uvrs`, as três FKs exclusivas de
+`catalogo_eventos`, a convenção `usuario_id`/`*_usuario_id`, nomes sem acento e
+até 63 bytes, ausência de FK polimórfica/incompatibilidade de tipo, as 238
+políticas de remoção e 12 relações com descarte manual transacional.
+
+**AUTORIZAÇÃO PARA IMPLEMENTAÇÃO CONTROLADA.** O usuário autorizou o início
+posterior da H2C.4A nos limites aprovados. **IMPLEMENTAÇÃO AINDA NÃO INICIADA:**
+B1–B4 seguem ativos; nenhum código, SQL, migration, banco ou teste foi criado ou
+executado neste encerramento.

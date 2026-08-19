@@ -1,0 +1,163 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% set editando = modo == 'editar' %}
+{% block title %}{{ 'Editar' if editando else 'Novo' }} Contrato{% endblock %}
+{% block page_title %}{{ 'Editar contrato' if editando else 'Novo contrato' }}{% endblock %}
+
+{% block content %}
+<form method="POST"
+      action="{{ url_for('fiscalizacao_contratos.contratos_editar', contrato_id=contrato.get('id')) if editando else url_for('fiscalizacao_contratos.contratos_novo') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card content-card mb-4">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-file-signature me-2"></i>Identificação
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="numero_contrato" class="form-label required-field">Número do contrato</label>
+                    <input type="text" class="form-control" id="numero_contrato" name="numero_contrato"
+                           maxlength="100" required value="{{ contrato.get('numero_contrato', '') }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="processo_administrativo" class="form-label">Processo administrativo</label>
+                    <input type="text" class="form-control" id="processo_administrativo"
+                           name="processo_administrativo" maxlength="100"
+                           value="{{ contrato.get('processo_administrativo') or '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="situacao" class="form-label required-field">Situação</label>
+                    <select class="form-select" id="situacao" name="situacao" required>
+                        {% for item in situacoes %}
+                        <option value="{{ item }}" {% if contrato.get('situacao') == item %}selected{% endif %}>{{ item }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label for="objeto" class="form-label required-field">Objeto</label>
+                    <textarea class="form-control" id="objeto" name="objeto" rows="4" required>{{ contrato.get('objeto', '') }}</textarea>
+                </div>
+                <div class="col-md-8">
+                    <label for="empresa_id" class="form-label required-field">Empresa contratada</label>
+                    <select class="form-select" id="empresa_id" name="empresa_id" required>
+                        <option value="">Selecione</option>
+                        {% for empresa in empresas %}
+                        <option value="{{ empresa.id }}" {% if contrato.get('empresa_id') == empresa.id %}selected{% endif %}>
+                            {{ empresa.razao_social }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Somente empresas ativas podem ser vinculadas.</div>
+                </div>
+                <div class="col-md-4">
+                    <label for="valor_original" class="form-label required-field">Valor original</label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="text" class="form-control" id="valor_original" name="valor_original"
+                               inputmode="decimal" required placeholder="125.450,75"
+                               value="{{ contrato.get('valor_original')|fc_valor_campo }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card content-card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <i class="fas fa-calendar-days me-2"></i>Datas e vigência
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="data_assinatura" class="form-label">Data de assinatura</label>
+                    <input type="date" class="form-control" id="data_assinatura" name="data_assinatura"
+                           value="{{ contrato.get('data_assinatura')|fc_data_iso }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="vigencia_inicio" class="form-label">Início da vigência</label>
+                    <input type="date" class="form-control" id="vigencia_inicio" name="vigencia_inicio"
+                           value="{{ contrato.get('vigencia_inicio')|fc_data_iso }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="vigencia_fim" class="form-label">Fim da vigência</label>
+                    <input type="date" class="form-control" id="vigencia_fim" name="vigencia_fim"
+                           value="{{ contrato.get('vigencia_fim')|fc_data_iso }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card content-card mb-4">
+        <div class="card-header bg-success text-white">
+            <i class="fas fa-users-gear me-2"></i>Responsáveis
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Somente servidores ativos podem ser escolhidos. Alterações futuras preservarão o histórico.</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="gestor_id" class="form-label required-field">Gestor</label>
+                    <select class="form-select" id="gestor_id" name="gestor_id" required>
+                        <option value="">Selecione</option>
+                        {% for servidor in servidores %}
+                        <option value="{{ servidor.id }}" {% if responsaveis.get('gestor_id') == servidor.id %}selected{% endif %}>
+                            {{ servidor.nome }} — {{ servidor.matricula }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="fiscal_titular_id" class="form-label required-field">Fiscal titular</label>
+                    <select class="form-select" id="fiscal_titular_id" name="fiscal_titular_id" required>
+                        <option value="">Selecione</option>
+                        {% for servidor in servidores %}
+                        <option value="{{ servidor.id }}" {% if responsaveis.get('fiscal_titular_id') == servidor.id %}selected{% endif %}>
+                            {{ servidor.nome }} — {{ servidor.matricula }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label for="fiscais_substitutos" class="form-label">Fiscais substitutos</label>
+                    <select class="form-select" id="fiscais_substitutos" name="fiscais_substitutos"
+                            multiple size="5">
+                        {% for servidor in servidores %}
+                        <option value="{{ servidor.id }}" {% if servidor.id in responsaveis.get('fiscais_substitutos', []) %}selected{% endif %}>
+                            {{ servidor.nome }} — {{ servidor.matricula }}{% if servidor.cargo %} — {{ servidor.cargo }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Opcional. Use Ctrl para selecionar mais de um no computador.</div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check border rounded p-3 ps-5 bg-light">
+                        <input class="form-check-input" type="checkbox" value="1"
+                               id="permitir_multiplas_funcoes" name="permitir_multiplas_funcoes"
+                               {% if responsaveis.get('permitir_multiplas_funcoes') %}checked{% endif %}>
+                        <label class="form-check-label" for="permitir_multiplas_funcoes">
+                            Confirmo que um mesmo servidor pode exercer mais de uma função neste contrato.
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card content-card mb-4">
+        <div class="card-header bg-dark text-white">
+            <i class="fas fa-note-sticky me-2"></i>Observações
+        </div>
+        <div class="card-body">
+            <textarea class="form-control" id="observacoes" name="observacoes" rows="4"
+                      aria-label="Observações">{{ contrato.get('observacoes') or '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2">
+        <a href="{{ url_for('fiscalizacao_contratos.contratos_detalhe', contrato_id=contrato.get('id')) if editando else url_for('fiscalizacao_contratos.contratos_lista') }}"
+           class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-floppy-disk me-2"></i>{{ 'Salvar alterações' if editando else 'Cadastrar contrato' }}
+        </button>
+    </div>
+</form>
+{% endblock %}

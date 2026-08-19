@@ -1,0 +1,78 @@
+{% extends "fiscalizacao_contratos/layout.html" %}
+
+{% block title %}Empresas Contratadas{% endblock %}
+{% block page_title %}Empresas Contratadas{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('fiscalizacao_contratos.empresas_nova') }}" class="btn btn-primary">
+    <i class="fas fa-plus me-2"></i>Nova empresa
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card content-card">
+    <div class="card-body">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+            <p class="text-muted mb-0">Empresas inativadas permanecem guardadas e podem ser reativadas.</p>
+            <form method="GET" class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="incluirInativas"
+                       name="incluir_inativas" value="1" {% if incluir_inativas %}checked{% endif %}
+                       onchange="this.form.submit()">
+                <label class="form-check-label" for="incluirInativas">Mostrar inativas</label>
+            </form>
+        </div>
+
+        {% if empresas %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Razão social</th>
+                        <th>CNPJ</th>
+                        <th>Cidade/UF</th>
+                        <th>Situação</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for empresa in empresas %}
+                    <tr>
+                        <td>
+                            <strong>{{ empresa.razao_social }}</strong>
+                            {% if empresa.nome_fantasia %}<div class="small text-muted">{{ empresa.nome_fantasia }}</div>{% endif %}
+                        </td>
+                        <td class="text-nowrap">{{ empresa.cnpj|fc_cnpj }}</td>
+                        <td>{{ empresa.cidade or '-' }}{% if empresa.uf %}/{{ empresa.uf }}{% endif %}</td>
+                        <td>
+                            {% if empresa.ativo %}
+                                <span class="badge text-bg-success">Ativa</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">Inativa</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-nowrap">
+                            <a href="{{ url_for('fiscalizacao_contratos.empresas_detalhe', empresa_id=empresa.id) }}"
+                               class="btn btn-sm btn-outline-primary" title="Visualizar">
+                                <i class="fas fa-eye"></i><span class="visually-hidden">Visualizar</span>
+                            </a>
+                            <a href="{{ url_for('fiscalizacao_contratos.empresas_editar', empresa_id=empresa.id) }}"
+                               class="btn btn-sm btn-outline-secondary" title="Editar">
+                                <i class="fas fa-pen"></i><span class="visually-hidden">Editar</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state text-center py-5">
+            <i class="fas fa-building fa-3x text-muted mb-3"></i>
+            <h2 class="h5">Nenhuma empresa encontrada</h2>
+            <p class="text-muted">Cadastre a primeira empresa contratada para começar.</p>
+            <a href="{{ url_for('fiscalizacao_contratos.empresas_nova') }}" class="btn btn-primary">Nova empresa</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

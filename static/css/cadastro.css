@@ -1,0 +1,102 @@
+body {
+    background-color: #f8f9fa;
+    font-family: Inter, sans-serif;
+    padding: 20px;
+}
+
+.form-container {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    display: none;
+    margin-top: 20px;
+    max-width: 1200px;
+    padding: 30px;
+}
+
+h2 {
+    border-bottom: 2px solid #ecf0f1;
+    color: #2c3e50;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+}
+
+.required-field::after {
+    color: red;
+    content: "*";
+    margin-left: 5px;
+}
+
+.dashboard-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s;
+}
+
+.dashboard-card:hover {
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+}
+
+.card-header-custom {
+    border-radius: 12px 12px 0 0 !important;
+    font-size: 0.9rem;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    padding: 15px;
+    text-transform: uppercase;
+}
+
+.btn-dashboard {
+    border-radius: 8px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    padding: 10px 15px;
+    text-align: left;
+}
+
+.btn-dashboard i {
+    margin-right: 8px;
+    text-align: center;
+    width: 25px;
+}
+
+.btn-group-dashboard {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.btn-group-dashboard .btn {
+    flex: 1;
+}
+
+.item-row {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    padding: 15px;
+    position: relative;
+}
+
+.remover-item {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+}
+
+.valor-monetario {
+    color: #2980b9;
+    font-weight: bold;
+}
+
+.tabela-container {
+    margin-top: 20px;
+    overflow-x: auto;
+}
+
+#tabelaRelatorio th {
+    white-space: nowrap;
+}
