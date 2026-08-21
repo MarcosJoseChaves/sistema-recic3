@@ -10,6 +10,7 @@ import calendar
 import secrets
 import smtplib
 import socket
+import uuid
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
@@ -6198,16 +6199,17 @@ def registrar_transacao_financeira():
             valor_pago_inicial = valor_desconto
         status_pagamento_inicial = 'Pago' if valor_pago_inicial >= valor_total_documento_calculado else 'Aberto'
 
+        identificador_publico = str(uuid.uuid4())
         cur.execute("""
             INSERT INTO transacoes_financeiras
-            (uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
+            (identificador_publico, uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
              tipo_transacao, tipo_atividade, valor_total_documento, valor_pago_recebido, data_hora_registro, id_patrimonio, 
              categoria_despesa_patrimonio, medidor_atual, tipo_medidor, id_motorista, nome_motorista,
              litros, tipo_combustivel, tipo_manutencao, garantia_km, garantia_data, proxima_revisao_km,
              proxima_revisao_data, status_pagamento)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """, (
-            dados["uvr_transacao"], dados.get("associacao_transacao",""),
+            identificador_publico, dados["uvr_transacao"], dados.get("associacao_transacao",""),
             id_final_origem_fk, nome_final_origem,
             dados.get("numero_documento_transacao", ""), data_documento,
             dados["tipo_transacao"], dados["tipo_atividade_transacao"],
@@ -6229,16 +6231,18 @@ def registrar_transacao_financeira():
             ))
 
         if aplicar_desconto_mesma_nf:
+            identificador_publico_desconto = str(uuid.uuid4())
             tipo_transacao_principal = dados["tipo_transacao"]
             tipo_transacao_desconto = 'Despesa' if tipo_transacao_principal == 'Receita' else 'Receita'
             cur.execute("""
                 INSERT INTO transacoes_financeiras
-                (uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
+                (identificador_publico, uvr, associacao, id_cadastro_origem, nome_cadastro_origem, numero_documento, data_documento,
                  tipo_transacao, tipo_atividade, valor_total_documento, valor_pago_recebido, data_hora_registro,
                  status_pagamento)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Liquidado')
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Liquidado')
                 RETURNING id
             """, (
+                identificador_publico_desconto,
                 dados["uvr_transacao"],
                 dados.get("associacao_transacao", ""),
                 id_final_origem_fk,
