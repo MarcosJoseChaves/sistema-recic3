@@ -1718,7 +1718,7 @@ class RawCatalogContractTests(unittest.TestCase):
         )
 
     def test_interpretador_oficial_e_python_312(self):
-        esperado = Path(r"C:\dev\recic4\.venv\Scripts\python.exe")
+        esperado = ROOT / ".venv" / "Scripts" / "python.exe"
         self.assertEqual(esperado.resolve(), Path(sys.executable).resolve())
         self.assertEqual((3, 12), sys.version_info[:2])
 
@@ -3431,7 +3431,8 @@ class RunnerTests(unittest.TestCase):
     def test_runner_executa_crlf_na_forma_lf_normalizada(self):
         fx = ManifestFixture()
         try:
-            fx.sql.write_bytes(fx.sql.read_bytes().replace(b"\n", b"\r\n"))
+            conteudo_lf = normalizar_utf8_lf(fx.sql.read_bytes())
+            fx.sql.write_bytes(conteudo_lf.replace(b"\n", b"\r\n"))
             runner = criar_runner(FakeConnection())
             runner.manifesto = carregar_manifesto(fx.save())
             runner.executar()
