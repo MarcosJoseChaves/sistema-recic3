@@ -361,7 +361,7 @@ class ManifestTests(unittest.TestCase):
             ["M0000", "M0001"]
             + [f"M{n:04d}" for n in range(2, 14)]
             + [f"H{n:03d}" for n in range(1, 12)]
-            + ["M0014", "M0015"]
+            + ["M0014", "M0015", "M0016"]
         )
         self.assertEqual(esperadas, [x.identificador for x in carregar_manifesto().operacoes])
 
@@ -920,15 +920,19 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
 
         _validar_contrato_inicial(futuro.operacoes)
 
-        self.assertEqual("H011", futuro.operacoes[-3].identificador)
+        self.assertEqual("H011", futuro.operacoes[-4].identificador)
 
-        self.assertEqual("M0014", futuro.operacoes[-2].identificador)
-        self.assertEqual(("H011",), futuro.operacoes[-2].dependencias)
-        self.assertEqual(25, futuro.operacoes[-2].ordem_global)
+        self.assertEqual("M0014", futuro.operacoes[-3].identificador)
+        self.assertEqual(("H011",), futuro.operacoes[-3].dependencias)
+        self.assertEqual(25, futuro.operacoes[-3].ordem_global)
 
-        self.assertEqual("M0015", futuro.operacoes[-1].identificador)
-        self.assertEqual(("M0014",), futuro.operacoes[-1].dependencias)
-        self.assertEqual(26, futuro.operacoes[-1].ordem_global)
+        self.assertEqual("M0015", futuro.operacoes[-2].identificador)
+        self.assertEqual(("M0014",), futuro.operacoes[-2].dependencias)
+        self.assertEqual(26, futuro.operacoes[-2].ordem_global)
+
+        self.assertEqual("M0016", futuro.operacoes[-1].identificador)
+        self.assertEqual(("M0015",), futuro.operacoes[-1].dependencias)
+        self.assertEqual(27, futuro.operacoes[-1].ordem_global)
 
     def test_preflight_baseline_completa_com_incrementais_pendentes_permanece_controlado(self):
         futuro = manifesto_incremental_pos_baseline()
@@ -949,7 +953,7 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
         self.assertFalse(resultado.pode_prosseguir)
 
 
-    def test_runner_incremental_aplica_m0014_e_m0015_em_ordem(self):
+    def test_runner_incremental_aplica_m0014_m0015_e_m0016_em_ordem(self):
         conexao = FakeConnection()
         runner = criar_runner(
             conexao,
@@ -964,10 +968,10 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
         ) as carregar:
             resultado = runner.executar_pendentes_controlados()
 
-        self.assertEqual(("M0014", "M0015"), resultado.aplicadas)
-        self.assertEqual(2, carregar.call_count)
+        self.assertEqual(("M0014", "M0015", "M0016"), resultado.aplicadas)
+        self.assertEqual(3, carregar.call_count)
         self.assertEqual(
-            ["M0014", "M0015"],
+            ["M0014", "M0015", "M0016"],
             [
                 chamada.args[0].identificador
                 for chamada in carregar.call_args_list
@@ -978,15 +982,15 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
             sql for sql, _params, _autocommit in conexao.executions
             if sql == "SELECT 14;"
         ]
-        self.assertEqual(["SELECT 14;", "SELECT 14;"], ddls)
+        self.assertEqual(["SELECT 14;", "SELECT 14;", "SELECT 14;"], ddls)
 
         registros_migration = [
             params for sql, params, _autocommit in conexao.executions
             if sql.startswith("INSERT INTO public.schema_migrations ")
         ]
-        self.assertEqual(2, len(registros_migration))
+        self.assertEqual(3, len(registros_migration))
         self.assertEqual(
-            ["M0014", "M0015"],
+            ["M0014", "M0015", "M0016"],
             [params[0] for params in registros_migration],
         )
 
@@ -994,22 +998,24 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
             params for sql, params, _autocommit in conexao.executions
             if sql.startswith("INSERT INTO public.schema_migration_execucoes ")
         ]
-        self.assertEqual(2, len(registros_execucao))
+        self.assertEqual(3, len(registros_execucao))
         self.assertEqual(
             [
                 ("M0014", 1, "APLICADA"),
                 ("M0015", 1, "APLICADA"),
+                ("M0016", 1, "APLICADA"),
             ],
             [params[:3] for params in registros_execucao],
         )
 
-        self.assertEqual(2, conexao.commits)
+        self.assertEqual(3, conexao.commits)
 
 
     def test_runner_incremental_sem_pendencias_nao_executa_ddl(self):
         futuro = manifesto_incremental_pos_baseline()
         m0014 = futuro.por_id()["M0014"]
         m0015 = futuro.por_id()["M0015"]
+        m0016 = futuro.por_id()["M0016"]
         snapshot = snapshot_baseline_completa()
 
         aplicadas = snapshot.migrations_aplicadas + (
@@ -1019,6 +1025,10 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
             ),
             AppliedMigration(
                 "M0015", 26, m0015.modulo, m0015.checksum,
+                1, 1, NOW, 5, 1,
+            ),
+            AppliedMigration(
+                "M0016", 27, m0016.modulo, m0016.checksum,
                 1, 1, NOW, 5, 1,
             ),
         )
@@ -1031,6 +1041,11 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
             MigrationExecution(
                 "M0015", 1, "APLICADA", NOW, NOW, 5,
                 m0015.checksum, None, None, REQUEST_ID,
+                "abcdef0123456789", 123, 1,
+            ),
+            MigrationExecution(
+                "M0016", 1, "APLICADA", NOW, NOW, 5,
+                m0016.checksum, None, None, REQUEST_ID,
                 "abcdef0123456789", 123, 1,
             ),
         )
@@ -1057,6 +1072,7 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
     def test_runner_incremental_rejeita_dependencia_invalida(self):
         futuro = manifesto_incremental_pos_baseline()
         m0014 = futuro.por_id()["M0014"]
+        m0015 = futuro.por_id()["M0015"]
         snapshot = snapshot_baseline_completa()
 
         snapshot = replace(
@@ -1066,11 +1082,20 @@ class IncrementalEvolutionContractTests(unittest.TestCase):
                     "M0014", 25, m0014.modulo, m0014.checksum,
                     1, 1, NOW, 5, 1,
                 ),
+                AppliedMigration(
+                    "M0015", 26, m0015.modulo, m0015.checksum,
+                    1, 1, NOW, 5, 1,
+                ),
             ),
             execucoes=snapshot.execucoes + (
                 MigrationExecution(
                     "M0014", 1, "APLICADA", NOW, NOW, 5,
                     m0014.checksum, None, None, REQUEST_ID,
+                    "abcdef0123456789", 123, 1,
+                ),
+                MigrationExecution(
+                    "M0015", 1, "APLICADA", NOW, NOW, 5,
+                    m0015.checksum, None, None, REQUEST_ID,
                     "abcdef0123456789", 123, 1,
                 ),
             ),
@@ -3399,7 +3424,7 @@ class RunnerTests(unittest.TestCase):
     def test_plano_cadeia_completa(self):
         estados = [x.estado for x in MigrationRunner().mostrar_plano()]
         self.assertEqual("EXECUTOR", estados[0])
-        self.assertEqual(["PENDENTE"] * 26, estados[1:])
+        self.assertEqual(["PENDENTE"] * 27, estados[1:])
 
     def test_operacao_desabilitada_no_plano(self):
         runner = MigrationRunner()
@@ -3801,11 +3826,12 @@ class BootstrapFastTests(unittest.TestCase):
 
     def test_manifesto_do_bootstrap_contem_cadeia_completa(self):
         manifesto = carregar_manifesto()
-        self.assertEqual(27, len(manifesto.operacoes))
+        self.assertEqual(28, len(manifesto.operacoes))
         self.assertEqual("M0000", manifesto.operacoes[0].identificador)
-        self.assertEqual("H011", manifesto.operacoes[-3].identificador)
-        self.assertEqual("M0014", manifesto.operacoes[-2].identificador)
-        self.assertEqual("M0015", manifesto.operacoes[-1].identificador)
+        self.assertEqual("H011", manifesto.operacoes[-4].identificador)
+        self.assertEqual("M0014", manifesto.operacoes[-3].identificador)
+        self.assertEqual("M0015", manifesto.operacoes[-2].identificador)
+        self.assertEqual("M0016", manifesto.operacoes[-1].identificador)
 
     def test_importar_entrada_bootstrap_nao_executa_runner(self):
         codigo = (
@@ -3880,11 +3906,11 @@ class CliAndSecurityTests(unittest.TestCase):
 
     def test_cli_checksum(self):
         codigo, saida = self.cli("verificar-checksums")
-        self.assertEqual(0, codigo); self.assertEqual(26, json.loads(saida)["checksums_verificados"])
+        self.assertEqual(0, codigo); self.assertEqual(27, json.loads(saida)["checksums_verificados"])
 
     def test_cli_plano(self):
         codigo, saida = self.cli("mostrar-plano")
-        self.assertEqual(0, codigo); self.assertEqual(27, len(json.loads(saida)["operacoes"]))
+        self.assertEqual(0, codigo); self.assertEqual(28, len(json.loads(saida)["operacoes"]))
 
     def test_cli_preflight_bloqueado(self):
         self.assertEqual(2, self.cli("preflight")[0])

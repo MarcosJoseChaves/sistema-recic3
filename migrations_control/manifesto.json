@@ -569,6 +569,27 @@
         "integracao_postgresql_efemero"
       ],
       "habilitada": true
+    },
+    {
+      "identificador": "M0016",
+      "ordem_global": 27,
+      "modulo": "ambiental",
+      "tipo": "NOVA_DDL",
+      "descricao": "Carrega o snapshot normativo ambiental canonico CNAE 2.3 de 10/09/2026.",
+      "caminho": "sql/M0016_ambiental_snapshot_normativo_2026.sql",
+      "checksum": "63f68d21526ff758fcd9922bde0d183f0806b64a7dd1c1de8c37d172248ce21b",
+      "dependencias": [
+        "M0015"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": true,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
     }
   ]
 }
