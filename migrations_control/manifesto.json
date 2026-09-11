@@ -548,6 +548,27 @@
         "integracao_postgresql_efemero"
       ],
       "habilitada": true
+    },
+    {
+      "identificador": "M0015",
+      "ordem_global": 26,
+      "modulo": "ambiental",
+      "tipo": "NOVA_DDL",
+      "descricao": "Ajusta o modelo normativo ambiental para rascunhos e titulos de quesitos.",
+      "caminho": "sql/M0015_ambiental_ajustes_modelo_normativo.sql",
+      "checksum": "f04f96d82b336cbd713b50e0691f7624dc35adc6e23561f8865a9108c84ae6a7",
+      "dependencias": [
+        "M0014"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
     }
   ]
 }

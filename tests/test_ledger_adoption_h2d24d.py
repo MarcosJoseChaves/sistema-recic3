@@ -285,26 +285,27 @@ class LedgerAdoptionTests(unittest.TestCase):
 class FutureManifestContinuityTests(unittest.TestCase):
     def fixture_futura(self):
         atuais = list(carregar_manifesto().operacoes)
-        m0014 = next(
-            op for op in atuais if op.identificador == "M0014"
+        m0015 = next(
+            op for op in atuais if op.identificador == "M0015"
         )
-        m0015 = replace(
-            m0014,
-            identificador="M0015",
-            ordem_global=m0014.ordem_global + 1,
-            descricao="Migration incremental sintetica posterior a M0014.",
-            dependencias=("M0014",),
+        m0016 = replace(
+            m0015,
+            identificador="M0016",
+            ordem_global=m0015.ordem_global + 1,
+            descricao="Migration incremental sintetica posterior a M0015.",
+            dependencias=("M0015",),
         )
-        return tuple(atuais + [m0015])
+        return tuple(atuais + [m0016])
 
-    def test_m0014_real_e_m0015_futura_aceitas_sem_reescrever_baseline(self):
+    def test_m0014_e_m0015_reais_e_m0016_futura_aceitas_sem_reescrever_baseline(self):
         fixture = self.fixture_futura()
         _validar_contrato_inicial(fixture)
 
-        self.assertEqual("H011", fixture[-3].identificador)
-        self.assertEqual("M0014", fixture[-2].identificador)
-        self.assertEqual("M0015", fixture[-1].identificador)
-        self.assertEqual(("M0014",), fixture[-1].dependencias)
+        self.assertEqual("H011", fixture[-4].identificador)
+        self.assertEqual("M0014", fixture[-3].identificador)
+        self.assertEqual("M0015", fixture[-2].identificador)
+        self.assertEqual("M0016", fixture[-1].identificador)
+        self.assertEqual(("M0015",), fixture[-1].dependencias)
 
     def test_gap_sintetico_rejeitado(self):
         fixture = tuple(
