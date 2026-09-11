@@ -357,9 +357,12 @@ class ManifestTests(unittest.TestCase):
         self.fx.close()
 
     def test_manifesto_real_valido(self):
-        esperadas = ["M0000", "M0001"] + [f"M{n:04d}" for n in range(2, 14)] + [
-            f"H{n:03d}" for n in range(1, 12)
-        ]
+        esperadas = (
+            ["M0000", "M0001"]
+            + [f"M{n:04d}" for n in range(2, 14)]
+            + [f"H{n:03d}" for n in range(1, 12)]
+            + ["M0014"]
+        )
         self.assertEqual(esperadas, [x.identificador for x in carregar_manifesto().operacoes])
 
     def test_json_invalido(self):
@@ -853,27 +856,22 @@ def snapshot_controlado(manifesto=None):
 
 
 def manifesto_incremental_pos_baseline():
-    """Manifesto sintetico que preserva a baseline e acrescenta M0014 apos H011."""
-    base = carregar_manifesto()
-    m0014 = replace(
-        base.por_id()["M0013"],
-        identificador="M0014",
-        ordem_global=25,
-        modulo="ambiental",
-        descricao="Migration incremental sintetica apos a baseline.",
-        dependencias=("H011",),
-    )
-    return replace(base, operacoes=base.operacoes + (m0014,))
+    """Manifesto atual: baseline imutavel ate H011 e M0014 incremental."""
+    return carregar_manifesto()
 
 
 def snapshot_baseline_completa():
     """Fotografia equivalente ao ledger real: M0001 aplicada e demais adotadas."""
     manifesto = carregar_manifesto()
+    limite_baseline = manifesto.por_id()["H011"].ordem_global
     aplicadas = []
     execucoes = []
 
     for operacao in manifesto.operacoes:
-        if operacao.identificador == "M0000":
+        if (
+            operacao.identificador == "M0000"
+            or operacao.ordem_global > limite_baseline
+        ):
             continue
 
         eh_m0001 = operacao.identificador == "M0001"
@@ -3355,7 +3353,7 @@ class RunnerTests(unittest.TestCase):
     def test_plano_cadeia_completa(self):
         estados = [x.estado for x in MigrationRunner().mostrar_plano()]
         self.assertEqual("EXECUTOR", estados[0])
-        self.assertEqual(["PENDENTE"] * 24, estados[1:])
+        self.assertEqual(["PENDENTE"] * 25, estados[1:])
 
     def test_operacao_desabilitada_no_plano(self):
         runner = MigrationRunner()
@@ -3757,9 +3755,10 @@ class BootstrapFastTests(unittest.TestCase):
 
     def test_manifesto_do_bootstrap_contem_cadeia_completa(self):
         manifesto = carregar_manifesto()
-        self.assertEqual(25, len(manifesto.operacoes))
+        self.assertEqual(26, len(manifesto.operacoes))
         self.assertEqual("M0000", manifesto.operacoes[0].identificador)
-        self.assertEqual("H011", manifesto.operacoes[-1].identificador)
+        self.assertEqual("H011", manifesto.operacoes[-2].identificador)
+        self.assertEqual("M0014", manifesto.operacoes[-1].identificador)
 
     def test_importar_entrada_bootstrap_nao_executa_runner(self):
         codigo = (
@@ -3834,11 +3833,11 @@ class CliAndSecurityTests(unittest.TestCase):
 
     def test_cli_checksum(self):
         codigo, saida = self.cli("verificar-checksums")
-        self.assertEqual(0, codigo); self.assertEqual(24, json.loads(saida)["checksums_verificados"])
+        self.assertEqual(0, codigo); self.assertEqual(25, json.loads(saida)["checksums_verificados"])
 
     def test_cli_plano(self):
         codigo, saida = self.cli("mostrar-plano")
-        self.assertEqual(0, codigo); self.assertEqual(25, len(json.loads(saida)["operacoes"]))
+        self.assertEqual(0, codigo); self.assertEqual(26, len(json.loads(saida)["operacoes"]))
 
     def test_cli_preflight_bloqueado(self):
         self.assertEqual(2, self.cli("preflight")[0])
@@ -4007,10 +4006,12 @@ class Norm5FastTests(unittest.TestCase):
         manifesto = carregar_manifesto()
         m0005 = manifesto.por_id()["M0005"]
         self.assertEqual(calcular_sha256_arquivo(m0005.arquivo_resolvido), m0005.checksum)
+        limite_baseline = manifesto.por_id()["H011"].ordem_global
         pares = [
             (op.identificador, op.checksum)
             for op in manifesto.operacoes
             if op.checksum is not None
+            and op.ordem_global <= limite_baseline
             and op.identificador not in {"M0005", "M0013"}
         ]
         resumo = "\n".join(f"{identificador}:{checksum}" for identificador, checksum in pares)
@@ -4053,10 +4054,13 @@ class Norm6FastTests(unittest.TestCase):
         manifesto = carregar_manifesto()
         m0013 = manifesto.por_id()["M0013"]
         self.assertEqual(calcular_sha256_arquivo(m0013.arquivo_resolvido), m0013.checksum)
+        limite_baseline = manifesto.por_id()["H011"].ordem_global
         pares = [
             (op.identificador, op.checksum)
             for op in manifesto.operacoes
-            if op.checksum is not None and op.identificador != "M0013"
+            if op.checksum is not None
+            and op.ordem_global <= limite_baseline
+            and op.identificador != "M0013"
         ]
         resumo = "\n".join(f"{identificador}:{checksum}" for identificador, checksum in pares)
         self.assertEqual(23, len(pares))

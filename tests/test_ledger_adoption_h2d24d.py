@@ -135,9 +135,22 @@ class LedgerAdoptionTests(unittest.TestCase):
             assinatura_ledger=EXPECTED_LEDGER_SCHEMA,
             migrations_aplicadas=aplicadas, execucoes=execucoes,
         )
+        plano = runner.mostrar_plano(snapshot)
+        limite_baseline = runner.manifesto.por_id()["H011"].ordem_global
+        plano_baseline = tuple(
+            item for item in plano if item.ordem <= limite_baseline
+        )
         self.assertFalse(any(
-            item.estado == "PENDENTE" for item in runner.mostrar_plano(snapshot)
+            item.estado == "PENDENTE" for item in plano_baseline
         ))
+        self.assertEqual(
+            "PENDENTE",
+            next(
+                item.estado
+                for item in plano
+                if item.identificador == "M0014"
+            ),
+        )
 
     def test_post_proof_falha_reverte_tudo(self):
         conexao = FakeConnection()
@@ -272,30 +285,31 @@ class LedgerAdoptionTests(unittest.TestCase):
 class FutureManifestContinuityTests(unittest.TestCase):
     def fixture_futura(self):
         atuais = list(carregar_manifesto().operacoes)
-        h011 = atuais[-1]
-        m0013 = next(
-            op for op in atuais if op.identificador == "M0013"
-        )
-        m0014 = replace(
-            m0013,
-            identificador="M0014",
-            ordem_global=h011.ordem_global + 1,
-            dependencias=("H011",),
+        m0014 = next(
+            op for op in atuais if op.identificador == "M0014"
         )
         m0015 = replace(
-            m0013,
+            m0014,
             identificador="M0015",
-            ordem_global=h011.ordem_global + 2,
+            ordem_global=m0014.ordem_global + 1,
+            descricao="Migration incremental sintetica posterior a M0014.",
             dependencias=("M0014",),
         )
-        return tuple(atuais + [m0014, m0015])
+        return tuple(atuais + [m0015])
 
-    def test_m0014_m0015_pos_h011_aceitos_sem_reescrever_baseline(self):
-        _validar_contrato_inicial(self.fixture_futura())
+    def test_m0014_real_e_m0015_futura_aceitas_sem_reescrever_baseline(self):
+        fixture = self.fixture_futura()
+        _validar_contrato_inicial(fixture)
+
+        self.assertEqual("H011", fixture[-3].identificador)
+        self.assertEqual("M0014", fixture[-2].identificador)
+        self.assertEqual("M0015", fixture[-1].identificador)
+        self.assertEqual(("M0014",), fixture[-1].dependencias)
 
     def test_gap_sintetico_rejeitado(self):
         fixture = tuple(
-            op for op in self.fixture_futura() if op.identificador != "M0013"
+            op for op in self.fixture_futura()
+            if op.identificador != "M0014"
         )
         with self.assertRaises(Exception):
             _validar_contrato_inicial(fixture)

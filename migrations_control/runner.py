@@ -350,13 +350,21 @@ class MigrationRunner:
             raise UnknownDatabaseError()
 
     def _registrar_adocoes(self, request_id) -> None:
+        h011 = self.manifesto.por_id().get("H011")
+        if h011 is None:
+            raise InvalidLedgerError()
+
         adotada_em = agora_utc()
         cursor = None
         erro_principal: BaseException | None = None
         try:
             cursor = self.conexao.cursor()
             for operacao in self.manifesto.operacoes:
-                if operacao.identificador in {"M0000", "M0001"} or not operacao.habilitada:
+                if (
+                    operacao.identificador in {"M0000", "M0001"}
+                    or not operacao.habilitada
+                    or operacao.ordem_global > h011.ordem_global
+                ):
                     continue
                 registrar_migration_adotada(
                     cursor, operacao, request_id=request_id, adotada_em=adotada_em,
@@ -428,17 +436,29 @@ class MigrationRunner:
             if not conteudo_valido:
                 raise InvalidLedgerError()
             plano = self.mostrar_plano(snapshot_final)
-            if any(item.estado == "PENDENTE" for item in plano):
+            h011 = self.manifesto.por_id().get("H011")
+            if h011 is None:
                 raise InvalidLedgerError()
-            if sum(item.estado == "ADOTADA" for item in plano) != 23:
+
+            plano_baseline = tuple(
+                item
+                for item in plano
+                if item.ordem <= h011.ordem_global
+            )
+            if any(item.estado == "PENDENTE" for item in plano_baseline):
                 raise InvalidLedgerError()
+            if sum(item.estado == "ADOTADA" for item in plano_baseline) != 23:
+                raise InvalidLedgerError()
+
             estado.confirmar_migration()
             transacao_iniciada = False
             estado.preparar_operacoes_sem_transacao()
             resultado = RunnerResult(
                 True, DatabaseClassification.BANCO_CONTROLADO.value,
                 ("M0001",), tuple(
-                    item.identificador for item in plano if item.estado == "ADOTADA"
+                    item.identificador
+                    for item in plano_baseline
+                    if item.estado == "ADOTADA"
                 ), 0, "Legado reconciliado adotado com sucesso.", request_id_texto,
             )
         except Exception as erro:
@@ -792,9 +812,15 @@ class MigrationRunner:
                 or ids_aplicados != {"M0001"}
             ):
                 raise UnknownDatabaseError()
+            por_id = self.manifesto.por_id()
+            h011 = por_id.get("H011")
+            if h011 is None:
+                raise InvalidLedgerError()
+
             pendentes = [
                 operacao for operacao in self.manifesto.operacoes
                 if operacao.identificador not in {"M0000", "M0001"}
+                and operacao.ordem_global <= h011.ordem_global
                 and operacao.habilitada
                 and operacao.identificador not in ids_aplicados
             ]

@@ -1,1 +1,2 @@
 .env -diff
+tests/fixtures/h2c4a2_pg15_18_catalogo_bruto.json text eol=lf

@@ -527,6 +527,27 @@
         "integracao_postgresql_efemero"
       ],
       "habilitada": true
+    },
+    {
+      "identificador": "M0014",
+      "ordem_global": 25,
+      "modulo": "ambiental",
+      "tipo": "NOVA_DDL",
+      "descricao": "Materializa a fundacao do dominio ambiental.",
+      "caminho": "sql/M0014_ambiental_fundacao.sql",
+      "checksum": "bdac9417687d48daf4be0e8f7268d070007098e15867c007a8497a4f453e7d5e",
+      "dependencias": [
+        "H011"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
     }
   ]
 }
