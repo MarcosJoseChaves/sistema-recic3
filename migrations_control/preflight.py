@@ -209,18 +209,6 @@ def classificar_preflight(
             snapshot, DatabaseClassification.BANCO_DESCONHECIDO,
             "As sequências IDENTITY do ledger estão ausentes ou incompletas.", 26, False,
         )
-    total_persistivel = sum(
-        op.habilitada and op.tipo is not OperationType.EXECUTOR
-        for op in manifesto.operacoes
-    )
-    if (
-        encontrados - LEDGER_OBJECTS
-        and len(snapshot.migrations_aplicadas) != total_persistivel
-    ):
-        return _resultado(
-            snapshot, DatabaseClassification.BANCO_DESCONHECIDO,
-            "Existem objetos não reconhecidos além do ledger inicial.", 23, False,
-        )
     estrutura_valida, motivo = validar_assinatura_ledger(snapshot.assinatura_ledger)
     if not estrutura_valida:
         return _resultado(
@@ -230,6 +218,15 @@ def classificar_preflight(
     if not conteudo_valido:
         return _resultado(
             snapshot, DatabaseClassification.BANCO_DESCONHECIDO, motivo, 25, False
+        )
+
+    ids_aplicados = {
+        item.migration_id for item in snapshot.migrations_aplicadas
+    }
+    if encontrados - LEDGER_OBJECTS and "H011" not in ids_aplicados:
+        return _resultado(
+            snapshot, DatabaseClassification.BANCO_DESCONHECIDO,
+            "Existem objetos não reconhecidos além do ledger inicial.", 23, False,
         )
     return _resultado(
         snapshot, DatabaseClassification.BANCO_CONTROLADO,

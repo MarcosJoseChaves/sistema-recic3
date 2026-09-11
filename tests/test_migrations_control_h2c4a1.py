@@ -70,7 +70,7 @@ from migrations_control.ledger import (
     registrar_m0001_aplicada,
 )
 from migrations_control.locking import AdvisoryLock, derivar_chave_lock
-from migrations_control.manifest import carregar_manifesto
+from migrations_control.manifest import _validar_contrato_inicial, carregar_manifesto
 from migrations_control.models import (
     AppliedMigration,
     MigrationExecution,
@@ -850,6 +850,250 @@ def snapshot_controlado(manifesto=None):
         True, LEDGER_OBJECTS, assinatura_ledger=EXPECTED_LEDGER_SCHEMA,
         migrations_aplicadas=aplicadas, execucoes=execucoes,
     )
+
+
+def manifesto_incremental_pos_baseline():
+    """Manifesto sintetico que preserva a baseline e acrescenta M0014 apos H011."""
+    base = carregar_manifesto()
+    m0014 = replace(
+        base.por_id()["M0013"],
+        identificador="M0014",
+        ordem_global=25,
+        modulo="ambiental",
+        descricao="Migration incremental sintetica apos a baseline.",
+        dependencias=("H011",),
+    )
+    return replace(base, operacoes=base.operacoes + (m0014,))
+
+
+def snapshot_baseline_completa():
+    """Fotografia equivalente ao ledger real: M0001 aplicada e demais adotadas."""
+    manifesto = carregar_manifesto()
+    aplicadas = []
+    execucoes = []
+
+    for operacao in manifesto.operacoes:
+        if operacao.identificador == "M0000":
+            continue
+
+        eh_m0001 = operacao.identificador == "M0001"
+        duracao = 5 if eh_m0001 else 0
+        situacao = "APLICADA" if eh_m0001 else "ADOTADA"
+
+        aplicadas.append(AppliedMigration(
+            operacao.identificador,
+            operacao.ordem_global,
+            operacao.modulo,
+            operacao.checksum,
+            1,
+            1,
+            NOW,
+            duracao,
+            1,
+        ))
+        execucoes.append(MigrationExecution(
+            operacao.identificador,
+            0,
+            situacao,
+            NOW,
+            NOW,
+            duracao,
+            operacao.checksum,
+            None,
+            None,
+            REQUEST_ID,
+            "abcdef0123456789",
+            123,
+            1,
+        ))
+
+    return PreflightSnapshot(
+        True,
+        LEDGER_OBJECTS | frozenset({"usuarios"}),
+        assinatura_ledger=EXPECTED_LEDGER_SCHEMA,
+        migrations_aplicadas=tuple(aplicadas),
+        execucoes=tuple(execucoes),
+    )
+
+
+class IncrementalEvolutionContractTests(unittest.TestCase):
+    def test_m0014_pode_ser_acrescentada_apos_h011_sem_reescrever_baseline(self):
+        futuro = manifesto_incremental_pos_baseline()
+
+        _validar_contrato_inicial(futuro.operacoes)
+
+        self.assertEqual("H011", futuro.operacoes[-2].identificador)
+        self.assertEqual("M0014", futuro.operacoes[-1].identificador)
+        self.assertEqual(("H011",), futuro.operacoes[-1].dependencias)
+        self.assertEqual(25, futuro.operacoes[-1].ordem_global)
+
+    def test_preflight_baseline_completa_com_m0014_pendente_permanece_controlado(self):
+        futuro = manifesto_incremental_pos_baseline()
+        resultado = classificar_preflight(snapshot_baseline_completa(), futuro)
+
+        self.assertEqual("BANCO_CONTROLADO", resultado.classificacao.value)
+        self.assertTrue(resultado.pode_prosseguir)
+
+
+    def test_objetos_extras_com_apenas_m0001_continuam_bloqueados(self):
+        snapshot = replace(
+            snapshot_controlado(),
+            objetos_encontrados=LEDGER_OBJECTS | frozenset({"usuarios"}),
+        )
+        resultado = classificar_preflight(snapshot, carregar_manifesto())
+
+        self.assertEqual("BANCO_DESCONHECIDO", resultado.classificacao.value)
+        self.assertFalse(resultado.pode_prosseguir)
+
+
+    def test_runner_incremental_aplica_somente_m0014(self):
+        conexao = FakeConnection()
+        runner = criar_runner(
+            conexao,
+            snapshot=snapshot_baseline_completa(),
+        )
+        runner.manifesto = manifesto_incremental_pos_baseline()
+
+        with mock.patch.object(
+            runner,
+            "_carregar_texto_operacao",
+            return_value="SELECT 14;",
+        ) as carregar:
+            resultado = runner.executar_pendentes_controlados()
+
+        self.assertEqual(("M0014",), resultado.aplicadas)
+        self.assertEqual(1, carregar.call_count)
+        self.assertEqual(
+            "M0014",
+            carregar.call_args.args[0].identificador,
+        )
+
+        ddls = [
+            sql for sql, _params, _autocommit in conexao.executions
+            if sql == "SELECT 14;"
+        ]
+        self.assertEqual(["SELECT 14;"], ddls)
+
+        registros_migration = [
+            params for sql, params, _autocommit in conexao.executions
+            if sql.startswith("INSERT INTO public.schema_migrations ")
+        ]
+        self.assertEqual(1, len(registros_migration))
+        self.assertEqual("M0014", registros_migration[0][0])
+
+        registros_execucao = [
+            params for sql, params, _autocommit in conexao.executions
+            if sql.startswith("INSERT INTO public.schema_migration_execucoes ")
+        ]
+        self.assertEqual(1, len(registros_execucao))
+        self.assertEqual(
+            ("M0014", 1, "APLICADA"),
+            registros_execucao[0][:3],
+        )
+
+        self.assertEqual(1, conexao.commits)
+
+
+    def test_runner_incremental_sem_pendencias_nao_executa_ddl(self):
+        futuro = manifesto_incremental_pos_baseline()
+        m0014 = futuro.por_id()["M0014"]
+        snapshot = snapshot_baseline_completa()
+
+        aplicadas = snapshot.migrations_aplicadas + (
+            AppliedMigration(
+                "M0014", 25, m0014.modulo, m0014.checksum,
+                1, 1, NOW, 5, 1,
+            ),
+        )
+        execucoes = snapshot.execucoes + (
+            MigrationExecution(
+                "M0014", 1, "APLICADA", NOW, NOW, 5,
+                m0014.checksum, None, None, REQUEST_ID,
+                "abcdef0123456789", 123, 1,
+            ),
+        )
+        snapshot = replace(
+            snapshot,
+            migrations_aplicadas=aplicadas,
+            execucoes=execucoes,
+        )
+
+        conexao = FakeConnection()
+        runner = criar_runner(conexao, snapshot=snapshot)
+        runner.manifesto = futuro
+
+        with mock.patch.object(
+            runner, "_carregar_texto_operacao"
+        ) as carregar:
+            resultado = runner.executar_pendentes_controlados()
+
+        self.assertEqual((), resultado.aplicadas)
+        carregar.assert_not_called()
+        self.assertEqual(0, conexao.commits)
+
+    def test_runner_incremental_rejeita_dependencia_invalida(self):
+        futuro = manifesto_incremental_pos_baseline()
+        operacoes = list(futuro.operacoes)
+        operacoes[-1] = replace(
+            operacoes[-1],
+            dependencias=("M0013",),
+        )
+        futuro = replace(futuro, operacoes=tuple(operacoes))
+
+        conexao = FakeConnection()
+        runner = criar_runner(
+            conexao,
+            snapshot=snapshot_baseline_completa(),
+        )
+        runner.manifesto = futuro
+
+        with self.assertRaises(InvalidLedgerError):
+            runner.executar_pendentes_controlados()
+
+        self.assertEqual(0, conexao.commits)
+        self.assertFalse(any(
+            sql == "SELECT 14;"
+            for sql, _params, _autocommit in conexao.executions
+        ))
+
+    def test_runner_incremental_falha_reverte_e_registra_sanitizado(self):
+        conexao = FakeConnection()
+        conexao.fail_execute_contains = "SELECT 14;"
+
+        runner = criar_runner(
+            conexao,
+            snapshot=snapshot_baseline_completa(),
+        )
+        runner.manifesto = manifesto_incremental_pos_baseline()
+
+        with mock.patch.object(
+            runner,
+            "_carregar_texto_operacao",
+            return_value="SELECT 14;",
+        ):
+            with self.assertRaises(MigrationExecutionError):
+                runner.executar_pendentes_controlados()
+
+        self.assertEqual(1, conexao.rollbacks)
+        self.assertEqual(1, conexao.commits)
+
+        falhas = [
+            params
+            for sql, params, _autocommit in conexao.executions
+            if sql.startswith(
+                "INSERT INTO public.schema_migration_execucoes "
+            )
+        ]
+        self.assertEqual(1, len(falhas))
+        self.assertEqual(
+            ("M0014", 1, "FALHOU"),
+            falhas[0][:3],
+        )
+        self.assertNotIn(
+            "segredo",
+            " ".join(str(valor) for valor in falhas[0]),
+        )
+
 
 
 class SchemaValidationTests(unittest.TestCase):

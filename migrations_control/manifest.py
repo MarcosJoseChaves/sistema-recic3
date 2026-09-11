@@ -205,16 +205,29 @@ def _validar_dependencias(operacoes: tuple[ManifestOperation, ...]) -> None:
 
 def _validar_continuidade_ids(operacoes: tuple[ManifestOperation, ...]) -> None:
     ids = tuple(op.identificador for op in operacoes)
-    ids_m = tuple(item for item in ids if item.startswith("M"))
-    ids_h = tuple(item for item in ids if item.startswith("H"))
-    if not ids_m or ids_m[0] != "M0000":
-        raise ManifestError("A cadeia física deve iniciar em M0000.")
-    maior_m = int(ids_m[-1][1:])
-    maior_h = int(ids_h[-1][1:]) if ids_h else 0
-    esperados_m = tuple(f"M{numero:04d}" for numero in range(maior_m + 1))
-    esperados_h = tuple(f"H{numero:03d}" for numero in range(1, maior_h + 1))
-    if ids_m != esperados_m or ids_h != esperados_h or ids != esperados_m + esperados_h:
-        raise ManifestError("IDs físicos possuem gap, namespace inválido ou ordem incorreta.")
+
+    baseline = (
+        tuple(f"M{numero:04d}" for numero in range(14))
+        + tuple(f"H{numero:03d}" for numero in range(1, 12))
+    )
+
+    if not ids or ids[0] != "M0000":
+        raise ManifestError("A cadeia f\u00edsica deve iniciar em M0000.")
+
+    if len(ids) <= len(baseline):
+        esperados = baseline[:len(ids)]
+    else:
+        quantidade_incrementais = len(ids) - len(baseline)
+        incrementais = tuple(
+            f"M{numero:04d}"
+            for numero in range(14, 14 + quantidade_incrementais)
+        )
+        esperados = baseline + incrementais
+
+    if ids != esperados:
+        raise ManifestError(
+            "IDs f\u00edsicos possuem gap, namespace inv\u00e1lido ou ordem incorreta."
+        )
 
 
 def _validar_contrato_inicial(operacoes: tuple[ManifestOperation, ...]) -> None:

@@ -502,6 +502,267 @@ class MigrationRunner:
             return adaptar_wrapper_historico(artefato.texto_sql)
         return artefato.texto_sql
 
+    def executar_pendentes_controlados(self) -> RunnerResult:
+        """Aplica somente migrations incrementais posteriores a H011."""
+        if self.conexao is None:
+            raise DatabaseConnectionError()
+
+        request_id = uuid4()
+        request_id_texto = str(request_id)
+        estado = ConnectionState(self.conexao)
+        estado.validar_entrada()
+        lock = self.lock_factory(
+            self.conexao,
+            timeout_segundos=self.timeout_lock_segundos,
+        )
+
+        aplicadas: list[str] = []
+        erro_principal: MigrationControlError | None = None
+        erro_limpeza: MigrationControlError | None = None
+        resultado: RunnerResult | None = None
+
+        migration_iniciada = False
+        operacao_atual = None
+        tentativa_atual = None
+        iniciada_em_atual = None
+        inicio_atual = None
+
+        try:
+            estado.preparar_operacoes_sem_transacao()
+            lock.adquirir()
+
+            snapshot = self.snapshot_factory(self.conexao)
+            preflight = classificar_preflight(snapshot, self.manifesto)
+            ids_aplicados = {
+                item.migration_id
+                for item in snapshot.migrations_aplicadas
+            }
+
+            if (
+                not preflight.pode_prosseguir
+                or preflight.classificacao
+                is not DatabaseClassification.BANCO_CONTROLADO
+                or "H011" not in ids_aplicados
+            ):
+                raise UnknownDatabaseError()
+
+            h011 = self.manifesto.por_id().get("H011")
+            if h011 is None:
+                raise InvalidLedgerError()
+
+            satisfeitas_iniciais = tuple(
+                operacao.identificador
+                for operacao in self.manifesto.operacoes
+                if operacao.identificador in ids_aplicados
+            )
+
+            operacoes_aplicadas = [
+                operacao
+                for operacao in self.manifesto.operacoes
+                if operacao.habilitada
+                and operacao.tipo is not OperationType.EXECUTOR
+                and operacao.identificador in ids_aplicados
+            ]
+            if not operacoes_aplicadas:
+                raise InvalidLedgerError()
+
+            anterior_aplicada = max(
+                operacoes_aplicadas,
+                key=lambda operacao: operacao.ordem_global,
+            ).identificador
+
+            pendentes = [
+                operacao
+                for operacao in self.manifesto.operacoes
+                if operacao.habilitada
+                and operacao.ordem_global > h011.ordem_global
+                and operacao.identificador not in ids_aplicados
+            ]
+
+            for operacao in pendentes:
+                if operacao.tipo is not OperationType.NOVA_DDL:
+                    raise InvalidLedgerError()
+                if operacao.dependencias != (anterior_aplicada,):
+                    raise InvalidLedgerError()
+
+                tentativas_anteriores = [
+                    item.tentativa
+                    for item in snapshot.execucoes
+                    if item.migration_id == operacao.identificador
+                ]
+                tentativa = max(tentativas_anteriores, default=0) + 1
+
+                operacao_atual = operacao
+                tentativa_atual = tentativa
+                iniciada_em = agora_utc()
+                inicio = self.clock()
+                iniciada_em_atual = iniciada_em
+                inicio_atual = inicio
+
+                estado.iniciar_migration()
+                migration_iniciada = True
+
+                cursor = None
+                try:
+                    texto_sql = self._carregar_texto_operacao(operacao)
+                    cursor = self.conexao.cursor()
+                    cursor.execute(texto_sql)
+
+                    concluida_em = agora_utc()
+                    duracao_ms = max(
+                        0,
+                        round((self.clock() - inicio) * 1000),
+                    )
+
+                    registrar_migration_aplicada(
+                        cursor,
+                        operacao,
+                        tentativa=tentativa,
+                        request_id=request_id,
+                        iniciada_em=iniciada_em,
+                        concluida_em=concluida_em,
+                        duracao_ms=duracao_ms,
+                        manifesto_versao=self.manifesto.versao_formato,
+                    )
+                finally:
+                    if cursor is not None:
+                        cursor.close()
+
+                estado.confirmar_migration()
+                migration_iniciada = False
+                estado.preparar_operacoes_sem_transacao()
+
+                aplicadas.append(operacao.identificador)
+                ids_aplicados.add(operacao.identificador)
+                anterior_aplicada = operacao.identificador
+
+                operacao_atual = None
+                tentativa_atual = None
+                iniciada_em_atual = None
+                inicio_atual = None
+
+            resultado = RunnerResult(
+                True,
+                preflight.classificacao.value,
+                tuple(aplicadas),
+                satisfeitas_iniciais,
+                0,
+                (
+                    "Migrations incrementais aplicadas com sucesso."
+                    if aplicadas
+                    else "Nenhuma migration incremental pendente."
+                ),
+                request_id_texto,
+            )
+
+        except Exception as erro:
+            erro_principal = _erro_controlado(erro)
+
+            if migration_iniciada:
+                try:
+                    if estado.status() != TRANSACTION_STATUS_IDLE:
+                        estado.reverter_migration()
+                except Exception as erro_rollback:
+                    self._log_secundario(
+                        "migration_rollback_falhou",
+                        erro_rollback,
+                        request_id_texto,
+                    )
+
+            if (
+                operacao_atual is not None
+                and tentativa_atual is not None
+                and iniciada_em_atual is not None
+                and inicio_atual is not None
+            ):
+                cursor = None
+                try:
+                    estado.preparar_operacoes_sem_transacao()
+                    estado.iniciar_migration()
+                    cursor = self.conexao.cursor()
+
+                    concluida_em = agora_utc()
+                    duracao_ms = max(
+                        0,
+                        round((self.clock() - inicio_atual) * 1000),
+                    )
+                    erro_seguro = sanitizar_erro(erro_principal)
+
+                    registrar_migration_falhou(
+                        cursor,
+                        operacao_atual,
+                        tentativa=tentativa_atual,
+                        request_id=request_id,
+                        iniciada_em=iniciada_em_atual,
+                        concluida_em=concluida_em,
+                        duracao_ms=duracao_ms,
+                        erro_codigo=erro_seguro["codigo"],
+                        erro_sanitizado=erro_seguro["mensagem"],
+                    )
+
+                    cursor.close()
+                    cursor = None
+                    estado.confirmar_migration()
+                    estado.preparar_operacoes_sem_transacao()
+
+                except Exception as erro_registro:
+                    if cursor is not None:
+                        try:
+                            cursor.close()
+                        except Exception:
+                            pass
+
+                    try:
+                        if estado.status() != TRANSACTION_STATUS_IDLE:
+                            estado.reverter_migration()
+                    except Exception:
+                        pass
+
+                    self._log_secundario(
+                        "migration_falha_registro_falhou",
+                        erro_registro,
+                        request_id_texto,
+                    )
+
+        finally:
+            if lock.adquirido:
+                try:
+                    if estado.status() != TRANSACTION_STATUS_IDLE:
+                        raise LockError()
+                    estado.preparar_operacoes_sem_transacao()
+                    lock.liberar()
+                except Exception as erro_unlock:
+                    convertido = _erro_controlado(erro_unlock)
+                    self._log_secundario(
+                        "migration_lock_liberacao_falhou",
+                        convertido,
+                        request_id_texto,
+                    )
+                    if erro_principal is None:
+                        erro_limpeza = convertido
+
+            try:
+                estado.restaurar()
+            except Exception as erro_restauracao:
+                convertido = _erro_controlado(erro_restauracao)
+                self._log_secundario(
+                    "migration_conexao_restauracao_falhou",
+                    convertido,
+                    request_id_texto,
+                )
+                if erro_principal is None and erro_limpeza is None:
+                    erro_limpeza = convertido
+
+        erro_final = erro_principal or erro_limpeza
+        if erro_final is not None:
+            raise erro_final
+
+        if resultado is None:
+            raise MigrationExecutionError()
+
+        return resultado
+
+
     def executar_cadeia_controlada(self) -> RunnerResult:
         """Aplica explicitamente M0002–H011; nunca executa o bootstrap M0001."""
         if self.conexao is None:

@@ -272,23 +272,25 @@ class LedgerAdoptionTests(unittest.TestCase):
 class FutureManifestContinuityTests(unittest.TestCase):
     def fixture_futura(self):
         atuais = list(carregar_manifesto().operacoes)
-        m_ops = [op for op in atuais if op.identificador.startswith("M")]
-        h_ops = [op for op in atuais if op.identificador.startswith("H")]
-        m14 = replace(
-            m_ops[-1], identificador="M0014", dependencias=("M0013",),
+        h011 = atuais[-1]
+        m0013 = next(
+            op for op in atuais if op.identificador == "M0013"
         )
-        cadeia = [*m_ops, m14, *h_ops]
-        h12 = replace(h_ops[-1], identificador="H012", dependencias=("H011",))
-        cadeia.append(h12)
-        resultado = []
-        anterior = None
-        for ordem, op in enumerate(cadeia):
-            deps = () if ordem == 0 else (anterior,)
-            resultado.append(replace(op, ordem_global=ordem, dependencias=deps))
-            anterior = op.identificador
-        return tuple(resultado)
+        m0014 = replace(
+            m0013,
+            identificador="M0014",
+            ordem_global=h011.ordem_global + 1,
+            dependencias=("H011",),
+        )
+        m0015 = replace(
+            m0013,
+            identificador="M0015",
+            ordem_global=h011.ordem_global + 2,
+            dependencias=("M0014",),
+        )
+        return tuple(atuais + [m0014, m0015])
 
-    def test_m0014_h012_sinteticos_aceitos_sem_hardcode(self):
+    def test_m0014_m0015_pos_h011_aceitos_sem_reescrever_baseline(self):
         _validar_contrato_inicial(self.fixture_futura())
 
     def test_gap_sintetico_rejeitado(self):
