@@ -1,0 +1,30 @@
+{% extends "esg/layout.html" %}
+{% block title %}Definições de indicadores · ESG{% endblock %}
+{% block content %}
+<header class="section-heading page-heading">
+    <div><p class="eyebrow">Marechal Aterro Zero</p><h1 class="page-title">Definições de indicadores</h1></div>
+    <a class="button button-primary" href="{{ url_for('esg.indicadores_novo') }}">Cadastrar indicador proposto</a>
+</header>
+<p class="data-notice">Área administrativa. Propostas e rascunhos não constituem resultados aprovados. RF-1A permanece NO-GO OPERACIONAL.</p>
+<section class="indicators section-space" aria-label="Indicadores cadastrados">
+    {% if indicadores %}
+    <div class="table-scroll">
+        <table>
+            <caption>Definições, unidades, perímetros e situações declaradas</caption>
+            <thead><tr><th scope="col">Indicador</th><th scope="col">Dimensão</th><th scope="col">Unidade</th><th scope="col">Perímetro</th><th scope="col">Situação da definição</th></tr></thead>
+            <tbody>{% for indicador in indicadores %}
+                <tr>
+                    <td><a href="{{ url_for('esg.indicadores_detalhe', codigo=indicador.codigo) }}">{{ indicador.nome }}</a><span class="helper block">{{ indicador.codigo }}</span></td>
+                    <td>{{ {'ambiental': 'Ambiental', 'social': 'Social', 'governanca': 'Governança'}[indicador.dimensao.value] }}</td>
+                    <td>{{ indicador.unidade.simbolo }} — {{ indicador.unidade.descricao }}</td>
+                    <td>{{ indicador.perimetro.codigo }} — {{ indicador.perimetro.descricao }}</td>
+                    <td>{{ rotulos_esg[indicador.situacao.value] }}</td>
+                </tr>
+            {% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><h2>Nenhuma definição cadastrada</h2><p>Cadastre uma proposta com metodologia, perímetro e fonte documental.</p></div>
+    {% endif %}
+</section>
+{% endblock %}

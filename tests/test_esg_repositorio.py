@@ -349,6 +349,42 @@ class TestRepositorioESG(unittest.TestCase):
                 self.assertEqual(conexao.sessoes, [{"readonly": True, "isolation_level": "REPEATABLE READ"}])
                 self.conferir_sucesso(conexao)
 
+    def test_listar_definicoes_vazias_e_com_estados_e_fontes(self):
+        aprovada = replace(self.definicao, codigo="aprovada-teste", situacao=SituacaoIndicador.APROVADO, fonte_aprovacao=self.fonte)
+        for definicoes in ((), (self.definicao, aprovada)):
+            repo, conexao, _ = self.repositorio([Passo("FROM esg_definicoes d", [self.definicao_linha(d) for d in definicoes])])
+            with self.subTest(quantidade=len(definicoes)):
+                self.assertEqual(repo.listar_definicoes(), definicoes)
+                self.assertEqual(conexao.sessoes, [{"readonly": True, "isolation_level": "REPEATABLE READ"}])
+                self.conferir_sucesso(conexao)
+
+    def test_listar_definicoes_rejeita_dados_invalidos_e_reverte(self):
+        for indice, valor in ((0, "codigo inválido"), (2, "dimensao-invalida"),
+                              (5, "estado-invalido"), (10, None)):
+            linha = list(self.definicao_linha())
+            linha[indice] = valor
+            repo, conexao, fabrica = self.repositorio([
+                Passo("FROM esg_definicoes d", [self.definicao_linha(), tuple(linha)])
+            ])
+            with self.subTest(indice=indice), self.assertRaises((PersistenciaESGError, ContratoESGInvalido)) as contexto:
+                repo.listar_definicoes()
+            self.assertNotIn("Detalhe interno", str(contexto.exception))
+            fabrica.assert_called_once_with()
+            self.assertEqual(conexao.commits, 0)
+            self.conferir_rollback(conexao)
+
+    def test_listar_definicoes_falha_de_consulta_reverte_sem_expor_driver(self):
+        repo, conexao, fabrica = self.repositorio([
+            Passo("FROM esg_definicoes d", erro=ErroDBSimulado())
+        ])
+        with self.assertRaises(PersistenciaESGError) as contexto:
+            repo.listar_definicoes()
+        self.assertNotIn("Detalhe interno", str(contexto.exception))
+        fabrica.assert_called_once_with()
+        self.assertEqual(len(conexao.execucoes), 1)
+        self.assertEqual(conexao.commits, 0)
+        self.conferir_rollback(conexao)
+
     def test_consulta_por_codigo_periodo_preserva_valor_e_fonte(self):
         for valor in (None, Decimal("0"), Decimal("1.234567890123456789")):
             for periodo in (Periodo(2025), Periodo(2025, 12)):

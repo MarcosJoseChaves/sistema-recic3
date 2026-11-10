@@ -1,0 +1,22 @@
+{% macro campo(dados, nome, rotulo, tipo='text', obrigatorio=true, multiline=false, ajuda='', limite=none) -%}
+<div class="field">
+    <label for="{{ nome }}">{{ rotulo }}{% if obrigatorio %} <span aria-hidden="true">*</span>{% else %} <span class="helper">(opcional)</span>{% endif %}</label>
+    {% if multiline %}
+    <textarea id="{{ nome }}" name="{{ nome }}" rows="4" {% if obrigatorio %}required{% endif %} {% if ajuda %}aria-describedby="{{ nome }}-ajuda"{% endif %}>{{ dados.get(nome, '') }}</textarea>
+    {% else %}
+    <input id="{{ nome }}" name="{{ nome }}" type="{{ tipo }}" value="{{ dados.get(nome, '') }}" {% if obrigatorio %}required{% endif %} {% if limite %}maxlength="{{ limite }}"{% endif %} {% if ajuda %}aria-describedby="{{ nome }}-ajuda"{% endif %}>
+    {% endif %}
+    {% if ajuda %}<p class="helper" id="{{ nome }}-ajuda">{{ ajuda }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro fonte(documento, titulo='Fonte documental') -%}
+<section class="document-source" aria-label="{{ titulo }}">
+    <h3>{{ titulo }}</h3>
+    <dl class="metadata">
+        <dt>Identificador documental</dt><dd>{{ documento.identificador }}</dd>
+        <dt>Referência documental</dt><dd class="preserve-text">{{ documento.referencia_documental }}</dd>
+        <dt>Data do documento</dt><dd>{{ documento.data_documento.strftime('%d/%m/%Y') if documento.data_documento else 'Não informada' }}</dd>
+    </dl>
+</section>
+{%- endmacro %}

@@ -1,0 +1,9 @@
+{% extends "esg/layout.html" %}
+{% block title %}Operação indisponível · ESG{% endblock %}
+{% block content %}
+<section class="indicators" aria-labelledby="erro-titulo">
+    <h1 id="erro-titulo" class="page-title">Não foi possível concluir a operação</h1>
+    <p class="feedback" role="alert">{{ mensagem }}</p>
+    <a class="button" href="{{ url_for('esg.painel') }}">Voltar ao início ESG</a>
+</section>
+{% endblock %}

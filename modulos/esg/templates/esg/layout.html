@@ -12,6 +12,8 @@
         <div class="shell header-content">
             <a class="brand" href="{{ url_for('index') }}" aria-label="RECIC3 — Painel principal">RECIC3<span>Gestão e sustentabilidade</span></a>
             <nav class="header-actions" aria-label="Navegação principal">
+                <a class="button button-outline" href="{{ url_for('esg.painel') }}">Início ESG</a>
+                <a class="button button-outline" href="{{ url_for('esg.indicadores_lista') }}">Indicadores</a>
                 <a class="button button-outline" href="{{ url_for('index') }}">Painel principal</a>
                 <form method="POST" action="{{ url_for('logout') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -21,8 +23,13 @@
         </div>
     </header>
     <main id="conteudo" class="shell main-content">
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% for categoria, mensagem in mensagens %}
+            <p class="feedback feedback-{{ categoria }}" role="status">{{ mensagem }}</p>
+            {% endfor %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </main>
-    <footer class="shell site-footer">RECIC3 · Marechal Aterro Zero</footer>
+    <footer class="shell site-footer">RECIC3 · Marechal Aterro Zero · RF-1A: NO-GO OPERACIONAL</footer>
 </body>
 </html>

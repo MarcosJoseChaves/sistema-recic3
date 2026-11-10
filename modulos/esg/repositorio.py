@@ -275,6 +275,12 @@ class RepositorioESG:
         with self._transacao(leitura=True) as cursor:
             return self._ler_definicao(cursor, codigo)
 
+    def listar_definicoes(self):
+        """Lista contratos e seus estados, sem agregar perímetros ou valores."""
+        with self._transacao(leitura=True) as cursor:
+            cursor.execute(DEFINICAO_SELECT + " ORDER BY d.dimensao, d.nome, d.codigo", ())
+            return tuple(_definicao(linha) for linha in cursor.fetchall())
+
     def obter_registro(self, codigo, periodo, perimetro):
         validar_codigo(codigo, "codigo")
         exigir_tipo(periodo, Periodo, "periodo")

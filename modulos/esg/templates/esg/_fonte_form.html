@@ -1,0 +1,10 @@
+{% from "esg/_macros.html" import campo %}
+<fieldset>
+    <legend>Fonte documental</legend>
+    <p class="helper">Informe uma referência rastreável. Nenhum documento será buscado ou enviado automaticamente.</p>
+    <div class="form-grid">
+        {{ campo(dados, 'fonte_id', 'Identificador da fonte', limite=64) }}
+        {{ campo(dados, 'fonte_data', 'Data do documento', tipo='date', obrigatorio=false) }}
+    </div>
+    {{ campo(dados, 'fonte_referencia', 'Referência documental completa', multiline=true) }}
+</fieldset>

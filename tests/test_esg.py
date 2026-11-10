@@ -148,19 +148,21 @@ class TestESG(unittest.TestCase):
                 self.assertIn("Marechal Aterro Zero", resposta.get_data(as_text=True))
                 self.assertIn("no-store", resposta.headers["Cache-Control"])
 
-    def test_tela_sem_indicadores_ou_dados_aprovados(self):
+    def test_tela_sem_persistencia_informa_indisponibilidade_sem_presumir_cadastros(self):
         self.autenticar(1)
         resposta = self.client.get("/esg")
         texto = resposta.get_data(as_text=True)
         self.assertEqual(resposta.status_code, 200)
         for mensagem in (
-            "Indicadores ESG", "Nenhum indicador cadastrado",
-            "Dados ainda não aprovados", "Aguardando dados aprovados",
+            "Indicadores ESG", "Consulta de indicadores indisponível",
+            "Persistência ESG não configurada", "Nenhum dado foi carregado",
+            "Publicação sob controle",
             "Ambiental", "Social", "Governança",
         ):
             self.assertIn(mensagem, texto)
         self.assertNotRegex(texto, r"\d[\d.,]*\s*(%|kg|toneladas|tCO2)")
         self.assertNotIn("<table", texto)
+        self.assertNotIn("Nenhum indicador cadastrado", texto)
 
     def test_recursos_locais_e_logout_com_csrf(self):
         self.autenticar(1)

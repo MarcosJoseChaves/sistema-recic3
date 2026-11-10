@@ -1,0 +1,37 @@
+{% extends "esg/layout.html" %}
+{% from "esg/_macros.html" import campo %}
+{% block title %}Cadastrar indicador proposto · ESG{% endblock %}
+{% block content %}
+<header class="page-heading"><p class="eyebrow">Cadastro administrativo</p><h1 class="page-title">Cadastrar indicador proposto</h1></header>
+<p class="data-notice">Situação inicial: Proposto — sem aprovação institucional. Este cadastro não aprova metodologia ou resultados.</p>
+{% if erro %}<p class="feedback feedback-error" role="alert">{{ erro }}</p>{% endif %}
+<form method="POST" action="{{ url_for('esg.indicadores_novo') }}" class="esg-form indicators section-space">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="helper">Campos com * são obrigatórios.</p>
+    <fieldset><legend>Definição</legend>
+        <div class="form-grid">
+            {{ campo(dados, 'codigo', 'Código do indicador', limite=64, ajuda='Comece por uma letra. Use letras sem acento, números, ponto, hífen ou sublinhado.') }}
+            {{ campo(dados, 'nome', 'Nome do indicador') }}
+            <div class="field"><label for="dimensao">Dimensão ESG *</label>
+                <select id="dimensao" name="dimensao" required>
+                    <option value="">Selecione</option>
+                    {% for dimensao in dimensoes_esg %}<option value="{{ dimensao.value }}" {% if dados.get('dimensao') == dimensao.value %}selected{% endif %}>{{ {'ambiental': 'Ambiental', 'social': 'Social', 'governanca': 'Governança'}[dimensao.value] }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        {{ campo(dados, 'descricao', 'Descrição', multiline=true) }}
+        {{ campo(dados, 'metodologia', 'Metodologia declarada', multiline=true, ajuda='Descreva a metodologia e suas limitações. O preenchimento não representa validação institucional.') }}
+    </fieldset>
+    <fieldset><legend>Unidade e abrangência</legend>
+        <div class="form-grid">
+            {{ campo(dados, 'unidade_simbolo', 'Símbolo da unidade', limite=32) }}
+            {{ campo(dados, 'unidade_descricao', 'Descrição da unidade') }}
+            {{ campo(dados, 'perimetro_codigo', 'Código do perímetro', limite=64) }}
+            {{ campo(dados, 'perimetro_descricao', 'Descrição do perímetro') }}
+        </div>
+        <p class="helper">Identidades existentes devem manter a mesma descrição. Abrangências diferentes exigem definições separadas.</p>
+    </fieldset>
+    {% include "esg/_fonte_form.html" %}
+    <div class="page-actions"><button class="button button-primary" type="submit">Salvar proposta</button><a class="button" href="{{ url_for('esg.indicadores_lista') }}">Cancelar</a></div>
+</form>
+{% endblock %}

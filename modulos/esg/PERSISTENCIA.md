@@ -59,6 +59,7 @@ Cursores devem devolver tuplas DB-API e `NUMERIC` como `Decimal`.
 | `salvar_fonte(fonte, usuario_id)` | cadastra/reutiliza somente referência documental idêntica |
 | `associar_evidencia(evidencia, usuario_id)` | inclui fonte/evidência apenas para registro ainda rascunho; bloqueia o registro durante a operação |
 | `obter_definicao(codigo)` | contrato ou `None` se ausente |
+| `listar_definicoes()` | tupla de definições com estados/fontes, somente leitura; acrescentado na ESG-02B2A |
 | `obter_registro(codigo, periodo, perimetro)` | contrato ou `None` se definição/período ausente; recorte divergente é erro |
 | `listar_registros(codigo, perimetro)` | `SerieIndicador` com definição, registros/estados/fontes/evidências; série vazia se não há registros, `None` se não há definição |
 

@@ -1,0 +1,27 @@
+{% extends "esg/layout.html" %}
+{% from "esg/_macros.html" import campo %}
+{% block title %}Registrar período · ESG{% endblock %}
+{% block content %}
+<header class="page-heading"><p class="eyebrow">{{ definicao.codigo }} · {{ definicao.nome }}</p><h1 class="page-title">Registrar período em rascunho</h1></header>
+<p class="data-notice">Situação inicial: Rascunho — sem aprovação institucional. Deixar o valor vazio não equivale a informar zero.</p>
+{% if erro %}<p class="feedback feedback-error" role="alert">{{ erro }}</p>{% endif %}
+<form method="POST" action="{{ url_for('esg.registros_novo', codigo=definicao.codigo) }}" class="esg-form indicators section-space">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="helper">Campos com * são obrigatórios.</p>
+    <fieldset><legend>Período e valor</legend>
+        <dl class="metadata"><dt>Unidade da definição</dt><dd>{{ definicao.unidade.simbolo }} — {{ definicao.unidade.descricao }}</dd><dt>Perímetro fixado pela definição</dt><dd>{{ definicao.perimetro.codigo }} — {{ definicao.perimetro.descricao }}</dd></dl>
+        <div class="form-grid">
+            {{ campo(dados, 'competencia', 'Competência ou ano', ajuda='Use AAAA para ano completo ou AAAA-MM para competência mensal.', limite=7) }}
+            {{ campo(dados, 'data_referencia', 'Data de referência', tipo='date', ajuda='Deve pertencer ao período informado.') }}
+        </div>
+        {{ campo(dados, 'valor', 'Valor informado', obrigatorio=false, limite=256, ajuda='Deixe vazio para valor ausente; informe 0 para zero. Use vírgula ou ponto decimal, sem separador de milhar ou notação científica.') }}
+    </fieldset>
+    {% include "esg/_fonte_form.html" %}
+    <fieldset><legend>Evidência documental opcional</legend>
+        <p class="helper">Para vincular uma evidência, informe seu tipo. A referência será a fonte documental deste registro. Não há upload de arquivos.</p>
+        {{ campo(dados, 'evidencia_tipo', 'Tipo da evidência', obrigatorio=false) }}
+        {{ campo(dados, 'evidencia_observacoes', 'Observações da evidência', obrigatorio=false, multiline=true) }}
+    </fieldset>
+    <div class="page-actions"><button class="button button-primary" type="submit">Salvar rascunho</button><a class="button" href="{{ url_for('esg.indicadores_detalhe', codigo=definicao.codigo) }}">Cancelar</a></div>
+</form>
+{% endblock %}

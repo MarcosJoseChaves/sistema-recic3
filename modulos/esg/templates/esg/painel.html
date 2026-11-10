@@ -5,21 +5,39 @@
     <p class="eyebrow">Módulo ESG</p>
     <h1>Marechal Aterro Zero</h1>
     <p class="hero-description">Um espaço para acompanhar informações ambientais, sociais e de governança.</p>
+    <div class="page-actions">
+        <a class="button button-primary" href="{{ url_for('esg.indicadores_lista') }}">Consultar indicadores</a>
+        <a class="button" href="{{ url_for('esg.indicadores_novo') }}">Cadastrar proposta</a>
+    </div>
+    {% if not persistencia_configurada %}
+    <p class="helper">Persistência ESG não configurada. Cadastro e consulta estão indisponíveis.</p>
+    {% endif %}
 </header>
 
 <section class="indicators" aria-labelledby="indicadores-titulo">
     <div class="section-heading">
         <h2 id="indicadores-titulo">Indicadores ESG</h2>
-        <span class="status">Aguardando dados aprovados</span>
+        <span class="status">{{ {'nao_configurado': 'Consulta indisponível', 'erro': 'Erro de consulta', 'vazio': 'Consulta disponível', 'com_dados': 'Consulta disponível'}[estado_painel] }}</span>
     </div>
     <div class="data-notice" role="note" aria-labelledby="dados-titulo">
-        <h3 id="dados-titulo">Dados ainda não aprovados</h3>
-        <p>Este módulo ainda não possui dados aprovados para apresentação. Os indicadores serão exibidos após o cadastro, a validação e a aprovação das informações.</p>
+        <h3 id="dados-titulo">Publicação sob controle</h3>
+        <p>Este painel não publica automaticamente resultados. Propostas e rascunhos não constituem informações institucionalmente aprovadas.</p>
     </div>
     <div class="empty-state">
         <span class="empty-mark" aria-hidden="true">ESG</span>
+        {% if estado_painel == 'com_dados' %}
+        <h3>Consulte os cadastros administrativos</h3>
+        <p>Verifique a situação de cada definição e registro na consulta de indicadores.</p>
+        {% elif estado_painel == 'vazio' %}
         <h3>Nenhum indicador cadastrado</h3>
-        <p>O painel aguarda a definição e o cadastro dos indicadores. Ainda não há resultados disponíveis para consulta.</p>
+        <p>A consulta foi concluída e não encontrou definições de indicadores.</p>
+        {% elif estado_painel == 'erro' %}
+        <h3>Não foi possível consultar os indicadores</h3>
+        <p role="alert">A consulta está temporariamente indisponível. Não foi possível determinar se existem indicadores cadastrados.</p>
+        {% else %}
+        <h3>Consulta de indicadores indisponível</h3>
+        <p>O painel aguarda a configuração da persistência para consultar os cadastros. Nenhum dado foi carregado.</p>
+        {% endif %}
     </div>
 </section>
 
@@ -33,19 +51,19 @@
             <span class="dimension-letter" aria-hidden="true">E</span>
             <h3 id="ambiental-titulo">Ambiental</h3>
             <p>Espaço reservado aos indicadores ambientais.</p>
-            <span class="dimension-status">Aguardando definição dos indicadores</span>
+            <span class="dimension-status">Dimensão ambiental</span>
         </article>
         <article class="dimension-card" aria-labelledby="social-titulo">
             <span class="dimension-letter" aria-hidden="true">S</span>
             <h3 id="social-titulo">Social</h3>
             <p>Espaço reservado aos indicadores sociais.</p>
-            <span class="dimension-status">Aguardando definição dos indicadores</span>
+            <span class="dimension-status">Dimensão social</span>
         </article>
         <article class="dimension-card" aria-labelledby="governanca-titulo">
             <span class="dimension-letter" aria-hidden="true">G</span>
             <h3 id="governanca-titulo">Governança</h3>
             <p>Espaço reservado aos indicadores de governança.</p>
-            <span class="dimension-status">Aguardando definição dos indicadores</span>
+            <span class="dimension-status">Dimensão de governança</span>
         </article>
     </div>
 </section>

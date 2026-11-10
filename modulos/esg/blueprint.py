@@ -3,7 +3,7 @@
 from flask import Blueprint
 
 
-def criar_blueprint_esg():
+def criar_blueprint_esg(repositorio=None):
     """Cria uma instância do módulo para registro no aplicativo principal."""
     blueprint = Blueprint(
         "esg",
@@ -15,5 +15,5 @@ def criar_blueprint_esg():
 
     from .routes import registrar_rotas
 
-    registrar_rotas(blueprint)
+    registrar_rotas(blueprint, repositorio=repositorio)
     return blueprint

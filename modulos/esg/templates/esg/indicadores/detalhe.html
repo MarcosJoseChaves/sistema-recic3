@@ -1,0 +1,52 @@
+{% extends "esg/layout.html" %}
+{% from "esg/_macros.html" import fonte %}
+{% block title %}{{ definicao.nome }} · ESG{% endblock %}
+{% block content %}
+<header class="section-heading page-heading">
+    <div><p class="eyebrow">{{ definicao.codigo }}</p><h1 class="page-title">{{ definicao.nome }}</h1></div>
+    <a class="button button-primary" href="{{ url_for('esg.registros_novo', codigo=definicao.codigo) }}">Registrar período em rascunho</a>
+</header>
+<p class="data-notice">Consulta administrativa. Verifique a situação de cada informação e sua fonte. RF-1A permanece NO-GO OPERACIONAL.</p>
+<section class="indicators section-space" aria-labelledby="definicao-titulo">
+    <h2 id="definicao-titulo">Definição do indicador</h2>
+    <dl class="metadata">
+        <dt>Situação da definição</dt><dd>{{ rotulos_esg[definicao.situacao.value] }}</dd>
+        <dt>Dimensão</dt><dd>{{ {'ambiental': 'Ambiental', 'social': 'Social', 'governanca': 'Governança'}[definicao.dimensao.value] }}</dd>
+        <dt>Descrição</dt><dd class="preserve-text">{{ definicao.descricao }}</dd>
+        <dt>Unidade</dt><dd>{{ definicao.unidade.simbolo }} — {{ definicao.unidade.descricao }}</dd>
+        <dt>Perímetro</dt><dd>{{ definicao.perimetro.codigo }} — {{ definicao.perimetro.descricao }}</dd>
+        <dt>Metodologia declarada</dt><dd class="preserve-text">{{ definicao.metodologia }}</dd>
+    </dl>
+    {{ fonte(definicao.fonte_metodologica, 'Fonte metodológica') }}
+    {% if definicao.fonte_aprovacao %}{{ fonte(definicao.fonte_aprovacao, 'Fonte da aprovação da definição') }}{% endif %}
+</section>
+<section class="section-space" aria-labelledby="registros-titulo">
+    <h2 id="registros-titulo">Registros por período</h2>
+    <form method="GET" action="{{ url_for('esg.indicadores_detalhe', codigo=definicao.codigo) }}" class="filter-form">
+        <div class="field"><label for="competencia">Período</label><input id="competencia" name="competencia" value="{{ filtros.get('competencia', '') }}" placeholder="AAAA ou AAAA-MM"><p class="helper">Ano completo e meses são consultados separadamente.</p></div>
+        <div class="field"><label for="situacao">Situação do registro</label><select id="situacao" name="situacao"><option value="">Todas</option>{% for situacao in situacoes_registro %}<option value="{{ situacao.value }}" {% if filtros.get('situacao') == situacao.value %}selected{% endif %}>{{ rotulos_esg[situacao.value] }}</option>{% endfor %}</select></div>
+        <button class="button" type="submit">Filtrar</button><a href="{{ url_for('esg.indicadores_detalhe', codigo=definicao.codigo) }}">Limpar filtros</a>
+    </form>
+    {% for registro in registros %}
+    <article class="indicators record-card" aria-label="Registro {{ registro.periodo.competencia }}">
+        <div class="section-heading"><h3>{{ registro.periodo.competencia }}</h3><span class="status">{{ rotulos_esg[registro.situacao.value] }}</span></div>
+        <dl class="metadata">
+            <dt>Valor informado</dt><dd>{% if registro.valor is none %}<strong>Valor ausente</strong>{% else %}<strong>{{ registro.valor }} {{ definicao.unidade.simbolo }}</strong>{% endif %}</dd>
+            <dt>Data de referência</dt><dd>{{ registro.data_referencia.strftime('%d/%m/%Y') }}</dd>
+            <dt>Perímetro</dt><dd>{{ registro.perimetro.codigo }} — {{ registro.perimetro.descricao }}</dd>
+            <dt>Identificador do registro</dt><dd>{{ registro.identificador }}</dd>
+        </dl>
+        {{ fonte(registro.fonte) }}
+        {% if registro.fonte_aprovacao %}{{ fonte(registro.fonte_aprovacao, 'Fonte da aprovação do registro') }}{% endif %}
+        <details class="document-source"><summary>Evidências documentais</summary>
+            {% set vinculadas = evidencias|selectattr('registro_id', 'equalto', registro.identificador)|list %}
+            {% for evidencia in vinculadas %}<section class="evidence">
+                <h4>{{ evidencia.tipo }}</h4><p class="helper">Evidência {{ evidencia.identificador }}</p>
+                {{ fonte(evidencia.fonte, 'Referência da evidência') }}
+                <p class="preserve-text">{{ evidencia.observacoes or 'Sem observações.' }}</p>
+            </section>{% else %}<p>Nenhuma evidência vinculada a este registro.</p>{% endfor %}
+        </details>
+    </article>
+    {% else %}<div class="empty-state indicators"><h3>Nenhum registro encontrado</h3><p>Não há registros para os filtros selecionados. Nenhum valor foi presumido.</p></div>{% endfor %}
+</section>
+{% endblock %}

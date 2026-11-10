@@ -2,7 +2,8 @@
 
 O texto abaixo documenta os contratos da ESG-02A. A camada adicional ESG-02B1,
 seu SQL ainda não executado e a estratégia de revisões estão descritos em
-[PERSISTENCIA.md](PERSISTENCIA.md). Os contratos e a interface permanecem iguais.
+[PERSISTENCIA.md](PERSISTENCIA.md). Os contratos permanecem iguais. As telas e
+os adaptadores da ESG-02B2A estão descritos em [INTERFACE.md](INTERFACE.md).
 
 Contratos Python e organização em memória. Não importam o aplicativo, consultam
 arquivos, abrem conexões, persistem ou publicam informações. A interface ESG-01
