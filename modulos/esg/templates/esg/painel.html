@@ -1,0 +1,52 @@
+{% extends "esg/layout.html" %}
+
+{% block content %}
+<header class="hero">
+    <p class="eyebrow">Módulo ESG</p>
+    <h1>Marechal Aterro Zero</h1>
+    <p class="hero-description">Um espaço para acompanhar informações ambientais, sociais e de governança.</p>
+</header>
+
+<section class="indicators" aria-labelledby="indicadores-titulo">
+    <div class="section-heading">
+        <h2 id="indicadores-titulo">Indicadores ESG</h2>
+        <span class="status">Aguardando dados aprovados</span>
+    </div>
+    <div class="data-notice" role="note" aria-labelledby="dados-titulo">
+        <h3 id="dados-titulo">Dados ainda não aprovados</h3>
+        <p>Este módulo ainda não possui dados aprovados para apresentação. Os indicadores serão exibidos após o cadastro, a validação e a aprovação das informações.</p>
+    </div>
+    <div class="empty-state">
+        <span class="empty-mark" aria-hidden="true">ESG</span>
+        <h3>Nenhum indicador cadastrado</h3>
+        <p>O painel aguarda a definição e o cadastro dos indicadores. Ainda não há resultados disponíveis para consulta.</p>
+    </div>
+</section>
+
+<section class="dimensions" aria-labelledby="dimensoes-titulo">
+    <div class="section-heading">
+        <h2 id="dimensoes-titulo">Dimensões ESG</h2>
+        <p>Estrutura para as próximas etapas</p>
+    </div>
+    <div class="dimension-grid">
+        <article class="dimension-card" aria-labelledby="ambiental-titulo">
+            <span class="dimension-letter" aria-hidden="true">E</span>
+            <h3 id="ambiental-titulo">Ambiental</h3>
+            <p>Espaço reservado aos indicadores ambientais.</p>
+            <span class="dimension-status">Aguardando definição dos indicadores</span>
+        </article>
+        <article class="dimension-card" aria-labelledby="social-titulo">
+            <span class="dimension-letter" aria-hidden="true">S</span>
+            <h3 id="social-titulo">Social</h3>
+            <p>Espaço reservado aos indicadores sociais.</p>
+            <span class="dimension-status">Aguardando definição dos indicadores</span>
+        </article>
+        <article class="dimension-card" aria-labelledby="governanca-titulo">
+            <span class="dimension-letter" aria-hidden="true">G</span>
+            <h3 id="governanca-titulo">Governança</h3>
+            <p>Espaço reservado aos indicadores de governança.</p>
+            <span class="dimension-status">Aguardando definição dos indicadores</span>
+        </article>
+    </div>
+</section>
+{% endblock %}

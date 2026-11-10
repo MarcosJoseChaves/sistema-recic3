@@ -22,6 +22,7 @@ from configuracao_ambiente import configurar_aplicacao
 from logging_operacional import registrar_evento, resposta_erro_interno
 from seguranca_rate_limit import aplicar_limites_rotas
 from seguranca_csrf import configurar_csrf
+from modulos.esg import criar_blueprint_esg
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
 from modulos.fiscalizacao_contratos.permissions import admin_json_required, admin_required
 
@@ -600,6 +601,7 @@ app.register_blueprint(
     criar_blueprint_fiscalizacao(conectar_banco),
     url_prefix="/fiscalizacao-contratos"
 )
+app.register_blueprint(criar_blueprint_esg(), url_prefix="/esg")
 
 
 @app.get('/health')
