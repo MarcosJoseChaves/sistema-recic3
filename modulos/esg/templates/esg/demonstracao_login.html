@@ -1,0 +1,6 @@
+{% extends "esg/layout.html" %}
+{% block content %}
+<h1>Sessão demonstrativa offline</h1>
+<p>O administrador fictício é autenticado somente pela fixture explícita do test_client.</p>
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% endblock %}

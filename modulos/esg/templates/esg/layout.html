@@ -23,6 +23,9 @@
         </div>
     </header>
     <main id="conteudo" class="shell main-content">
+        {% if aviso_demonstracao is defined %}
+        <p class="data-notice" role="note"><strong>{{ aviso_demonstracao }}</strong> · Demonstração em memória, sem validade institucional.</p>
+        {% endif %}
         {% with mensagens = get_flashed_messages(with_categories=true) %}
             {% for categoria, mensagem in mensagens %}
             <p class="feedback feedback-{{ categoria }}" role="status">{{ mensagem }}</p>
