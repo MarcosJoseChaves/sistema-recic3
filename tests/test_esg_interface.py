@@ -378,6 +378,35 @@ class TestInterfaceESG(unittest.TestCase):
                 self.assertIn(trecho, texto)
         self.repo.listar_registros.assert_called_once_with(self.definicao.codigo, self.definicao.perimetro)
 
+    def test_detalhe_organizado_preserva_textos_extensos_valores_fontes_e_evidencias(self):
+        nome = "Indicador sintético com título extenso " * 8
+        referencia = "<Documento fictício> " + "referência documental extensa " * 20
+        fonte = replace(self.definicao.fonte_metodologica, referencia_documental=referencia.strip())
+        definicao = replace(self.definicao, nome=nome.strip(), fonte_metodologica=fonte,
+                            metodologia=("Primeira linha sintética.\n" + "Metodologia não homologada. " * 20).strip())
+        registro = self.fixture_registro(valor=Decimal("1.2300"), fonte=fonte)
+        evidencia = Evidencia(UUID(int=4), registro.identificador, "Evidência sintética", fonte,
+                              "Observações extensas sem aprovação. " * 20 + "Fim.")
+        self.repo.obter_definicao.return_value = definicao
+        self.repo.listar_registros.return_value = organizar_registros(definicao, (registro,), (evidencia,))
+        resposta = self.client.get(DETALHE)
+        texto = resposta.get_data(as_text=True)
+        self.assertEqual(resposta.status_code, 200)
+        for trecho in (definicao.nome, definicao.metodologia, definicao.descricao,
+                       definicao.unidade.descricao, definicao.perimetro.descricao,
+                       str(registro.identificador), str(evidencia.identificador), evidencia.observacoes,
+                       "<strong>1.2300 t</strong>", "Proposto — sem aprovação institucional",
+                       "Rascunho — sem aprovação institucional", "&lt;Documento fictício&gt;"):
+            self.assertIn(trecho, texto)
+        self.assertIn('href="#registros-titulo"', texto)
+        for identificador in ("definicao-titulo", "metodologia-titulo", "fontes-titulo", "registros-titulo"):
+            self.assertIn(f'id="{identificador}"', texto)
+        self.assertLess(texto.index('id="definicao-titulo"'), texto.index('id="fontes-titulo"'))
+        self.assertLess(texto.index('id="fontes-titulo"'), texto.index('id="registros-titulo"'))
+        self.assertNotIn("<Documento fictício>", texto)
+        self.repo.salvar_definicao.assert_not_called()
+        self.repo.salvar_registro.assert_not_called()
+
     def test_detalhe_distingue_valor_ausente_zero_e_evidencia_vinculada(self):
         ausente = self.fixture_registro()
         zero = self.fixture_registro(identificador=UUID(int=3), periodo=Periodo(2025, 12), valor=Decimal("0"))

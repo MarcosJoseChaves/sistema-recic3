@@ -4,22 +4,33 @@
 {% block content %}
 <header class="section-heading page-heading">
     <div><p class="eyebrow">{{ definicao.codigo }}</p><h1 class="page-title">{{ definicao.nome }}</h1></div>
-    <a class="button button-primary" href="{{ url_for('esg.registros_novo', codigo=definicao.codigo) }}">Registrar período em rascunho</a>
+    <div class="page-actions heading-actions">
+        <a class="button" href="#registros-titulo">Ver registros por período</a>
+        <a class="button button-primary" href="{{ url_for('esg.registros_novo', codigo=definicao.codigo) }}">Registrar período em rascunho</a>
+    </div>
 </header>
 <p class="data-notice">Consulta administrativa. Verifique a situação de cada informação e sua fonte. RF-1A permanece NO-GO OPERACIONAL.</p>
-<section class="indicators section-space" aria-labelledby="definicao-titulo">
+<div class="definition-grid">
+<section class="indicators" aria-labelledby="definicao-titulo">
     <h2 id="definicao-titulo">Definição do indicador</h2>
     <dl class="metadata">
-        <dt>Situação da definição</dt><dd>{{ rotulos_esg[definicao.situacao.value] }}</dd>
+        <dt>Situação da definição</dt><dd><span class="status">{{ rotulos_esg[definicao.situacao.value] }}</span></dd>
         <dt>Dimensão</dt><dd>{{ {'ambiental': 'Ambiental', 'social': 'Social', 'governanca': 'Governança'}[definicao.dimensao.value] }}</dd>
         <dt>Descrição</dt><dd class="preserve-text">{{ definicao.descricao }}</dd>
         <dt>Unidade</dt><dd>{{ definicao.unidade.simbolo }} — {{ definicao.unidade.descricao }}</dd>
         <dt>Perímetro</dt><dd>{{ definicao.perimetro.codigo }} — {{ definicao.perimetro.descricao }}</dd>
-        <dt>Metodologia declarada</dt><dd class="preserve-text">{{ definicao.metodologia }}</dd>
     </dl>
+    <section class="methodology" aria-labelledby="metodologia-titulo">
+        <h3 id="metodologia-titulo">Metodologia declarada</h3>
+        <p class="preserve-text">{{ definicao.metodologia }}</p>
+    </section>
+</section>
+<section class="indicators" aria-labelledby="fontes-titulo">
+    <h2 id="fontes-titulo">Fontes documentais</h2>
     {{ fonte(definicao.fonte_metodologica, 'Fonte metodológica') }}
     {% if definicao.fonte_aprovacao %}{{ fonte(definicao.fonte_aprovacao, 'Fonte da aprovação da definição') }}{% endif %}
 </section>
+</div>
 <section class="section-space" aria-labelledby="registros-titulo">
     <h2 id="registros-titulo">Registros por período</h2>
     <form method="GET" action="{{ url_for('esg.indicadores_detalhe', codigo=definicao.codigo) }}" class="filter-form">
