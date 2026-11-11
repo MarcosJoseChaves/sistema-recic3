@@ -11,7 +11,10 @@ from werkzeug.exceptions import HTTPException
 from seguranca_csrf import configurar_csrf
 from . import criar_blueprint_esg
 from .demonstracao import AVISO_DEMONSTRACAO, RepositorioDemonstrativoESG
-from .validacoes import exigir_tipo
+from .executivo import montar_visao_executiva
+from .repositorio import PersistenciaESGError
+from .validacoes import ContratoESGInvalido, exigir_tipo
+from modulos.fiscalizacao_contratos.permissions import admin_required
 
 
 def criar_aplicacao_demonstrativa(repositorio):
@@ -59,6 +62,19 @@ def criar_aplicacao_demonstrativa(repositorio):
         return redirect(url_for("login"), code=303)
 
     app.register_blueprint(criar_blueprint_esg(repositorio), url_prefix="/esg")
+
+    @app.get("/esg/demonstracao/executiva")
+    @admin_required
+    def executiva_demonstrativa():
+        from .routes import ROTULOS
+
+        try:
+            visao = montar_visao_executiva(repositorio)
+        except (PersistenciaESGError, ContratoESGInvalido):
+            return render_template("esg/executiva.html", visao=None,
+                                   erro="Não foi possível consultar os dados demonstrativos."), 503
+        return render_template("esg/executiva.html", visao=visao, rotulos_esg=ROTULOS)
+
     return app
 
 

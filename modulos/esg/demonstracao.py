@@ -137,3 +137,37 @@ def criar_repositorio_com_exemplos():
         evidencia = Evidencia(uuid4(), registro.identificador, "Referência sintética", fonte, AVISO_DEMONSTRACAO)
         repo.salvar_registro(registro, 1, evidencias=(evidencia,))
     return repo
+
+
+def criar_repositorio_executivo_sintetico():
+    """Carga executiva explícita e independente, sem números municipais ou homologação."""
+    repo = RepositorioDemonstrativoESG()
+    exemplos = (
+        ("destinacao", "Destinação de resíduos", DimensaoESG.AMBIENTAL, "ud", "Unidades fictícias", Periodo(2034), Decimal("0")),
+        ("recuperacao", "Recuperação de materiais", DimensaoESG.AMBIENTAL, "ud", "Unidades fictícias", Periodo(2034), Decimal("12.3400")),
+        ("compostagem", "Compostagem", DimensaoESG.AMBIENTAL, "ud", "Unidades fictícias", Periodo(2034, 1), None),
+        ("associacoes", "Participação das associações", DimensaoESG.SOCIAL, "ass-fict", "Associações fictícias", Periodo(2034, 1), Decimal("3")),
+        ("inclusao", "Inclusão produtiva", DimensaoESG.SOCIAL, "pessoas-fict", "Pessoas fictícias", Periodo(2034), None),
+        ("capacitacoes", "Capacitações", DimensaoESG.SOCIAL, "eventos-fict", "Eventos fictícios", None, None),
+        ("rastreabilidade", "Rastreabilidade documental", DimensaoESG.GOVERNANCA, "ref-fict", "Referências fictícias", Periodo(2034), None),
+    )
+    for codigo, nome, dimensao, simbolo, unidade, periodo, valor in exemplos:
+        fonte = FonteDocumental("exec-fonte-" + codigo,
+                                AVISO_DEMONSTRACAO + ": documento sintético de " + nome.lower() + ", sem emissor institucional.",
+                                date(2035, 1, 15))
+        definicao = DefinicaoIndicador(
+            "exec-" + codigo, nome + " — exemplo sintético", dimensao,
+            "Exemplo fictício sem correspondência com resultados municipais.",
+            UnidadeMedida(simbolo, unidade),
+            "Metodologia fictícia, não homologada. Sem cálculo ou agregação.",
+            Perimetro("exec-recorte-" + codigo, "Abrangência fictícia exclusiva de " + nome.lower()), fonte,
+        )
+        repo.salvar_definicao(definicao, 1)
+        if periodo is not None:
+            referencia = date(2034, 12, 31) if periodo.mes is None else date(2034, 1, 31)
+            registro = RegistroPeriodo(uuid4(), definicao.codigo, periodo, fonte, referencia, definicao.perimetro, valor)
+            evidencias = ()
+            if valor is not None or dimensao is DimensaoESG.GOVERNANCA:
+                evidencias = (Evidencia(uuid4(), registro.identificador, "Evidência sintética", fonte, AVISO_DEMONSTRACAO),)
+            repo.salvar_registro(registro, 1, evidencias)
+    return repo
