@@ -38,23 +38,36 @@
             <p class="helper">Fontes documentais, evidências e situação de validação permanecem identificadas em cada cartão. Propostas e rascunhos não são resultados aprovados.</p>
             {% endif %}
             <div class="executive-grid">
-                {% for cartao in cartoes %}
+                {# Ordem exclusiva da apresentação; cartões e contratos permanecem intactos. #}
+                {% set prioridade = ('exec-recuperacao', 'exec-destinacao', 'exec-compostagem', 'exec-associacoes', 'exec-inclusao', 'exec-capacitacoes', 'exec-rastreabilidade') %}
+                {% set apresentacao = namespace(cartoes=[]) %}
+                {% for codigo in prioridade %}
+                    {% set apresentacao.cartoes = apresentacao.cartoes + (cartoes | selectattr('definicao.codigo', 'equalto', codigo) | list) %}
+                {% endfor %}
+                {% for cartao in cartoes if cartao.definicao.codigo not in prioridade %}
+                    {% set apresentacao.cartoes = apresentacao.cartoes + [cartao] %}
+                {% endfor %}
+                {% for cartao in apresentacao.cartoes %}
                 <article class="indicators executive-card" aria-label="{{ cartao.definicao.nome }}">
                     <header>
-                        <p class="eyebrow">{{ cartao.definicao.codigo }}</p>
                         <h3>{{ cartao.definicao.nome }}</h3>
                     </header>
-                    <p class="executive-value">{% if cartao.valor is none %}Dado indisponível{% else %}{{ cartao.valor }} <span>{{ cartao.definicao.unidade.simbolo }}</span>{% endif %}</p>
+                    <p class="executive-value">{% if cartao.registro is none %}Sem registro{% elif cartao.valor is none %}Dado indisponível{% else %}{{ cartao.valor }} <span>{{ cartao.definicao.unidade.simbolo }}</span>{% endif %}</p>
                     <dl class="metadata executive-facts">
-                        <dt>Unidade</dt><dd>{{ cartao.definicao.unidade.simbolo }} — {{ cartao.definicao.unidade.descricao }}</dd>
-                        <dt>Período</dt><dd>{{ cartao.registro.periodo.competencia if cartao.registro else 'Dado indisponível — sem registro de período' }}</dd>
-                        <dt>Perímetro</dt><dd>{{ cartao.definicao.perimetro.codigo }} — {{ cartao.definicao.perimetro.descricao }}</dd>
-                        <dt>Definição</dt><dd>{{ rotulos_esg[cartao.definicao.situacao.value] }}</dd>
-                        <dt>Registro</dt><dd>{{ rotulos_esg[cartao.registro.situacao.value] if cartao.registro else 'Sem registro' }}</dd>
+                        <dt>Período</dt><dd>{{ cartao.registro.periodo.competencia if cartao.registro else 'Indisponível — sem registro de período' }}</dd>
+                        <dt>Situação do registro</dt><dd>{{ rotulos_esg[cartao.registro.situacao.value] if cartao.registro else 'Sem registro' }}</dd>
                     </dl>
-                    <p class="helper executive-source"><strong>{{ 'Fonte do registro' if cartao.registro else 'Fonte metodológica; medição indisponível' }}:</strong> {{ cartao.fonte.identificador }} — {{ cartao.fonte.referencia_documental }}</p>
+                    <p class="helper executive-scope"><strong>Perímetro:</strong> {{ cartao.definicao.perimetro.descricao }}. Sem comparação entre recortes.</p>
                     <details class="document-source">
-                        <summary>Fontes e evidências · contexto completo</summary>
+                        <summary>Contexto técnico · fontes e evidências</summary>
+                        <dl class="metadata executive-context">
+                            <dt>Indicador</dt><dd>{{ cartao.definicao.codigo }}</dd>
+                            <dt>Unidade</dt><dd>{{ cartao.definicao.unidade.simbolo }} — {{ cartao.definicao.unidade.descricao }}</dd>
+                            <dt>Perímetro</dt><dd>{{ cartao.definicao.perimetro.codigo }} — {{ cartao.definicao.perimetro.descricao }}</dd>
+                            <dt>Definição</dt><dd>{{ rotulos_esg[cartao.definicao.situacao.value] }}</dd>
+                            <dt>Registro</dt><dd>{{ rotulos_esg[cartao.registro.situacao.value] if cartao.registro else 'Sem registro' }}</dd>
+                        </dl>
+                        <p class="helper executive-source"><strong>{{ 'Fonte do registro' if cartao.registro else 'Fonte metodológica; medição indisponível' }}:</strong> {{ cartao.fonte.identificador }} — {{ cartao.fonte.referencia_documental }}</p>
                         <p class="preserve-text">{{ cartao.definicao.descricao }}</p>
                         <h4>Metodologia declarada</h4><p class="preserve-text">{{ cartao.definicao.metodologia }}</p>
                         {{ fonte(cartao.definicao.fonte_metodologica, 'Fonte metodológica') }}
@@ -82,7 +95,7 @@
                 <h3 id="sem-dados-titulo">Indicadores sem dados suficientes</h3>
                 <p class="helper">Ausência de registro ou de valor não equivale a zero; documentação não implica validação institucional.</p>
                 {% for cartao in visao.sem_dados_suficientes %}
-                <p class="executive-gap">{{ cartao.definicao.codigo }} · {{ cartao.definicao.nome }} · {{ cartao.registro.periodo.competencia if cartao.registro else 'Período indisponível' }} · {{ cartao.definicao.perimetro.codigo }} — Dado indisponível</p>
+                <p class="executive-gap">{{ cartao.definicao.codigo }} · {{ cartao.definicao.nome }} · {{ cartao.registro.periodo.competencia if cartao.registro else 'Período indisponível' }} · {{ cartao.definicao.perimetro.codigo }} — {{ 'Sem registro' if cartao.registro is none else 'Dado indisponível' }}</p>
                 {% else %}
                 <p>{{ 'Nenhuma ausência de valor identificada nos cartões carregados. Isso não constitui aprovação.' if visao.cartoes else 'Dado indisponível — nenhum cartão carregado.' }}</p>
                 {% endfor %}

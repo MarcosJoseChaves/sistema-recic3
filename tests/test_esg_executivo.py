@@ -155,6 +155,59 @@ class TestExecutivoESG(unittest.TestCase):
                 self.assertEqual(self.client.get(href).status_code, 200)
         self.assertNotIn("app", sys.modules)
 
+    def test_ordem_executiva_somente_na_apresentacao_sem_alterar_cartoes(self):
+        antes = montar_visao_executiva(self.repo)
+        texto = self.client.get(EXECUTIVA).get_data(as_text=True)
+        nomes = re.findall(r'<article class="indicators executive-card" aria-label="([^"]+)"', texto)
+        codigos = ('recuperacao', 'destinacao', 'compostagem', 'associacoes',
+                   'inclusao', 'capacitacoes', 'rastreabilidade')
+        por_codigo = {c.definicao.codigo: c for c in antes.cartoes}
+        self.assertEqual(nomes, [por_codigo['exec-' + codigo].definicao.nome for codigo in codigos])
+        self.assertEqual(montar_visao_executiva(self.repo), antes)
+
+    def test_hierarquia_preserva_contexto_e_distingue_ausencias_de_zero(self):
+        texto = self.client.get(EXECUTIVA).get_data(as_text=True)
+        artigos = re.findall(r'<article class="indicators executive-card".*?</article>', texto, re.S)
+        self.assertEqual(len(artigos), 7)
+        por_nome = {c.definicao.nome: c for c in montar_visao_executiva(self.repo).cartoes}
+        for artigo in artigos:
+            nome = re.search(r'aria-label="([^"]+)"', artigo).group(1)
+            cartao = por_nome[nome]
+            principal, contexto = artigo.split('<details', 1)
+            self.assertIn(cartao.definicao.perimetro.descricao, principal)
+            self.assertIn('Situação do registro', principal)
+            self.assertNotIn(cartao.fonte.identificador, principal)
+            self.assertIn(cartao.definicao.codigo, contexto)
+            self.assertIn(cartao.definicao.perimetro.codigo, contexto)
+            self.assertIn(cartao.fonte.identificador, contexto)
+            self.assertIn(cartao.definicao.metodologia, contexto)
+            self.assertIn('Definição', contexto)
+            valor = re.search(r'<p class="executive-value">(.*?)</p>', principal).group(1)
+            if cartao.registro is None:
+                self.assertEqual(valor, 'Sem registro')
+                self.assertNotIn('2034', principal)
+            elif cartao.valor is None:
+                self.assertEqual(valor, 'Dado indisponível')
+            else:
+                self.assertEqual(valor, f'{cartao.valor} <span>{cartao.definicao.unidade.simbolo}</span>')
+            if cartao.registro:
+                self.assertIn(cartao.registro.periodo.competencia, principal)
+                for evidencia in cartao.evidencias:
+                    self.assertIn(str(evidencia.identificador), contexto)
+
+    def test_apresentacao_preserva_codigos_fora_da_prioridade_e_multiplos_periodos(self):
+        repo = criar_repositorio_com_exemplos()
+        app = criar_aplicacao_demonstrativa(repo)
+        client = app.test_client()
+        autenticar_administrador_demonstrativo(client)
+        texto = client.get(EXECUTIVA).get_data(as_text=True)
+        artigos = re.findall(r'<article class="indicators executive-card".*?</article>', texto, re.S)
+        self.assertEqual(len(artigos), 3)
+        for artigo, cartao in zip(artigos, montar_visao_executiva(repo).cartoes):
+            self.assertIn(cartao.definicao.codigo, artigo)
+            self.assertIn(f'?competencia={cartao.registro.periodo.competencia}', artigo)
+
+
     def test_get_nao_escreve_e_post_nao_habilita_operacoes(self):
         antes = (self.repo.listar_definicoes(), dict(self.repo.autorias))
         with patch.object(self.repo, "salvar_definicao", side_effect=AssertionError("Escrita proibida")) as definicoes, \
