@@ -1,0 +1,49 @@
+{
+  "aviso": "Apenas preservacao tecnica: NAO AUTORIZA EXECUCAO OPERACIONAL. Nao substitui manifesto efetivo. SQLs nao registrados podem bloquear o preflight estrito por arquivos extras ate integracao futura controlada.",
+  "normalizacao_checksum": "UTF-8/LF",
+  "algoritmo_checksum": "SHA-256",
+  "operacoes_candidatas": [
+    {
+      "identificador": "M0017",
+      "ordem_global": 28,
+      "modulo": "esg",
+      "tipo": "NOVA_DDL",
+      "descricao": "ESG-MAZ03B v1: proveniencia, reconciliacao, pendencias e resolucao segura.",
+      "caminho": "sql/M0017_esg_mvp.sql",
+      "checksum": "66f20dfbdac8df69636fb0937b40cd4744105c182378ef19e7b73a29c8e4dc52",
+      "dependencias": [
+        "M0016"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    },
+    {
+      "identificador": "M0018",
+      "ordem_global": 29,
+      "modulo": "esg",
+      "tipo": "NOVA_DDL",
+      "descricao": "Integridade de bytes UTF8 JSON e SHA256; contrato v1.",
+      "caminho": "sql/M0018_esg_integridade_especificacao.sql",
+      "checksum": "2fc91d6aea3b1055de24deb409918baec44b4b2799a52600067ff353524a1b72",
+      "dependencias": [
+        "M0017"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
+    }
+  ]
+}

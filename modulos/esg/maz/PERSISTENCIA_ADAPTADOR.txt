@@ -1,0 +1,135 @@
+ADAPTADOR PERSISTENTE K01/TRCS — INTERFACE 03C
+
+Módulo: modulos.esg.maz.persistencia. Requer M0017/M0018 revisadas e instaladas
+pelo fluxo controlado no ambiente de destino. Não instala migrations nem cria
+conexão na importação ou no construtor. Não é substituto de RepositorioESG V1.
+Não expõe aprovação/publicação institucional. RF-1A: NO-GO OPERACIONAL.
+
+Fábrica e transações
+AdaptadorMAZ(conectar) recebe callable sem argumentos que entrega conexão DB-API
+PostgreSQL dedicada, aberta, ociosa, autocommit=False. Usar identidade runtime,
+com autorização/ator autenticado fornecido pelo chamador. A fábrica deve impor
+seu destino e parâmetros de conexão; este módulo não lê .env, DSN ou credenciais.
+O harness 03C aplica host/hostaddr=127.0.0.1, port=65437, banco postgres,
+SCRAM, role maz_runtime_03b4, timeouts e validação prévia do processo/PGDATA.
+O módulo fecha conexões das quais assumiu propriedade e não finaliza transação
+alheia em conexão fornecida em estado inválido.
+Escrita: uma transação para grafo, auditoria, evidências e corrente.
+Leitura: snapshot REPEATABLE READ com readonly=True. SQL com nomes public
+explícitos e valores parametrizados; identificadores são constantes internas.
+
+Operações públicas
+- cadastrar_fonte(FonteDocumental, versao, ator=..., request_id=UUID, anterior=None)
+  Idempotente somente para identidade/conteúdo idênticos. Fonte sucessora exige
+  predecessor válido; referência/data conflitantes não são sobrescritas.
+- obter_fonte(identificador, versao=1) -> FonteDocumental reconstruída.
+- cadastrar_metodologia(versao, raw: bytes, digest: str, fonte,
+  ator=..., request_id=..., versao_fonte=1)
+  Cadastra/recupera K01, kg, A1 e a versão proposta. Uma versão existente deve
+  ter bytes/digest/fonte idênticos. Não cria aprovação institucional.
+- obter_metodologia(versao) -> (bytes_exatos, sha256_hex).
+- obter_definicao('K01' ou 'A1') -> dict codigo/nome/dimensao; o mesmo K01.
+- registrar(entrada: ComponenteMassa, rejeitos: ComponenteMassa, metodologia,
+  ator, request_id, motivo, versao_entrada=1, versao_rejeitos=1,
+  evidencias=tuple[EvidenciaMAZ], reconciliacao=None, versao_reconciliacao=1,
+  serie_id=None, revisao_esperada=None, precisao=50) -> UUID da revisão.
+  Para sucessora, informar serie_id e revisao_esperada juntos. A competência,
+  perímetro e versão metodológica da série devem permanecer compatíveis.
+- obter(revisao_uuid) -> MedicaoMAZ imutável, com componentes originais R1,
+  ResultadoTRCS, AvaliacaoTRCS, evidências, bytes/hash, motivo/predecessor,
+  versões documentais, proveniência textual e auditorias.
+- listar(indicador='K01', serie_id=None) -> tuple de UUIDs de revisões,
+  ordenados por série/número. A1 é alias de K01, sem INSERT duplicado.
+- corrente(serie_id) -> UUID da revisão corrente.
+- por_request(request_id) -> tuple UUIDs de revisões já confirmadas; serve
+  para consultar confirmação incerta, sem retry ou nova escrita automática.
+
+Exemplo sintético (não executa por importação)
+from decimal import Decimal
+from uuid import uuid4
+import hashlib
+from modulos.esg.contratos import FonteDocumental, Periodo, Perimetro
+from modulos.esg.maz.modelos import ComponenteMassa, UnidadeMassa, OrigemValor
+from modulos.esg.maz.persistencia import AdaptadorMAZ, EvidenciaMAZ
+
+ad = AdaptadorMAZ(factory_runtime_injetada)
+fonte = FonteDocumental('fonte03c', 'Documento exclusivamente sintético')
+raw = b'{"formula":"TRCS_BRUTA_100_REJEITOS_ENTRADA","contrato_numerico":"R2-kg-1e9-6"}'
+ad.cadastrar_metodologia('metodo03c', raw, hashlib.sha256(raw).hexdigest(),
+    fonte, ator=ator_autenticado, request_id=uuid4())
+periodo = Periodo(2051, 3)
+perimetro = Perimetro('perimetro03c', 'Recorte sintético')
+entrada = ComponenteMassa(Decimal('1'), UnidadeMassa.TONELADA,
+    periodo, perimetro, fonte, OrigemValor.DECLARADO)
+rejeitos = ComponenteMassa(Decimal('0.0025'), UnidadeMassa.TONELADA,
+    periodo, perimetro, fonte, OrigemValor.DECLARADO)
+request = uuid4()  # guardar antes do commit para eventual consulta
+rid = ad.registrar(entrada, rejeitos, 'metodo03c', ator=ator_autenticado,
+    request_id=request, motivo='Primeira medição sintética',
+    evidencias=(EvidenciaMAZ(fonte, 1, 'Expedição sintética'),))
+medicao = ad.obter(rid)  # percentual Decimal('0.25'), razão Fraction(1, 4)
+new = ad.registrar(entrada, rejeitos, 'metodo03c', ator=ator_autenticado,
+    request_id=uuid4(), motivo='Revisão sintética',
+    serie_id=medicao.serie_id, revisao_esperada=rid)
+assert ad.corrente(medicao.serie_id) == new
+assert ad.obter(rid).revisao_id == rid  # histórico preservado
+
+Garantias e limites
+ComponenteMassa/ResultadoTRCS/AvaliacaoTRCS e construtores R1 são usados para
+validar entradas e reconstruir saídas. Não há outra implementação da fórmula.
+Conversão t/kg e razão persistida são exatas por deslocamento decimal, sem float
+ou influência do contexto ativo. kg em [0,1e9], até seis casas significativas;
+None distinto de zero, escala excessiva recusada sem arredondamento silencioso.
+Preservam-se Decimal original, texto, unidade, regra e fonte/versão.
+Bytes: MAZ-SPEC-UTF8-JSON-v1; UTF-8, objeto JSON, duplicatas recusadas inclusive
+aninhadas; hash sobre bytes exatos. Sem promessa de canonicalização semântica.
+Números JSON não são convertidos para float ao validar/recomparar a especificação.
+A origem/autenticidade dos documentos deve ser autenticada pelo chamador.
+O adaptador não implementa validação documental de componentes VALIDADO: rejeita
+essa gravação explicitamente. Referência de reconciliação não autentica conteúdo.
+
+ConflitoMAZ: 23505, 40001/40P01 ou revisão corrente/CAS incompatível. Rollback,
+sem repetição automática. O chamador decide nova leitura/revisão e não sobrescreve.
+IntegridadeMAZ: vínculos/dados/estado persistido incoerentes ou falha parcial.
+ConfirmacaoIncertaMAZ: commit sem resposta confiável; consultar por_request e
+reconstruir o resultado antes de nova tentativa. Request UUID não é promessa
+universal de deduplicação de todos os cadastros.
+Não há método de aprovação/publicação, UPDATE histórico ou DELETE de fatos.
+
+Integração futura (somente documentação nesta etapa)
+Criar/usar serviço MAZ que receba AdaptadorMAZ via injeção e traduza DTOs de
+formulário para objetos R1, ator autenticado e request_id. Não conectar por
+importação ou dentro de app.py. As rotas ESG V1 esperam objetos/tabelas diferentes;
+não injetar este adaptador como substituto transparente de RepositorioESG V1.
+Revisar explicitamente a interface do serviço/Blueprint, controle de acesso,
+mensagens de conflito, tratamento de commit incerto e apresentação de pendências.
+Não foram implementadas telas Obrigação 14, K02–K11, conexão operacional ou
+registro de M0017/M0018 no manifesto efetivo. Oito testes POSIX pendentes.
+
+Testes reproduzíveis
+Unitários/simulados: tests.test_esg_maz_persistencia (16 casos, sem banco).
+PostgreSQL: tests.esg_maz_postgresql (23 casos); só executa com FACTORY/ATOR
+explicitamente injetados pelo harness externo de identidade e lifecycle 03C.
+Não tem DSN de fallback nem acesso automático a banco na descoberta/importação.
+Não apontar esse harness de homologação ao banco operacional.
+
+LIMITAÇÕES EXPLÍCITAS DO CHECKPOINT 03D
+- Para componente sem massa, o esquema atual exige NULL nos campos de origem,
+  inclusive unidade_original. obter() reconstitui a unidade como kg nesse caso;
+  não promete recuperar qual unidade original foi selecionada para um valor ausente.
+- por_request consulta revisões confirmadas com determinado UUID, mas não é
+  garantia universal de idempotência nem deduplicação de todos os cadastros.
+- MedicaoMAZ não expõe necessariamente todos os metadados documentais, eventos
+  ou linhas do grafo. Seu conjunto de auditorias cobre revisão, componentes,
+  resultado e avaliação; não é um extrato de todos os eventos relacionados.
+- Linhas imutáveis não implicam fechamento integral contra novas inserções
+  relacionadas. O futuro serviço deve definir e respeitar a completude do grafo.
+- A identidade e autorização do ator são responsabilidades do futuro serviço web.
+  A validação do inteiro positivo/UUID pelo adaptador não autentica uma pessoa.
+
+ORDENAÇÃO DETERMINÍSTICA
+obter(): componentes/proveniência/versões por papel (entrada, rejeitos);
+evidências por fonte_id, fonte_versao, tipo e UUID persistido como desempate;
+auditorias expostas por auditoria_id crescente. Não altera fatos ou estados.
+Os dois componentes também são expostos por campos nomeados do contrato R1.
+Listagens de revisões já usam série/número, e por_request usa UUID da revisão.
