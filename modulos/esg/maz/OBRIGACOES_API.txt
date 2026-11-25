@@ -1,0 +1,95 @@
+﻿OBRIGAÇÕES AMBIENTAIS ESG-MAZ — API E LIMITES (04)
+
+Módulo: modulos.esg.maz.obrigacoes.
+Dependência: candidata M0019_esg_obrigacoes.sql após M0018. Não há instalação
+ou conexão implícita ao importar. Recebe a mesma fábrica DB-API runtime dedicada
+utilizada por AdaptadorMAZ. O adaptador TRCS não foi alterado.
+
+Contrato
+Obrigacao(identificador, titulo, fonte: FonteDocumental, versao_fonte=1,
+ instrumento_ref=None, texto=None, competencia: Periodo|None=None,
+ prazo: date|None=None, responsavel_proposto=None, responsavel_designado=None,
+ designacao_fonte=None, designacao_versao=1, situacao='desconhecida',
+ documentos=(), pendencias=(), riscos=(), encaminhamentos=()).
+Identificador estável até 64 caracteres; não reutilizar para outra obrigação.
+Texto, instrumento, competência, prazo e responsáveis desconhecidos ficam None.
+Prazo desconhecido não significa inexistente. Responsável proposto não é formal.
+Responsável designado exige referência documental de designação. O sistema não
+atesta a autenticidade ou eficácia jurídica da referência; requer conferência.
+
+DocumentoObrigacao(fonte, versao, descricao, tipo='evidencia',
+ estado='apresentado', avaliacao='nao_avaliada', documento_privado_id=None,
+ sha256=None).
+Tipos: evidencia, analise_tecnica, decisao_documental. Estado apresentado/analisado
+é independente da situação administrativa. Suficiente/insuficiente só com
+analise_tecnica analisada. Uma decisão é registrada como referência documental,
+sem atribuição automática de eficácia jurídica ou cumprimento.
+Quantidade de documentos não altera situação. Protocolo não equivale a licença.
+Referências privadas usam somente IDs existentes; sem upload/download, armazenamento
+externo ou serviços de terceiros. Se documento e SHA forem informados, o trigger
+homologado verifica a correspondência; documento omitido não autentica um arquivo.
+
+Operações
+ad = AdaptadorObrigacoes(factory_runtime)
+rid = ad.salvar(caso, ator=ator_autenticado, request_id=UUID,
+                justificativa='Motivo da inclusão')
+atual = ad.obter(caso.identificador)
+antigo = ad.obter(caso.identificador, rid)
+nova = ad.salvar(caso_alterado, ator=ator_autenticado, request_id=novo_UUID,
+                 justificativa='Motivo da alteração', revisao_esperada=atual.revisao_id)
+ad.listar() -> tuple de resumos: identificador/título/situação/prazo/conhecido/número.
+ad.historico(id) -> tuple ordenada de IDs, número, predecessor, data, ator e motivo.
+ad.g1() -> situações conhecidas/desconhecidas SOMENTE dos casos cadastrados.
+ad.g2(id) -> mapa de preenchido/indisponivel/nao_informado, contagem e escopo do caso.
+Nenhum método cria meta, declara 15 itens completos ou calcula cumprimento jurídico.
+
+CasoObrigacao retorna a obrigação tipada, revisão, número, predecessor,
+justificativa, timestamp, ator, request_id e auditoria. cumprimento_juridico é
+sempre nao_determinado e autorizacao_operacional=False nesta versão.
+A API não é uma máquina de decisão jurídica nem substitui análise institucional.
+Situações administrativas permitidas: desconhecida, em_acompanhamento, pendente,
+em_analise. O chamador as informa explicitamente; documentos não as promovem.
+
+Transações, fontes e histórico
+Uma transação engloba obrigação/revisão/referências/auditorias e corrente.
+As fontes reutilizam FonteDocumental e versões existentes do núcleo; identidade
+conflitante produz IntegridadeMAZ. A revisão sucessora usa CAS e não sobrescreve
+o passado. ConflitoMAZ pede nova leitura; nenhum retry automático.
+ConfirmacaoIncertaMAZ do núcleo também se aplica. Antes de repetir escrita,
+consultar histórico por identidade/request registrado; não há garantia universal
+nova de idempotência. Fábrica deve impor destino, timeouts e usuário mínimo.
+Ator positivo e UUID não são autenticação; o serviço futuro deve fornecer ambos
+a partir de contexto autenticado e autorização, sem aceitar ator arbitrário da UI.
+
+Desconhecidos e G1/G2
+O caso demonstrativo sintético da Obrigação 14 contém título de acompanhamento
+sobre pátio de compostagem SUJEITO À CONFERÊNCIA DO INSTRUMENTO ORIGINAL.
+Não contém texto jurídico presumido, prazo, pessoa responsável ou situação atual
+municipal. Seus None são informações explicitamente indisponíveis. Listas vazias
+são nao_informado, não confirmação de ausência de pendências/riscos/evidências.
+G1 retorna escopo somente_casos_cadastrados, plano_15_itens_comprovado=False.
+G2 mostra os campos mínimos adotados para o caso, e não um índice institucional
+aprovado ou denominador dos 15 itens. metas institucionais permanecem None.
+
+Preparação ESG-MAZ-05 (não implementada)
+- Lista: consumir listar/G1, exibindo situação conhecida ou desconhecida.
+- Ficha: obter com período/prazo, responsáveis proposto/designado separados,
+  instrumento/texto desconhecidos claramente identificados e G2 por campo.
+- Documentos: mostrar referência/versão/estado/avaliação técnica distintos,
+  com vínculo privado resolvido só por serviço autorizado de documentos existente.
+- Histórico: historico/obter revisão com ator/data/justificativa e aviso de conflito.
+- Formulário de revisão: enviar revisao_esperada, ator do servidor e request UUID.
+- Não tratar apresentado/analisado/suficiente como cumprimento, licença ou autorização.
+- Não renderizar conteúdo restrito em relatório público, logs ou exportação automática.
+Nenhum app.py, Blueprint, template ou mecanismo de upload foi alterado.
+
+Migration e operação
+M0019 aditiva candidata registrada somente em MIGRATIONS_CANDIDATAS.json.
+Manifesto operacional permanece inalterado; preflight estrito pode recusar SQLs
+candidatos extras até integração futura controlada. Copiar/versionar SQL não
+constitui autorização de execução operacional. M0017/M0018 são preservadas.
+M0018 continua homologada somente para a recuperação de bytes históricos conhecida;
+não se presume compatibilidade com qualquer base preexistente.
+Não instalar essa cadeia em produção sem autorização e revisão próprias.
+RF-1A permanece NO-GO OPERACIONAL. Oito testes POSIX continuam pendentes.
+Imutabilidade das linhas nao garante fechamento integral contra novas evidencias relacionadas a revisoes anteriores; essa garantia nao esta implementada no banco. A interface futura so escrevera documentos por uma nova revisao.

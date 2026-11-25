@@ -44,6 +44,27 @@
         "integracao_postgresql_efemero"
       ],
       "habilitada": true
+    },
+    {
+      "identificador": "M0019",
+      "ordem_global": 30,
+      "modulo": "esg",
+      "tipo": "NOVA_DDL",
+      "descricao": "Acompanhamento documental de obrigacoes, sem eficacia juridica automatica.",
+      "caminho": "sql/M0019_esg_obrigacoes.sql",
+      "checksum": "5fba58065466aac7d042a54072b3b0ba36f962dd1171a5dafe65ce6f080afd03",
+      "dependencias": [
+        "M0018"
+      ],
+      "transacional": true,
+      "imutavel": true,
+      "possui_ddl": true,
+      "dados_estruturais": false,
+      "testes_exigidos": [
+        "unitario_manifesto",
+        "integracao_postgresql_efemero"
+      ],
+      "habilitada": true
     }
   ]
 }
