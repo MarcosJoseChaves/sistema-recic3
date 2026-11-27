@@ -199,6 +199,7 @@ def configurar_aplicacao(app):
 
 def _configurar_aplicacao_validada(app, ambiente):
     """Aplica configurações seguras sem abrir conexões externas."""
+    app.config["ESG_MAZ_NATIVE_ENABLED"] = ler_booleano("ESG_MAZ_NATIVE_ENABLED", padrao=False)
     secret_key = _valor_obrigatorio("SECRET_KEY")
     database_url = (os.getenv("DATABASE_URL") or "").strip() or None
 

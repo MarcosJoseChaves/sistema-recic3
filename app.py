@@ -23,6 +23,7 @@ from logging_operacional import registrar_evento, resposta_erro_interno
 from seguranca_rate_limit import aplicar_limites_rotas
 from seguranca_csrf import configurar_csrf
 from modulos.esg import criar_blueprint_esg
+from modulos.esg.integracao_maz import configurar_maz_nativo
 from modulos.fiscalizacao_contratos import criar_blueprint_fiscalizacao
 from modulos.fiscalizacao_contratos.permissions import admin_json_required, admin_required
 
@@ -602,6 +603,7 @@ app.register_blueprint(
     url_prefix="/fiscalizacao-contratos"
 )
 app.register_blueprint(criar_blueprint_esg(), url_prefix="/esg")
+configurar_maz_nativo(app)
 
 
 @app.get('/health')
