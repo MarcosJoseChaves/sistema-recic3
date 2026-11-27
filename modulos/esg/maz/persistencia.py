@@ -83,6 +83,8 @@ class MedicaoMAZ:
     versoes_fontes: tuple
     auditorias: tuple
     proveniencia: tuple
+    criado_em: object = None
+    ator: int | None = None
 
 class AdaptadorMAZ:
     """Fábrica injetada deve devolver conexão dedicada runtime, ociosa, autocommit=False."""
@@ -258,7 +260,7 @@ class AdaptadorMAZ:
                 if not aud or (aud[0],str(aud[1]),aud[2])!=(fato['criado_por_usuario_id'],str(fato['request_id']),'ESG'):raise IntegridadeMAZ('Auditoria persistida incoerente.')
                 auditorias.append((fato['auditoria_id'],aud[0],UUID(str(aud[1]))))
             auditorias.sort(key=lambda item:item[0])
-            return MedicaoMAZ(UUID(str(rev['serie_id'])),UUID(str(revisao_id)),rev['numero'],rev['metodologia_versao'],parts['entrada'],parts['rejeitos'],result,assessment,ev,raw,method['hash_especificacao'],rev['motivo'],UUID(str(rev['anterior'])) if rev['anterior'] else None,tuple((x['papel'],x['fonte_versao']) for x in records),tuple(auditorias),tuple((x['papel'],x['valor_original_texto'],x['unidade_original'],x['regra_conversao']) for x in records))
+            return MedicaoMAZ(UUID(str(rev['serie_id'])),UUID(str(revisao_id)),rev['numero'],rev['metodologia_versao'],parts['entrada'],parts['rejeitos'],result,assessment,ev,raw,method['hash_especificacao'],rev['motivo'],UUID(str(rev['anterior'])) if rev['anterior'] else None,tuple((x['papel'],x['fonte_versao']) for x in records),tuple(auditorias),tuple((x['papel'],x['valor_original_texto'],x['unidade_original'],x['regra_conversao']) for x in records),rev['criado_em'],rev['criado_por_usuario_id'])
 
     def listar(self,indicador='K01',serie_id=None):
         if indicador not in ('K01','A1'):raise ContratoESGInvalido('Apenas K01/A1 suportado.')

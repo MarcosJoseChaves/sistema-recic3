@@ -1,0 +1,76 @@
+RECIC3 ESG — interface demonstrativa ESG-MAZ-05C
+26/11/2026 · America/Sao_Paulo
+
+Escopo e integração
+Blueprint aditivo em /esg/maz, com adaptadores explicitamente injetados.
+app.py, autenticação operacional, migrations e manifesto operacional não foram alterados.
+RF-1A permanece NO-GO OPERACIONAL. O marco FGV de 08/12/2026 não encerra a implantação definitiva.
+
+Revisões e documentação
+G2 aceita g2(identificador, revisao_id=None). A ficha calcula g2_registro(registro)
+sobre o mesmo snapshot que apresenta, incluindo documentos, competência e responsáveis.
+São 13 campos: preenchidos, explicitamente indisponíveis e não informados.
+Completude efetiva = preenchidos/13; campos tratados = (preenchidos + indisponíveis)/13.
+Nenhuma proporção determina cumprimento jurídico.
+
+TRCS: a rota /trcs/<revisao>/revisar exige que a revisão ainda seja corrente e
+que o campo esperada seja exatamente o UUID da rota. O adaptador mantém CAS,
+transação única e rollback; conflitos não recebem retry automático.
+A ação de revisão aparece somente na ficha vigente. Histórico é somente leitura.
+Os percentuais são formatados com duas casas somente na apresentação.
+Massas originais, unidades independentes e razão exata continuam preservadas.
+
+Fontes novas recebem identidade independente na versão 1. Sem uma nova fonte
+de massas, a revisão mantém separadamente as fontes/versões de entrada e rejeitos.
+Evidências e documentos anteriores são copiados como referências imutáveis;
+uma retificação não altera o documento histórico. Não há autenticação documental.
+Competência de obrigação: ano e mês opcionais; ambos vazios significam
+explicitamente indisponível, somente ano significa anual. Mês sem ano é rejeitado.
+
+Seleção reproduzível
+Na fábrica demonstrativa, MAZ_DEMO_TRCS_REFERENCIAS fixa a revisão de homologação
+599170cb-3f1f-4798-9c06-996d7ac78d47 como âncora da série, e
+MAZ_DEMO_PERIMETROS inclui exclusivamente demo05a-recorte para o caso-base anterior.
+MAZ_PAINEL_TRCS_REVISAO_REFERENCIA fixa a mesma âncora. O painel resolve a revisão
+corrente dessa série, ou a série escolhida explicitamente pelo parâmetro serie.
+Não escolhe o último item da listagem e não consolida percentuais entre séries.
+MAZ_DEMO_OBRIGACOES inclui O14-demo. Os parâmetros escopo=demonstracao (padrão)
+e escopo=todos são filtros explícitos; todos inclui ensaios existentes e novos.
+Ao registrar uma série nova, sua ficha é acessível imediatamente. Para incluí-la
+no conjunto principal, configure a lista explícita após revisão da origem.
+O blueprint fora da fábrica não presume âncoras municipais nem conexão automática.
+
+Recursos locais
+Pesquisa e filtros no catálogo, séries TRCS e obrigações. Gráficos leves em HTML/CSS,
+favicon SVG e prévia de TRCS em JavaScript local; sem CDN. Prévia aproximada não
+substitui o motor Decimal nem a validação do servidor. Temas de materialidade
+são candidatos conceituais sem pontuações, participação ou prioridades homologadas.
+
+Procedimento local controlado
+Cluster exclusivo: C:\Users\USUARIO\AppData\Local\Temp\RECIC3_ESG_MAZ03B2_20261125_initonly\pgdata
+PostgreSQL 127.0.0.1:65437; aplicação 127.0.0.1:5055.
+
+Iniciar em PowerShell, mantendo o executor ativo:
+& 'C:\Users\USUARIO\AppData\Local\Temp\RECIC3_ESG_MAZ01_20261124_ae2a1340\venv\Scripts\python.exe' -I -S -B 'C:\Users\USUARIO\AppData\Local\Temp\RECIC3_ESG_MAZ05C_20261126\demo_lifecycle.py' serve
+Após DEMO_READY, abrir http://127.0.0.1:5055/login.
+O código sintético permanece no secrets/demo05a_login.pw do cluster; não o copie
+ao repositório, logs ou pacote de revisão. Sessões são renovadas em cada execução.
+
+Encerrar em outra janela PowerShell:
+[IO.File]::WriteAllText('C:\Users\USUARIO\AppData\Local\Temp\RECIC3_ESG_MAZ05C_20261126\STOP_DEMO','encerrar demonstracao')
+Aguardar status passed e shutdown confirmado no results.json mais recente.
+O executor valida identidade antes de sinalizar exclusivamente o cluster descartável.
+Não usar kill genérico, outro PGDATA ou outra porta. Os hashes são fixados;
+divergência exige revisão concreta dos arquivos e atualização controlada.
+
+Ensaios explícitos (acrescentam registros segregados; não recarregam o caso-base):
+& 'C:\Users\USUARIO\AppData\Local\Temp\RECIC3_ESG_MAZ01_20261124_ae2a1340\venv\Scripts\python.exe' -I -S -B 'C:\Users\USUARIO\AppData\Local\Temp\RECIC3_ESG_MAZ05C_20261126\demo_lifecycle.py' verify
+O procedimento anterior 05A serve continua disponível com manifesto de entradas
+atualizado apenas nos arquivos revisados; o executor anterior foi preservado.
+
+Roteiro definitivo, fora desta execução
+Integrar o módulo à configuração e PostgreSQL de produção do RECIC3 após autorização;
+autenticação institucional; carga municipal autorizada; automação de pesagens;
+integração documental; alertas e notificações; novos motores; avaliação participativa
+da dupla materialidade. Não manter uma arquitetura demonstrativa paralela permanente.
+Oito testes POSIX e nova homologação visual humana continuam pendentes.

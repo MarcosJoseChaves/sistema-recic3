@@ -139,15 +139,20 @@ class AdaptadorObrigacoes(AdaptadorMAZ):
 
     def historico(self,identificador):
         with self._tx(leitura=True) as q:
-            q.execute('SELECT id,numero,anterior,criado_em,criado_por_usuario_id,justificativa FROM public.esg_obrigacao_revisoes WHERE obrigacao_id=%s ORDER BY numero',(identificador,))
-            return tuple(dict(zip(('id','numero','anterior','criado_em','ator','justificativa'),row)) for row in q.fetchall())
+            q.execute('SELECT id,numero,anterior,criado_em,criado_por_usuario_id,justificativa,situacao FROM public.esg_obrigacao_revisoes WHERE obrigacao_id=%s ORDER BY numero',(identificador,))
+            return tuple(dict(zip(('id','numero','anterior','criado_em','ator','justificativa','situacao'),row)) for row in q.fetchall())
 
     def g1(self):
         casos=self.listar()
         return {'escopo':'somente_casos_cadastrados','total_cadastrado':len(casos),'situacoes':tuple((x['identificador'],x['situacao']) for x in casos),'plano_15_itens_comprovado':False,'meta_institucional':None}
 
-    def g2(self,identificador):
-        r=self.obter(identificador);c=r.caso
+    def g2(self,identificador,revisao_id=None):
+        return self.g2_registro(self.obter(identificador,revisao_id))
+
+    @staticmethod
+    def g2_registro(r):
+        """Calcula somente o snapshot consultado, sem reler a revisão corrente."""
+        c=r.caso;identificador=c.identificador
         campos={n:('indisponivel' if getattr(c,n) is None else 'preenchido') for n in ('instrumento_ref','texto','competencia','prazo','responsavel_proposto','responsavel_designado')}
         campos.update(titulo='preenchido',fonte='preenchido',situacao='indisponivel' if c.situacao=='desconhecida' else 'preenchido',documentos='preenchido' if c.documentos else 'nao_informado',pendencias='preenchido' if c.pendencias else 'nao_informado',riscos='preenchido' if c.riscos else 'nao_informado',encaminhamentos='preenchido' if c.encaminhamentos else 'nao_informado')
-        return {'escopo':'campos_do_caso','identificador':identificador,'campos':campos,'preenchidos':sum(v=='preenchido' for v in campos.values()),'total_campos':len(campos),'cumprimento_juridico':'nao_determinado','meta_institucional':None}
+        return {'escopo':'campos_do_caso','identificador':identificador,'revisao_id':str(r.revisao_id),'numero':r.numero,'indisponiveis':sum(v=='indisponivel' for v in campos.values()),'nao_informados':sum(v=='nao_informado' for v in campos.values()),'tratados':sum(v!='nao_informado' for v in campos.values()),'campos':campos,'preenchidos':sum(v=='preenchido' for v in campos.values()),'total_campos':len(campos),'cumprimento_juridico':'nao_determinado','meta_institucional':None}
