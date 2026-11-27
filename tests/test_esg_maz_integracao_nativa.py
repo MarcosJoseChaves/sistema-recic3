@@ -72,11 +72,11 @@ class ComposicaoNativa(unittest.TestCase):
    if not r.endpoint.startswith('maz.'):continue
    path=re.sub(r'<uuid:[^>]+>','00000000-0000-0000-0000-000000000001',r.rule);path=re.sub(r'<[^>]+>','untrusted',path)
    for method in r.methods & {'GET','POST'}:
-    with self.subTest(path=path,method=method):self.assertEqual(c.open(path,method=method,data={'csrf_token':token}).status_code,503)
+    with self.subTest(path=path,method=method):self.assertEqual(c.open(path,method=method,data={'csrf_token':token}).status_code,200 if method=='GET' and path in ('/esg/maz/','/esg/maz/catalogo','/esg/maz/materialidade') else 503)
  def test_12_no_csrf_bypass(self):self.assertEqual(self.client(self.app('true')).post('/esg/maz/trcs/nova').status_code,400)
  def test_13_no_fallback_or_config_injection(self):
   a=self.app('true');spy=Mock(side_effect=AssertionError('injection forbidden'));a.config.update(MAZ_DEMO_OBRIGACOES=spy,MAZ_DEMO_TRCS_REFERENCIAS=spy,MAZ_NATIVE_ADAPTER=spy)
-  r=self.client(a).get('/esg/maz/');self.assertEqual(r.status_code,503);spy.assert_not_called();self.assertNotIn(b'O14-demo',r.data)
+  r=self.client(a).get('/esg/maz/');self.assertEqual(r.status_code,200);spy.assert_not_called();self.assertNotIn(b'O14-demo',r.data)
  def test_14_http_cannot_enable(self):
   a=self.app('false');c=self.client(a)
   with c.session_transaction() as s:s['ESG_MAZ_NATIVE_ENABLED']=True
@@ -94,4 +94,35 @@ class ComposicaoNativa(unittest.TestCase):
  def test_17_main_composition_ast_controlled(self):
   tree=ast.parse((ROOT/'app.py').read_text('utf8'));a=self.app('true',compose=False);before=set(a.view_functions);nodes=[n for n in tree.body if isinstance(n,ast.Expr) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Name) and n.value.func.id=='configurar_maz_nativo'];self.assertEqual(len(nodes),1)
   exec(compile(ast.Module(body=nodes,type_ignores=[]),'controlled-composition','exec'),{'app':a,'configurar_maz_nativo':configurar_maz_nativo});self.assertTrue(before<=set(a.view_functions));self.assertIn('maz',a.blueprints)
+class NavegacaoNativa(ComposicaoNativa):
+ def test_menu_nativo_condicional(self):
+  from flask import render_template
+  from flask_login import current_user
+  for flag,role,visible in [('false','admin',False),('true','user',False),('true','admin',True)]:
+   a=self.app(flag,role);a.add_url_rule('/menu-test','menu_test',lambda:render_template('cadastro.html',usuario=current_user))
+   html=self.client(a).get('/menu-test').get_data(as_text=True)
+   self.assertEqual('href="/esg/maz/"' in html,visible)
+   self.assertIn('href="/esg"',html) if role=='admin' else None
+class ConsultasNativas(ComposicaoNativa):
+ def test_catalogo_e_filtros(self):
+  from modulos.esg.maz.catalogo import CODIGOS
+  c=self.client(self.app('true'));html=c.get('/esg/maz/catalogo').get_data(as_text=True)
+  for codigo in CODIGOS:self.assertIn('id="'+codigo+'"',html)
+  for query,count in [('motor=implementado',1),('motor=pendente',15),('dimensao=social',4),('q=gravimetria',1),('q=notfound',0)]:
+   r=c.get('/esg/maz/catalogo?'+query);self.assertEqual(r.status_code,200);self.assertEqual(r.get_data(as_text=True).count('<article '),count)
+  self.assertEqual(c.get('/esg/maz/catalogo?dimensao=invalid').status_code,400)
+ def test_materialidade_e_ausencia_sinteticos(self):
+  c=self.client(self.app('true'));html=c.get('/esg/maz/materialidade').get_data(as_text=True);self.assertEqual(html.count('data-tema='),5)
+  for path in ['/esg/maz/','/esg/maz/catalogo','/esg/maz/materialidade']:
+   r=c.get(path);self.assertEqual(r.status_code,200)
+   for value in ['O14-demo','2055-11','25,00%','20,00%','599170cb']:self.assertNotIn(value,r.get_data(as_text=True))
+ def test_static_local_and_escape(self):
+  c=self.client(self.app('true'));r=c.get('/esg/maz/assets/css/maz_native.css');self.assertEqual(r.status_code,200);self.assertNotIn(b'http',r.data);r.close()
+  r=c.get('/esg/maz/catalogo?q=<script>alert(1)</script>');self.assertNotIn(b'<script>alert',r.data);r.close()
+ComposicaoNativa.test_19_catalogo_filtros=ConsultasNativas.test_catalogo_e_filtros
+ComposicaoNativa.test_20_materialidade_sem_sinteticos=ConsultasNativas.test_materialidade_e_ausencia_sinteticos
+ComposicaoNativa.test_21_static_escape=ConsultasNativas.test_static_local_and_escape
+del ConsultasNativas
+ComposicaoNativa.test_18_menu_nativo_condicional = NavegacaoNativa.test_menu_nativo_condicional
+del NavegacaoNativa
 if __name__=='__main__':unittest.main(verbosity=2)

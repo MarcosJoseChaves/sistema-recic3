@@ -1,6 +1,6 @@
 # Plano Diretor de Desenvolvimento ESG-MAZ
 
-Baseline aprovada: 27/11/2026. Progresso ponderado aprovado: **36%**. RF-1A permanece **NO-GO OPERACIONAL**.
+Baseline aprovada: 27/11/2026. Progresso ponderado aprovado: **39%**. RF-1A permanece **NO-GO OPERACIONAL**.
 
 
 O RECIC3 é um sistema consolidado, atualmente em funcionamento, utilizando GitHub, Neon com plano pago, Cloudinary e infraestrutura operacional estabelecida.
@@ -51,7 +51,7 @@ Avaliar futuramente o database branching do Neon, mediante autorização especí
 
 Regras de acompanhamento:
 
-- 36% aprovados.
+- 39% aprovados.
 - Pesos estimativos de esforço, não prontidão operacional.
 - Crédito somente após aceite.
 - Subdivisões sem dupla contagem.
@@ -83,4 +83,12 @@ O percentual não constitui autorização para piloto ou publicação.
 
 27/11/2026: pesos e acumulado de 36% aprovados pelo solicitante após revisão independente da 08B.1. Etapas até 08B.1 têm crédito aceito; etapas posteriores permanecem candidatas, sem crédito antecipado. A portabilidade integra o marco técnico já aceito, mas a homologação no notebook e os oito testes POSIX continuam pendentes. Cada entrega pode avançar individualmente após aceite e autorização, sem depender dos 100%.
 
-Próxima unidade candidata: 08B.2a, navegação nativa, mediante autorização específica; nenhuma implementação automática. Não há ativação operacional pela publicação deste documento ou pelo percentual. Mudanças futuras nos pesos devem registrar data, motivo, pesos anteriores/novos e efeito no acumulado, sem duplicar crédito.
+Histórico: 08B.2a foi a unidade candidata após o checkpoint 08B.1; 08B.2a/b/c foram posteriormente aprovadas no escopo consultivo representativo. Nenhuma implementação automática das etapas seguintes. Não há ativação operacional pela publicação deste documento ou pelo percentual. Mudanças futuras nos pesos devem registrar data, motivo, pesos anteriores/novos e efeito no acumulado, sem duplicar crédito.
+
+## Aceite de 08B.2a/b/c — baseline 27/11/2026
+
+39% de desenvolvimento aprovados pelo solicitante, sem alteração dos pesos. 08B.2a (navegação), 08B.2b (catálogo/materialidade) e 08B.2c (homologação consultiva representativa) concluídas nesse escopo.
+
+Evidências separadas: 21 testes isolados e 13 verificações HTTP automatizados registrados; homologação humana de menu, catálogo, pesquisa, filtros e materialidade confirmada pelo usuário. Nenhuma observação visual humana direta pelo Codex é alegada. A revisão independente dos hashes e sintaxe foi informada pelo usuário.
+
+Limitações preservadas: aparência/JavaScript integral do menu herdado limitada por CDN; startup integral do RECIC3 ainda não homologado; implantação operacional não realizada; publicação da branch pendente de comprovação dos gatilhos do provedor. Nenhuma dessas aprovações libera produção ou piloto automaticamente. RF-1A permanece NO-GO OPERACIONAL. Oito testes POSIX e trilha complementar do notebook continuam pendentes.
